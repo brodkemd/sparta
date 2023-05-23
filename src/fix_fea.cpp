@@ -15,6 +15,7 @@
 #include "fix_fea.h"
 #include "error.h"
 #include "surf.h"
+#include <bits/stdc++.h> 
 
 using namespace SPARTA_NS;
 
@@ -22,159 +23,73 @@ enum{INT,DOUBLE};                      // several files
 
 /* ---------------------------------------------------------------------- */
 
-FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg)
-{
-  /***
-   * Format of this command
-  */
+FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
+    // checking if the number of args is correct
+    if (narg > 6)
+        error->all(FLERR,"Illegal fix fea command, too many inputs, format \"fix id fea EXE FILE\"");
+    else if (narg < 6)
+        error->all(FLERR,"Illegal fix fea command, too few inputs, format \"fix id fea EXE FILE\"");
 
-  if (narg > 5)
-    error->all(FLERR,"Illegal fix fea command, too many inputs, format \"fix id fea EXE FILE\"");
-  else if (narg < 5)
-    error->all(FLERR,"Illegal fix fea command, too few inputs, format \"fix id fea EXE FILE\"");
+    // making sure there is a surface to analyze
+    if (!surf->exist)
+        error->all(FLERR,"Illegal fix fea command, no surface to analyze");
 
-  if (!surf->exist)
-    error->all(FLERR,"Illegal fix fea command, no surface to analyze");
+    // getting when to run from the args to this fix command, nevery
+    nevery = atoi(arg[2]);
+    if (nevery <= 0)
+        error->all(FLERR,"Illegal fix fea command, nevery <= 0");
 
-  nevery = atoi(arg[2]);
-  if (nevery <= 0) error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+    // getting the executable and file path from the args passed to this command
+    const char* exe_path =  arg[3];
+    const char* sif_path =  arg[4];
+    this->surf_path = arg[5];
 
-  // std::string msg  = "";
-  // for (int i = 0; i < narg; i++) msg += (std::string(arg[i]) + " ");
-  // error->message(FLERR, ((std::string)"FEA args: " + msg).c_str());
-  // CommandResult command_result = EXEC("pwd" + this->command_end);
+    // Structure which would store the metadata
+    struct stat sb;
 
-  const char* exe_path = arg[3];
-  const char* file_path = arg[4];
+    // Calls the function with path as argument
+    // If the file/directory exists at the path returns 0
+    // If block executes if path exists
+    if (!(stat(exe_path,  &sb) == 0)) error->all(FLERR,"Illegal fix fea command, exe path does not exist");
+    if (!(stat(sif_path,  &sb) == 0)) error->all(FLERR,"Illegal fix fea command, sif path does not exist");
+    if (!(stat(this->surf_path, &sb) == 0)) error->all(FLERR,"Illegal fix fea command, surf path does not exist");
 
-  // Structure which would store the metadata
-  struct stat sb;
+    // 
+    this->writer = new WriteSurf(sparta);
 
-  // Calls the function with path as argument
-  // If the file/directory exists at the path returns 0
-  // If block executes if path exists
-  if (!(stat(exe_path, &sb) == 0)) error->all(FLERR,"Illegal fix fea command, exe path does not exist");
-  if (!(stat(file_path, &sb) == 0)) error->all(FLERR,"Illegal fix fea command, file path does not exist");
+    this->surf_id = strcat(arg[0], arg[1]);
 
-  // must have " 2>&1" at end to pipe stderr to stdout
-  this->command = std::string(exe_path) + " " + std::string(file_path) + " 2>&1";
+    // must have " 2>&1" at end to pipe stderr to stdout
+    this->command = std::string(exe_path) + " " + std::string(sif_path) + " 2>&1";
 }
 
 /* ---------------------------------------------------------------------- */
 
-FixFea::~FixFea()
-{
-  return;
+FixFea::~FixFea() {
+    delete this->writer, this->surf_path, this->surf_id;
+    this->command.clear();
+    return;
 }
 
 /* ---------------------------------------------------------------------- */
 
-int FixFea::setmask()
-{
-  int mask = 0;
-  mask |= END_OF_STEP;
-  return mask;
+int FixFea::setmask() {
+    int mask = 0;
+    mask |= END_OF_STEP;
+    return mask;
 }
 
 
-void FixFea::end_of_step()
-{
-  error->message(FLERR, "Running FEA");
-  CommandResult command_result = EXEC(this->command);
+void FixFea::end_of_step() {
+    error->message(FLERR, "Running FEA");
 
-  if (command_result.exitstatus) {
-    fprintf(logfile, command_result.output.c_str());
-    error->all(FLERR, "fix fea failed, see sparta log file");
-  }
+    char* cmds[3] = {strcat(,  ), (char*)'g', (char*)'g'};
+    writer->command(3, cmds);
+
+    CommandResult command_result = EXEC(this->command);
+
+    if (command_result.exitstatus) {
+        fprintf(logfile, command_result.output.c_str());
+        error->all(FLERR, "fix fea failed, see sparta log file");
+    }
 }
-/* ---------------------------------------------------------------------- */
-
-// void FixFea::init()
-// {
-//   if (maxion != particle->nspecies)
-//     error->all(FLERR,"Number of particle species has changed since "
-//                "fix fea was specified");
-// }
-
-// /* ----------------------------------------------------------------------
-//    called when a particle with index is created
-//     or when temperature dependent properties need to be updated
-//    creation used temp_thermal and vstream to set particle velocity
-//    if an ion, set ionambi and velambi for particle
-// ------------------------------------------------------------------------- */
-
-// void FixFea::update_custom(int index, double temp_thermal,
-//                                 double, double,
-//                                 double *vstream)
-// {
-//   int *ionambi = particle->eivec[particle->ewhich[ionindex]];
-//   double **velambi = particle->edarray[particle->ewhich[velindex]];
-
-//   // if species is not fea ion, set ionambi off and return
-
-//   int ispecies = particle->particles[index].ispecies;
-
-//   if (ions[ispecies] == 0) {
-//     ionambi[index] = 0;
-//     return;
-//   }
-
-//   // set velocity of electron
-//   // based on electron mass, thermal temperature, and streaming velocity
-
-//   ionambi[index] = 1;
-
-//   double vscale = sqrt(2.0 * update->boltz * temp_thermal /
-//                        particle->species[especies].mass);
-
-//   double vn = vscale * sqrt(-log(random->uniform()));
-//   double vr = vscale * sqrt(-log(random->uniform()));
-//   double theta1 = MY_2PI * random->uniform();
-//   double theta2 = MY_2PI * random->uniform();
-
-//   velambi[index][0] = vstream[0] + vn*cos(theta1);
-//   velambi[index][1] = vstream[1] + vr*cos(theta2);
-//   velambi[index][2] = vstream[2] + vr*sin(theta2);
-// }
-
-// /* ----------------------------------------------------------------------
-//    called when a surface reaction occurs
-//    iorig = particle I before reaction
-//    I,J = indices of two particles after reaction
-//          either can be -1, meaning particle does not exist
-// ------------------------------------------------------------------------- */
-
-// void FixFea::surf_react(Particle::OnePart *iorig, int &i, int &j)
-// {
-//   int ispecies = iorig->ispecies;
-
-//   // recombination reaction, just return
-
-//   if (i < 0) return;
-
-//   // exchange reaction
-//   // if ion -> non-ion, unset ionambi flag
-
-//   if (j < 0) {
-//     if (ions[ispecies] == 0) return;
-//     Particle::OnePart *particles = particle->particles;
-//     if (ions[particles[i].ispecies] == 1) return;
-//     int *ionambi = particle->eivec[particle->ewhich[ionindex]];
-//     ionambi[i] = 0;
-//   }
-
-//   // dissociation reaction
-//   // if non-ion -> ion + electron, create an fea ion
-//   // use global temp_thermal and vstream for electron creation
-//   // set j = -1 to delete electron that was just created by caller
-
-//   else {
-//     if (ions[ispecies] == 1) return;
-//     Particle::OnePart *particles = particle->particles;
-//     if (ions[particles[i].ispecies] == 0) return;
-//     if (particles[j].ispecies != especies) return;
-//     update_custom(i,update->temp_thermal,update->temp_thermal,
-//                  update->temp_thermal,update->vstream);
-//     j = -1;
-//   }
-// }

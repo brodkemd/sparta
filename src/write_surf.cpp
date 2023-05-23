@@ -39,6 +39,7 @@ WriteSurf::WriteSurf(SPARTA *sparta) : Pointers(sparta)
 
 void WriteSurf::command(int narg, char **arg)
 {
+  error->all(FLERR, "here");
   if (!surf->exist)
     error->all(FLERR,"Cannot write surf when surfs do not exist");
 

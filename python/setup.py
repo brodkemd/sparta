@@ -30,10 +30,7 @@ s = setup(
     author_email="brodkemd@mail.uc.edu",
     url="https://github.com/brodkemd/sparta",
     package_dir={"sparta" : "src/sparta"},
-    package_data={"sparta" : ["../doc/**", "pizza/**", "paraview/**", "db.txt", "tools/**"]},
-    # cmdclass={
-    #     'install': PostInstallCommand,
-    # }
+    package_data={"sparta" : ["doc/**", "pizza/**", "paraview/**", "db.txt", "tools/**"]},
 )
 
 #installation_path = s.command_obj['install'].install_lib
