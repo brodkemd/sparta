@@ -26,6 +26,8 @@
 #include "memory.h"
 #include "error.h"
 
+#include <iostream>
+
 using namespace SPARTA_NS;
 
 #define BIG 1.0e20
@@ -126,6 +128,16 @@ Dump::Dump(SPARTA *sparta, int, char **arg) : Pointers(sparta)
 
 Dump::~Dump()
 {
+  if (strcmp(style, (char*)"fea") != 0) {
+    if (multifile == 0 && fp != NULL) {
+      if (compressed) {
+        if (filewriter) pclose(fp);
+      } else {
+        if (filewriter) fclose(fp);
+      }
+    }
+  }
+
   delete [] id;
   delete [] style;
   delete [] filename;
@@ -144,14 +156,6 @@ Dump::~Dump()
   memory->destroy(sbuf);
 
   if (multiproc) MPI_Comm_free(&clustercomm);
-
-  if (multifile == 0 && fp != NULL) {
-    if (compressed) {
-      if (filewriter) pclose(fp);
-    } else {
-      if (filewriter) fclose(fp);
-    }
-  }
 }
 
 /* ---------------------------------------------------------------------- */

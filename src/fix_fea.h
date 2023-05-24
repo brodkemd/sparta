@@ -71,7 +71,7 @@ namespace SPARTA_NS {
             FixFea(class SPARTA *sparta) : Fix(sparta) {} // needed for Kokkos
             virtual ~FixFea();
             int setmask();
-            void init();
+            // void init();
             // void start_of_step();
             void end_of_step();
 

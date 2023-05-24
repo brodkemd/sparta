@@ -13,18 +13,10 @@
 ------------------------------------------------------------------------- */
 
 #include "fix_fea.h"
-// #include "error.h"
-// #include "surf.h"
-// #include "string.h"
-
-// #include <bits/stdc++.h> 
-// #include <ctime>
-// #include <unistd.h>
-// #include <iostream>
 
 using namespace SPARTA_NS;
 
-enum{INT,DOUBLE};                      // several files
+enum{INT,DOUBLE};  // several files
 
 // void genRandomID(int size, char* outstr) {
 //     srand((unsigned)time(NULL) * getpid());
@@ -126,7 +118,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // dump id surf select-id nevery output_file id c_id[*]
     char* dump_args[DUMP_SURF_ARGS_SIZE] = {
                arg[9],
-        (char*)"surf",
+        (char*)"fea",
                arg[11],
         (char*)std::to_string(this->nevery).c_str(),
                arg[10],
@@ -142,7 +134,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     modify->add_compute(COMPUTE_SURF_ARGS_SIZE, compute_args);
     output->add_dump(DUMP_SURF_ARGS_SIZE, dump_args);
-    //output->modify_dump(DUMP_MODIFY_ARGS_SIZE, dump_modify_args);
+    // output->modify_dump(DUMP_MODIFY_ARGS_SIZE, dump_modify_args);
 
     // error->all(FLERR, this->surf_dump_id);
     // // modifying the latest dump so that the file is flushed every dump
@@ -152,8 +144,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // output->dump[output->ndump-1]->flush_flag = 1;//modify_params(DUMP_MODIFY_ARGS_SIZE, dump_modify_args);
 
     this->writer = new WriteSurf(sparta); // initializing the surface writing class
-
-    
 
     //this->surf_dump_id = arg[9];
 
@@ -168,16 +158,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 FixFea::~FixFea() {
     delete this->writer;
     this->command.clear();
-    return;
-}
-
-void FixFea::init() {
-    // for (int i = 0; i < output->ndump; i++) {
-    //     if (strcmp(output->dump[i]->id, this->surf_dump_id) == 0) {
-    //         output->dump[i]->flush_flag = 1;
-    //     }
-    // }
-    // error->all(FLERR, this->surf_dump_id);
     return;
 }
 
