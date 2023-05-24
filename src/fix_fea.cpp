@@ -18,46 +18,9 @@ using namespace SPARTA_NS;
 
 enum{INT,DOUBLE};  // several files
 
-// void genRandomID(int size, char* outstr) {
-//     srand((unsigned)time(NULL) * getpid());
-//     char alphanum[] = "0123456789_abcdefghijklmnopqrstuvwxyz";
-//     for (int i = 0; i < size; i++) outstr[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-// }
-
-
-/**
- * Execute system command and get STDOUT result.
- * Regular system() only gives back exit status, this gives back output as well.
- * @param command system command to execute
- * @return commandResult containing STDOUT (not stderr) output & exitstatus
- * of command. Empty if command failed (or has no output). If you want stderr,
- * use shell redirection (2&>1).
- */
-static CommandResult EXEC(const std::string &command) {
-    int exitcode = 0;
-    std::array<char, 1048576> buffer {};
-    std::string result;
-
-    FILE *pipe = popen(command.c_str(), "r");
-    if (pipe == nullptr) {
-        throw std::runtime_error("popen() failed!");
-    }
-    try {
-        std::size_t bytesread;
-        while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-            result += std::string(buffer.data(), bytesread);
-        }
-    } catch (...) {
-        pclose(pipe);
-        throw;
-    }
-    exitcode = WEXITSTATUS(pclose(pipe));
-    return CommandResult{result, exitcode};
-}
-
 /* ---------------------------------------------------------------------- */
 
-/***
+/**
  * inputs, format INDEX : DESCRIPTION or VALUE
  * 0  : id
  * 1  : fea
@@ -113,8 +76,9 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         (char*)"etot"
     };
 
+    // adding the surf path to the surf args
     this->surf_args[0] = surf_path;
-    // this->surf_dump_file = arg[10];
+
     // dump id surf select-id nevery output_file id c_id[*]
     char* dump_args[DUMP_SURF_ARGS_SIZE] = {
                arg[9],
@@ -126,62 +90,43 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
                arg[12]
     };
 
-    char* dump_modify_args[DUMP_MODIFY_ARGS_SIZE] = {
-               dump_args[0],
-        (char*)"flush",
-        (char*)"yes"
-    };
-
+    // adding the needed compute 
     modify->add_compute(COMPUTE_SURF_ARGS_SIZE, compute_args);
     output->add_dump(DUMP_SURF_ARGS_SIZE, dump_args);
-    // output->modify_dump(DUMP_MODIFY_ARGS_SIZE, dump_modify_args);
 
-    // error->all(FLERR, this->surf_dump_id);
-    // // modifying the latest dump so that the file is flushed every dump
-    // for (int i = 0; i < output->ndump; i++) {
-    //     error->message(FLERR, output->dump[i]->id);
-    // }
-    // output->dump[output->ndump-1]->flush_flag = 1;//modify_params(DUMP_MODIFY_ARGS_SIZE, dump_modify_args);
-
-    this->writer = new WriteSurf(sparta); // initializing the surface writing class
-
-    //this->surf_dump_id = arg[9];
+    // initializing the surface writing class
+    this->writer = new WriteSurf(sparta);
 
     // must have " 2>&1" at end to pipe stderr to stdout
-    this->command = std::string(exe_path) + " " + std::string(sif_path) + " 2>&1";
+    std::string command = std::string(exe_path)+" "+std::string(sif_path)+" 2>&1";
 
-    // delete [] exe_path, sif_path, surf_path;
+    // dump arguments for the dump fea command
+    char* dump_fea_modify_args[DUMP_FEA_MODIFY_ARGS_SIZE] = {
+        (char*)"command",
+        (char*)command.c_str()
+    };
+
+    // modifying the fea dump to add command to run
+    output->dump[output->ndump - 1]->modify_params(DUMP_FEA_MODIFY_ARGS_SIZE, dump_fea_modify_args);
 }
 
 /* ---------------------------------------------------------------------- */
 
-FixFea::~FixFea() {
-    delete this->writer;
-    this->command.clear();
-    return;
-}
+/**
+ * deleting the writer on destruction
+ */
+FixFea::~FixFea() { delete this->writer; }
 
 /* ---------------------------------------------------------------------- */
 
-int FixFea::setmask() {
-    int mask = 0;
-    mask |= END_OF_STEP;
-    //mask |= START_OF_STEP;
-    return mask;
-}
+/**
+ * sets the mask to make the class run at the end of each timestep 
+ */
+int FixFea::setmask() { return 0 | END_OF_STEP /* | START_OF_STEP */; }
 
-// void FixFea::start_of_step() {
-//     error->message(FLERR, "Running FEA");
-//     return;
-// }
 
-void FixFea::end_of_step() {
-    writer->command(SURF_ARGS_SIZE, this->surf_args);
-    CommandResult command_result = EXEC(this->command);
-
-    if (command_result.exitstatus) {
-        fprintf(logfile, command_result.output.c_str());
-        error->all(FLERR, "fix fea failed, see sparta log file");
-    }
-    // remove(this->dump_file);
-}
+/**
+ * Runs at the end of each time step
+ * writing the surface data to the file
+ */
+void FixFea::end_of_step() { this->writer->command(SURF_ARGS_SIZE, this->surf_args); }

@@ -14,9 +14,6 @@
 
 #include "dump_fea.h"
 
-#include <stdio.h>
-#include <unistd.h> 
-
 using namespace SPARTA_NS;
 
 // customize by adding keyword
@@ -25,7 +22,39 @@ enum{INT,DOUBLE,BIGINT,STRING};        // same as Dump
 
 enum{PERIODIC,OUTFLOW,REFLECT,SURFACE,AXISYM};  // same as Domain
 
+/**
+ * Execute system command and get STDOUT result.
+ * Regular system() only gives back exit status, this gives back output as well.
+ * @param command system command to execute
+ * @return commandResult containing STDOUT (not stderr) output & exitstatus
+ * of command. Empty if command failed (or has no output). If you want stderr,
+ * use shell redirection (2&>1).
+ */
+static CommandResult EXEC(const std::string &command) {
+    int exitcode = 0;
+    std::array<char, 1048576> buffer {};
+    std::string result;
 
+    FILE *pipe = popen(command.c_str(), "r");
+    if (pipe == nullptr) {
+        throw std::runtime_error("popen() failed!");
+    }
+    try {
+        std::size_t bytesread;
+        while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
+            result += std::string(buffer.data(), bytesread);
+        }
+    } catch (...) {
+        pclose(pipe);
+        throw;
+    }
+    exitcode = WEXITSTATUS(pclose(pipe));
+    return CommandResult{result, exitcode};
+}
+
+/**
+ * Constructor
+ */
 DumpFea::DumpFea(SPARTA *sparta, int narg, char **arg) : DumpSurf(sparta, narg, arg) {
     if (narg == 5) error->all(FLERR,"No dump surf attributes specified");
 
@@ -140,17 +169,40 @@ DumpFea::DumpFea(SPARTA *sparta, int narg, char **arg) : DumpSurf(sparta, narg, 
 
 /* ---------------------------------------------------------------------- */
 
-DumpFea::~DumpFea() { fsync(fileno(this->fp)); }
+/* Destructor */
+DumpFea::~DumpFea() { 
+    // syncing the file to update the handle
+    fsync(fileno(this->fp));
+
+    // clearing the string command to dump memory
+    this->command.clear();
+}
 
 /* ---------------------------------------------------------------------- */
 
-void DumpFea::write() {
-    fp = fopen(this->filename,"w");
+/**
+ * overrides base class modify command 
+ */ 
+void DumpFea::modify_params(int narg, char** arg) {
+    for (int i = 0; i < narg; i++) {
+        // gets the command arg from the input
+        if (arg[i] == (char*)"command")
+            this->command = std::string(arg[i+1]);
+    }
+    return;
+}
 
-    if (fp == NULL) error->one(FLERR,"Cannot open dump file");
+/**
+ * writes to the dump file
+ */
+void DumpFea::write() {
+    // opening the file for writing
+    fp = fopen(this->filename, "w");
+
+    // making sure it is open
+    if (fp == NULL) error->all(FLERR,"Cannot open dump file");
 
     // simulation box bounds
-
     boxxlo = domain->boxlo[0];
     boxxhi = domain->boxhi[0];
     boxylo = domain->boxlo[1];
@@ -159,12 +211,10 @@ void DumpFea::write() {
     boxzhi = domain->boxhi[2];
 
     // nme = # of dump lines this proc will contribute to dump
-
     nme = count();
 
     // ntotal = total # of dump lines in snapshot
     // nmax = max # of dump lines on any proc
-
     bigint bnme = nme;
     MPI_Allreduce(&bnme,&ntotal,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
 
@@ -175,7 +225,6 @@ void DumpFea::write() {
     // write timestep header
     // for multiproc,
     //   nheader = # of lines in this file via Allreduce on clustercomm
-
     bigint nheader = ntotal;
     if (multiproc)
         MPI_Allreduce(&bnme,&nheader,1,MPI_SPARTA_BIGINT,MPI_SUM,clustercomm);
@@ -185,7 +234,6 @@ void DumpFea::write() {
     // insure buf is sized for packing and communicating
     // use nmax to insure filewriter proc can receive info from others
     // limit nmax*size_one to int since used as arg in MPI calls
-
     if (nmax > maxbuf) {
         if ((bigint) nmax * size_one > MAXSMALLINT)
             error->all(FLERR,"Too much per-proc info for dump");
@@ -195,13 +243,11 @@ void DumpFea::write() {
     }
 
     // pack my data into buf
-
     pack();
 
     // if buffering, convert doubles into strings
     // insure sbuf is sized for communicating
     // cannot buffer if output is to binary file
-
     if (buffer_flag && !binary) {
         nsme = convert_string(nme,buf);
         int nsmin,nsmax;
@@ -219,13 +265,11 @@ void DumpFea::write() {
     // filewriter = 1 = this proc writes to file
     // ping each proc in my cluster, receive its data, write data to file
     // else wait for ping from fileproc, send my data to fileproc
-
     int tmp,nlines,nchars;
     MPI_Status status;
     MPI_Request request;
 
     // comm and output buf of doubles
-
     if (buffer_flag == 0 || binary) {
         if (filewriter) {
             for (int iproc = 0; iproc < nclusterprocs; iproc++) {
@@ -247,7 +291,6 @@ void DumpFea::write() {
         }
 
     // comm and output sbuf = one big string of formatted values per proc
-
     } else {
         if (filewriter) {
             for (int iproc = 0; iproc < nclusterprocs; iproc++) {
@@ -268,6 +311,21 @@ void DumpFea::write() {
         }
     }
 
-    // if file per timestep, close file if I am filewriter
+    // closing the file
     fclose(this->fp);
+
+    // if a command was provided
+    if (this->command.length() > 0) {
+        // running the command
+        CommandResult command_result = EXEC(this->command);
+
+        // if the command did not succeed
+        if (command_result.exitstatus) {
+            // writing to the logfile and erroring out
+            fprintf(logfile, command_result.output.c_str());
+            error->all(FLERR, "fix fea failed, see sparta log file");
+        }
+        std::cout << "done running command\n";
+    }
+
 }

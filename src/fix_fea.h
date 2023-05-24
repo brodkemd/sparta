@@ -24,7 +24,7 @@ FixStyle(fea,FixFea)
 #define DUMP_SURF_ARGS_SIZE 7
 #define COMPUTE_SURF_ARGS_SIZE 5
 #define SURF_ARGS_SIZE 1
-#define DUMP_MODIFY_ARGS_SIZE 3
+#define DUMP_FEA_MODIFY_ARGS_SIZE 2
 
 #include "fix.h"
 #include "error.h"
@@ -33,22 +33,16 @@ FixStyle(fea,FixFea)
 #include "modify.h"
 #include "output.h"
 #include "dump.h"
-#include "string.h"
 
 #include <string>
-#include <stdexcept>
-#include <array>
-#include <sys/stat.h>
+// #include <iostream>
 
-struct CommandResult {
-    std::string output;
-    int exitstatus;
-};
+#include <sys/stat.h>
 
 namespace SPARTA_NS {
     /**
      * Class for this fix command
-    */
+     */
     class FixFea : public Fix {
         public:
             /***
@@ -71,19 +65,12 @@ namespace SPARTA_NS {
             FixFea(class SPARTA *sparta) : Fix(sparta) {} // needed for Kokkos
             virtual ~FixFea();
             int setmask();
-            // void init();
-            // void start_of_step();
             void end_of_step();
 
         protected:
-            std::string command = "";
+            // std::string command = "";
             char* surf_args[SURF_ARGS_SIZE];
-            //char* surf_dump_file;
-            //char* surf_dump_id;
-            // char* dump_args[DUMP_SURF_ARGS_SIZE];
             class WriteSurf* writer;
-            // class ComputeSurf* computer;
-            // class DumpSurf* dumper;
     };
 }
 

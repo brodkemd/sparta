@@ -36,7 +36,7 @@ class Dump : protected Pointers {
   void init();
   virtual void write();
   virtual void reset_grid_count() {}
-  void modify_params(int, char **);
+  virtual void modify_params(int narg, char ** arg);
   virtual bigint memory_usage();
 
  protected:

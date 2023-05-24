@@ -31,79 +31,35 @@ DumpStyle(fea,DumpFea)
 #include "memory.h"
 #include "update.h"
 #include "input.h"
+#include "fix_fea.h"
+
+#include <iostream>
+#include <string>
+#include <iostream>
+#include <stdexcept>
+#include <array>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <unistd.h> 
+
+struct CommandResult {
+    std::string output;
+    int exitstatus;
+};
 
 namespace SPARTA_NS {
     class DumpFea : public DumpSurf {
-    public:
-        DumpFea(class SPARTA *, int, char **);
-        ~DumpFea();
+        public:
+            DumpFea(class SPARTA *, int, char **);
+            ~DumpFea();
 
-    private:
-        void write() override;
-        // void openfile() override {};
+            void modify_params(int narg, char ** arg) override;
+
+        private:
+            void write() override;
+            std::string command = "";
     };
 }
 
 #endif
 #endif
-
-/* ERROR/WARNING messages:
-
-E: No dump surf attributes specified
-
-Self-explanatory.
-
-E: Invalid attribute in dump surf command
-
-Self-explanatory.
-
-E: Could not find dump surf compute ID
-
-Self-explanatory.
-
-E: Could not find dump surf fix ID
-
-Self-explanatory.
-
-E: Dump surf and fix not computed at compatible times
-
-Fixes generate values on specific timesteps.  The dump surf output
-does not match these timesteps.
-
-E: Could not find dump surf variable name
-
-Self-explanatory.
-
-E: Invalid dump surf field for 2d simulation
-
-Self-explanatory.
-
-E: Dump surf compute does not compute per-surf info
-
-Self-explanatory.
-
-E: Dump surf compute does not calculate per-surf array
-
-Self-explanatory.
-
-E: Dump surf compute vector is accessed out-of-range
-
-Self-explanatory.
-
-E: Dump surf fix does not compute per-surf info
-
-Self-explanatory.
-
-E: Dump surf fix does not compute per-surf array
-
-Self-explanatory.
-
-E: Dump surf fix vector is accessed out-of-range
-
-Self-explanatory.
-
-E: Dump surf variable is not surf-style variable
-
-Self-explanatory.
-
-*/
