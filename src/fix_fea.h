@@ -21,8 +21,19 @@ FixStyle(fea,FixFea)
 #ifndef SPARTA_FIX_FEA_H
 #define SPARTA_FIX_FEA_H
 
+#define DUMP_SURF_ARGS_SIZE 7
+#define COMPUTE_SURF_ARGS_SIZE 5
+#define SURF_ARGS_SIZE 1
+#define DUMP_MODIFY_ARGS_SIZE 3
+
 #include "fix.h"
+#include "error.h"
 #include "write_surf.h"
+#include "surf.h"
+#include "modify.h"
+#include "output.h"
+#include "dump.h"
+#include "string.h"
 
 #include <string>
 #include <stdexcept>
@@ -36,54 +47,44 @@ struct CommandResult {
 
 namespace SPARTA_NS {
     /**
-     * Execute system command and get STDOUT result.
-     * Regular system() only gives back exit status, this gives back output as well.
-     * @param command system command to execute
-     * @return commandResult containing STDOUT (not stderr) output & exitstatus
-     * of command. Empty if command failed (or has no output). If you want stderr,
-     * use shell redirection (2&>1).
-     */
-    static CommandResult EXEC(const std::string &command) {
-        int exitcode = 0;
-        std::array<char, 1048576> buffer {};
-        std::string result;
-
-        FILE *pipe = popen(command.c_str(), "r");
-        if (pipe == nullptr) {
-            throw std::runtime_error("popen() failed!");
-        }
-        try {
-            std::size_t bytesread;
-            while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                result += std::string(buffer.data(), bytesread);
-            }
-        } catch (...) {
-            pclose(pipe);
-            throw;
-        }
-        exitcode = WEXITSTATUS(pclose(pipe));
-        return CommandResult{result, exitcode};
-    }
-
-    /**
      * Class for this fix command
     */
     class FixFea : public Fix {
         public:
+            /***
+             * inputs, format INDEX : DESCRIPTION or VALUE
+             * 0  : id
+             * 1  : fea
+             * 2  : nevery, execute every this many time steps
+             * 3  : elmer_exe, path to the executable for elmer
+             * 4  : sif_file, path the sif file to run with elmer
+             * 5  : surf_file, path or name of file to dump surface to
+             * 6  : compute-id, id for compute 
+             * 7  : group-id, group ID for which surface elements to perform calculation on
+             * 8  : mix-ID, mixture ID for particles to perform calculation on
+             * 9  : dump-id, 
+             * 10 : dump-file, file to dump surf info to
+             * 11 : select-ID, what surface elements to dump
+             * 12 : dump compute format, this is c_[*]
+             */
             FixFea(class SPARTA *, int, char **);
             FixFea(class SPARTA *sparta) : Fix(sparta) {} // needed for Kokkos
             virtual ~FixFea();
             int setmask();
+            void init();
+            // void start_of_step();
             void end_of_step();
-
 
         protected:
             std::string command = "";
-            char* surf_path;
-            WriteSurf* writer;
-            char* surf_id;
+            char* surf_args[SURF_ARGS_SIZE];
+            //char* surf_dump_file;
+            //char* surf_dump_id;
+            // char* dump_args[DUMP_SURF_ARGS_SIZE];
+            class WriteSurf* writer;
+            // class ComputeSurf* computer;
+            // class DumpSurf* dumper;
     };
-
 }
 
 #endif
