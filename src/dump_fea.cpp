@@ -17,7 +17,6 @@
 using namespace SPARTA_NS;
 
 // customize by adding keyword
-
 enum{INT,DOUBLE,BIGINT,STRING};        // same as Dump
 
 enum{PERIODIC,OUTFLOW,REFLECT,SURFACE,AXISYM};  // same as Domain
