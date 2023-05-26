@@ -4,7 +4,8 @@ from mayavi import mlab
 
 sparta_surf_file  = "/home/marekbrodke/Documents/C++/sparta/elmer/test_mesh/out.surf"
 out_node_file     = "/home/marekbrodke/Documents/C++/sparta/elmer/test_mesh_out/mesh.nodes"
-out_element_file = "/home/marekbrodke/Documents/C++/sparta/elmer/test_mesh_out/mesh.elements" 
+out_element_file  = "/home/marekbrodke/Documents/C++/sparta/elmer/test_mesh_out/mesh.elements"
+out_boundary_file  = "/home/marekbrodke/Documents/C++/sparta/elmer/test_mesh_out/mesh.boundary"
 
 with open(sparta_surf_file, 'r') as f:
     lines = [line.strip().split() for line in f.readlines()]
@@ -37,11 +38,20 @@ triangles = lines[start+points+3:]
 
 with open(out_node_file, 'w') as f:
     for i in range(len(nodes)):
-        nodes[i].insert(1, "-1")
+        node = nodes[i]
+        node.insert(1, "-1")
         f.write(" ".join(nodes[i]) + "\n")
 
 with open(out_element_file, 'w') as f:
     for i in range(len(triangles)):
-        triangles[i].insert(1, "1")
-        triangles[i].insert(2, "303")
-        f.write(" ".join(triangles[i]) + "\n")
+        triangle = triangles[i]
+        triangle.insert(1, "1")
+        triangle.insert(2, "303")
+        f.write(" ".join(triangle) + "\n")
+
+with open(out_boundary_file, 'w') as f:
+    for i in range(len(triangles)):
+        triangle = triangles[i]
+        triangle.insert(1, "1")
+        triangle.insert(2, "303")
+        f.write(" ".join(triangle) + "\n")

@@ -195,11 +195,13 @@ void DumpFea::modify_params(int narg, char** arg) {
  * writes to the dump file
  */
 void DumpFea::write() {
-    // opening the file for writing
-    fp = fopen(this->filename, "w");
+    if (filewriter) {
+        // opening the file for writing
+        fp = fopen(this->filename, "w");
 
-    // making sure it is open
-    if (fp == NULL) error->all(FLERR,"Cannot open dump file");
+        // making sure it is open
+        if (fp == NULL) error->all(FLERR,"Cannot open dump file");
+    }
 
     // simulation box bounds
     boxxlo = domain->boxlo[0];
@@ -310,21 +312,23 @@ void DumpFea::write() {
         }
     }
 
-    // closing the file
-    fclose(this->fp);
+    if (filewriter) {
+        // closing the file
+        fclose(this->fp);
 
-    // if a command was provided
-    if (this->command.length() > 0) {
-        // running the command
-        CommandResult command_result = EXEC(this->command);
+        // if a command was provided
+        if (this->command.length() > 0) {
+            // running the command
+            CommandResult command_result = EXEC(this->command);
 
-        // if the command did not succeed
-        if (command_result.exitstatus) {
-            // writing to the logfile and erroring out
-            fprintf(logfile, command_result.output.c_str());
-            error->all(FLERR, "fix fea failed, see sparta log file");
+            // if the command did not succeed
+            if (command_result.exitstatus) {
+                // writing to the logfile and erroring out
+                fprintf(logfile, command_result.output.c_str());
+                error->all(FLERR, "fix fea failed, see sparta log file");
+            }
+            std::cout << "done running command\n";
         }
-        std::cout << "done running command\n";
     }
 
 }
