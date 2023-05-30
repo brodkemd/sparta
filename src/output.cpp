@@ -527,6 +527,7 @@ void Output::add_dump(int narg, char **arg)
 
   // create the Dump
 
+  std::cout << "adding dump 1\n";
   if (0) return;         // dummy line to enable else-if macro expansion
 
 #define DUMP_CLASS
@@ -536,12 +537,13 @@ void Output::add_dump(int narg, char **arg)
 #undef DUMP_CLASS
 
   else error->all(FLERR,"Unrecognized dump style");
-
+  std::cout << "adding dump 2\n";
   every_dump[ndump] = atoi(arg[3]);
   if (every_dump[ndump] <= 0) error->all(FLERR,"Illegal dump command");
   last_dump[ndump] = -1;
   var_dump[ndump] = NULL;
   ndump++;
+  std::cout << "done adding dump\n";
 }
 
 /* ----------------------------------------------------------------------

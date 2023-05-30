@@ -396,11 +396,115 @@ def particle_3d(
             mlab.close()
 
 
+def surf_temperature_3d(
+        surf_temperature_file:str, # file to read data from
+        surf_file:str,
+        output_file:str              = None, # file to output to
+        temperature_data_index:int   = 1,
+        **kwargs
+    ) -> str|None:
+
+    Kwargs = _TOTAL_KWARGS_3D.copy()
+    Kwargs = _handle_kwargs(kwargs, Kwargs, strict=True)
+    
+    if not Kwargs["use_existing_figure"]:
+        # creating figure using the size detected in the file
+        mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0, 0, 0), size=Kwargs["figsize"])
+
+    surf_coords:list[list[float]] = [] # x,y,z coords for surface
+    tris:list[list[float]] = [] # triangles for surface
+
+    data:dict = {}
+
+    # loads lines from surface file
+    lines = []
+    with open(surf_file, 'r') as f: lines = [line.strip().split() for line in f.readlines()]
+
+    surfs_start:int = 0 # where the surfs start
+    tris_start:int = 0 # where the triangle data starts
+    x_ind:int = 1 # x-coord index in the file
+    y_ind:int = 2 # y-coord index in the file
+    z_ind:int = 3  # z-coord index in the file
+    for i, line in enumerate(lines):
+        new_line = line # splitting the line into a list
+        if len(new_line): # if there is data in the line
+            if new_line[0] == "Points":
+                # where the surface data starts
+                surfs_start = i+2
+                
+            if new_line[0] == "Triangles":
+                tris_start = i+2
+                break # no longer need any info so exits loop
+
+    # iterates through the loaded lines
+    for i in range(tris_start, len(lines)):
+        data = lines[i] # splits lines into list
+        # if the length of the line is 0 then there is no more data, so exit loop
+        if not len(data): break
+        # adds list to list (will contain surface order pairs)
+        tris.append([int(data[1].strip())-1, int(data[2].strip())-1, int(data[3].strip())-1]) # grabs verticies of triangle
+
+
+    # iterates through the loaded lines
+    for i in range(surfs_start, len(lines)):
+        data = lines[i] # splits lines into list
+        # if the length of the line is 0 then there is no more data, so exit loop
+        if not len(data): break
+        # adds list to list (will contain surface order pairs)
+        surf_coords.append([float(data[x_ind].strip()), float(data[y_ind].strip()), float(data[z_ind].strip())]) # grabs x,y,z coord of surface point
+
+    del lines # deletes, no longer need var
+
+    # getting the surface data from the lists
+    x = [i[0] for i in surf_coords]
+    y = [i[1] for i in surf_coords]
+    z = [i[2] for i in surf_coords]
+
+    # adding the first coords to close the surface
+    x.append(surf_coords[0][0])
+    y.append(surf_coords[0][1])
+    z.append(surf_coords[0][2])
+    
+    with open(surf_temperature_file, 'r') as f: lines = [line.strip().split() for line in f.readlines()]
+
+    surfs_start = 0
+    for i, line in enumerate(lines):
+        if len(line)>=2:
+            if line[1] == "SURFS":
+                # where the surface data starts
+                surfs_start = i+1
+                break # no longer need anything so exit the loop
+
+    t = []
+    for i, line in enumerate(lines[surfs_start:]):
+        t.append(float(line[temperature_data_index]))
+    
+    mesh = mlab.triangular_mesh(x, y, z, tris)
+    mesh.mlab_source.dataset.cell_data.scalars = t
+    mesh.mlab_source.dataset.cell_data.scalars.name = 'Cell data' 
+    mesh.mlab_source.update() 
+    mesh.parent.update()
+
+    mesh2 = mlab.pipeline.set_active_attribute(mesh, cell_scalars='Cell data')
+    s2 = mlab.pipeline.surface(mesh2) 
+
+    mlab.scalarbar(s2)
+    
+    if not Kwargs["use_existing_figure"]:
+        if Kwargs["view"] is not None: mlab.view(*Kwargs["view"])
+        
+        if output_file is None:
+            mlab.show()
+        else:
+            mlab.savefig(output_file, Kwargs["image_size"])
+            mlab.close()
+
+
 def sim_3d(
         particle_file:str            = None, # file to read data from
         surf_file:str                = None,
         grid_file:str                = None,
-        output_file:str              = None, # file to output video to
+        output_file:str              = None, # file to output to
         colors:OrderedDict[str, str] = {}, # structure = {species name : "color"}
         **kwargs
     ) -> str|None:

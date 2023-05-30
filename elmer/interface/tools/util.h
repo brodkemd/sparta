@@ -2,6 +2,7 @@
 #define UTIL_H
 
 #include <iostream>
+#include <fstream>
 
 void print() {
     std::cout << '\n';
@@ -12,5 +13,6 @@ void print(const T &t, TAIL... tail) {
     std::cout << t << " ";
     print(tail...);
 }
+
 
 #endif

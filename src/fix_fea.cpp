@@ -54,7 +54,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // getting the executable and file path from the args passed to this command
     char* exe_path  = arg[3];
     char* sif_path  = arg[4];
-    char* surf_path = arg[5];
+    // char* surf_path = arg[5];
 
     // Structure which would store the metadata
     struct stat sb;
@@ -69,36 +69,54 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // command style: compute id surf group-id mix-id args
     char* compute_args[COMPUTE_SURF_ARGS_SIZE] = {
-               arg[6],
+        (char*)"CCCC",
         (char*)"surf",
                arg[7],
-               arg[8], 
+               arg[8],
         (char*)"etot"
     };
 
+    // command style: compute id surf group-id mix-id args
+    char* fix_args[COMPUTE_SURF_ARGS_SIZE] = {
+        (char*)"FFFF",
+        (char*)"surf/temp",
+               arg[7],
+        (char*)std::to_string(this->nevery).c_str(),
+        (char*)"c_CCCC"
+    };
+
+    // std::cout << "==>" << surf->tris[0].id << "\n";
+    // std::cout << "==>" << surf->tris[0].p1[0] << " " << surf->tris[0].p1[1] << " " << surf->tris[0].p1[2] << "\n";
+    // std::cout << "==>" << surf->tris[0].p2[0] << " " << surf->tris[0].p2[1] << " " << surf->tris[0].p2[2] << "\n";
+    // std::cout << "==>" << surf->tris[0].p3[0] << " " << surf->tris[0].p3[1] << " " << surf->tris[0].p3[2] << "\n";
+    // error->all(FLERR, " ");
     // adding the surf path to the surf args
-    this->surf_args[0] = surf_path;
+    // this->surf_args[0] = surf_path;
 
     // dump id surf select-id nevery output_file id c_id[*]
     char* dump_args[DUMP_SURF_ARGS_SIZE] = {
-               arg[9],
+        (char*)"DDDD",
         (char*)"fea",
                arg[11],
         (char*)std::to_string(this->nevery).c_str(),
                arg[10],
         (char*)"id",
-               arg[12]
+        (char*)"c_CCCC[*]"
     };
 
-    // adding the needed compute 
+    // adding the needed compute
     modify->add_compute(COMPUTE_SURF_ARGS_SIZE, compute_args);
-    output->add_dump(DUMP_SURF_ARGS_SIZE, dump_args);
+
+    this->compute_index = modify->ncompute - 1;
+
+    output->add_dump(DUMP_SURF_ARGS_SIZE- 1, dump_args);
 
     // initializing the surface writing class
-    this->writer = new WriteSurf(sparta);
+    // this->writer = new WriteSurf(sparta);
 
     // must have " 2>&1" at end to pipe stderr to stdout
     std::string command = std::string(exe_path)+" "+std::string(sif_path)+" 2>&1";
+
 
     // dump arguments for the dump fea command
     char* dump_fea_modify_args[DUMP_FEA_MODIFY_ARGS_SIZE] = {
@@ -106,8 +124,15 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         (char*)command.c_str()
     };
 
+    std::cout << modify->compute[this->compute_index]->id << "\n";
+
+
+    // error->all(FLERR, std::to_string(this->compute_index).c_str());
     // modifying the fea dump to add command to run
-    output->dump[output->ndump - 1]->modify_params(DUMP_FEA_MODIFY_ARGS_SIZE, dump_fea_modify_args);
+    // output->dump[output->ndump - 1]->modify_params(DUMP_FEA_MODIFY_ARGS_SIZE, dump_fea_modify_args);
+
+    // debug_msg();
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -115,7 +140,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 /**
  * deleting the writer on destruction
  */
-FixFea::~FixFea() { delete this->writer; }
+// FixFea::~FixFea() {} // { delete this->writer; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -129,4 +154,4 @@ int FixFea::setmask() { return 0 | END_OF_STEP /* | START_OF_STEP */; }
  * Runs at the end of each time step
  * writing the surface data to the file
  */
-void FixFea::end_of_step() { this->writer->command(SURF_ARGS_SIZE, this->surf_args); }
+void FixFea::end_of_step() {} // { this->writer->command(SURF_ARGS_SIZE, this->surf_args); }

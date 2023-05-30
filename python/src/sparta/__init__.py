@@ -4,5 +4,5 @@ from .molecule import Molecule, Species, VSS
 from ._tools_wrapper import *
 from ._paraview_wrapper import *
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 

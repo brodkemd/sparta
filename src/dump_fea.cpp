@@ -55,11 +55,14 @@ static CommandResult EXEC(const std::string &command) {
  * Constructor
  */
 DumpFea::DumpFea(SPARTA *sparta, int narg, char **arg) : DumpSurf(sparta, narg, arg) {
+    //std::cout << "setting up dump fea\n";
     if (narg == 5) error->all(FLERR,"No dump surf attributes specified");
 
     clearstep = 1;
     buffer_allow = 1;
     buffer_flag = 1;
+
+    //std::cout << "dump 1\n";
 
     dimension = domain->dimension;
 
@@ -164,6 +167,7 @@ DumpFea::DumpFea(SPARTA *sparta, int narg, char **arg) : DumpSurf(sparta, narg, 
     firstflag = 1;
     cglobal = clocal = NULL;
     buflocal = NULL;
+    // std::cout << "dump 2\n";
 }
 
 /* ---------------------------------------------------------------------- */
@@ -195,126 +199,127 @@ void DumpFea::modify_params(int narg, char** arg) {
  * writes to the dump file
  */
 void DumpFea::write() {
-    if (filewriter) {
-        // opening the file for writing
-        fp = fopen(this->filename, "w");
 
-        // making sure it is open
-        if (fp == NULL) error->all(FLERR,"Cannot open dump file");
-    }
+    // if (filewriter) {
+    //     // opening the file for writing
+    //     fp = fopen(this->filename, "w");
 
-    // simulation box bounds
-    boxxlo = domain->boxlo[0];
-    boxxhi = domain->boxhi[0];
-    boxylo = domain->boxlo[1];
-    boxyhi = domain->boxhi[1];
-    boxzlo = domain->boxlo[2];
-    boxzhi = domain->boxhi[2];
+    //     // making sure it is open
+    //     if (fp == NULL) error->all(FLERR,"Cannot open dump file");
+    // }
 
-    // nme = # of dump lines this proc will contribute to dump
-    nme = count();
+    // // simulation box bounds
+    // boxxlo = domain->boxlo[0];
+    // boxxhi = domain->boxhi[0];
+    // boxylo = domain->boxlo[1];
+    // boxyhi = domain->boxhi[1];
+    // boxzlo = domain->boxlo[2];
+    // boxzhi = domain->boxhi[2];
 
-    // ntotal = total # of dump lines in snapshot
-    // nmax = max # of dump lines on any proc
-    bigint bnme = nme;
-    MPI_Allreduce(&bnme,&ntotal,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
+    // // nme = # of dump lines this proc will contribute to dump
+    // nme = count();
 
-    int nmax;
-    if (multiproc != nprocs) MPI_Allreduce(&nme,&nmax,1,MPI_INT,MPI_MAX,world);
-    else nmax = nme;
+    // // ntotal = total # of dump lines in snapshot
+    // // nmax = max # of dump lines on any proc
+    // bigint bnme = nme;
+    // MPI_Allreduce(&bnme,&ntotal,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
 
-    // write timestep header
-    // for multiproc,
-    //   nheader = # of lines in this file via Allreduce on clustercomm
-    bigint nheader = ntotal;
-    if (multiproc)
-        MPI_Allreduce(&bnme,&nheader,1,MPI_SPARTA_BIGINT,MPI_SUM,clustercomm);
+    // int nmax;
+    // if (multiproc != nprocs) MPI_Allreduce(&nme,&nmax,1,MPI_INT,MPI_MAX,world);
+    // else nmax = nme;
 
-    if (filewriter) write_header(nheader);
+    // // write timestep header
+    // // for multiproc,
+    // //   nheader = # of lines in this file via Allreduce on clustercomm
+    // bigint nheader = ntotal;
+    // if (multiproc)
+    //     MPI_Allreduce(&bnme,&nheader,1,MPI_SPARTA_BIGINT,MPI_SUM,clustercomm);
 
-    // insure buf is sized for packing and communicating
-    // use nmax to insure filewriter proc can receive info from others
-    // limit nmax*size_one to int since used as arg in MPI calls
-    if (nmax > maxbuf) {
-        if ((bigint) nmax * size_one > MAXSMALLINT)
-            error->all(FLERR,"Too much per-proc info for dump");
-        maxbuf = nmax;
-        memory->destroy(buf);
-        memory->create(buf,maxbuf*size_one,"dump:buf");
-    }
+    // if (filewriter) write_header(nheader);
 
-    // pack my data into buf
-    pack();
+    // // insure buf is sized for packing and communicating
+    // // use nmax to insure filewriter proc can receive info from others
+    // // limit nmax*size_one to int since used as arg in MPI calls
+    // if (nmax > maxbuf) {
+    //     if ((bigint) nmax * size_one > MAXSMALLINT)
+    //         error->all(FLERR,"Too much per-proc info for dump");
+    //     maxbuf = nmax;
+    //     memory->destroy(buf);
+    //     memory->create(buf,maxbuf*size_one,"dump:buf");
+    // }
 
-    // if buffering, convert doubles into strings
-    // insure sbuf is sized for communicating
-    // cannot buffer if output is to binary file
-    if (buffer_flag && !binary) {
-        nsme = convert_string(nme,buf);
-        int nsmin,nsmax;
-        MPI_Allreduce(&nsme,&nsmin,1,MPI_INT,MPI_MIN,world);
-        if (nsmin < 0) error->all(FLERR,"Too much buffered per-proc info for dump");
-        if (multiproc != nprocs)
-            MPI_Allreduce(&nsme,&nsmax,1,MPI_INT,MPI_MAX,world);
-        else nsmax = nsme;
-        if (nsmax > maxsbuf) {
-            maxsbuf = nsmax;
-            memory->grow(sbuf,maxsbuf,"dump:sbuf");
-        }
-    }
+    // // pack my data into buf
+    // pack();
 
-    // filewriter = 1 = this proc writes to file
-    // ping each proc in my cluster, receive its data, write data to file
-    // else wait for ping from fileproc, send my data to fileproc
-    int tmp,nlines,nchars;
-    MPI_Status status;
-    MPI_Request request;
+    // // if buffering, convert doubles into strings
+    // // insure sbuf is sized for communicating
+    // // cannot buffer if output is to binary file
+    // if (buffer_flag && !binary) {
+    //     nsme = convert_string(nme,buf);
+    //     int nsmin,nsmax;
+    //     MPI_Allreduce(&nsme,&nsmin,1,MPI_INT,MPI_MIN,world);
+    //     if (nsmin < 0) error->all(FLERR,"Too much buffered per-proc info for dump");
+    //     if (multiproc != nprocs)
+    //         MPI_Allreduce(&nsme,&nsmax,1,MPI_INT,MPI_MAX,world);
+    //     else nsmax = nsme;
+    //     if (nsmax > maxsbuf) {
+    //         maxsbuf = nsmax;
+    //         memory->grow(sbuf,maxsbuf,"dump:sbuf");
+    //     }
+    // }
 
-    // comm and output buf of doubles
-    if (buffer_flag == 0 || binary) {
-        if (filewriter) {
-            for (int iproc = 0; iproc < nclusterprocs; iproc++) {
-                if (iproc) {
-                    MPI_Irecv(buf,maxbuf*size_one,MPI_DOUBLE,me+iproc,0,world,&request);
-                    MPI_Send(&tmp,0,MPI_INT,me+iproc,0,world);
-                    MPI_Wait(&request,&status);
-                    MPI_Get_count(&status,MPI_DOUBLE,&nlines);
-                    nlines /= size_one;
-                } else nlines = nme;
+    // // filewriter = 1 = this proc writes to file
+    // // ping each proc in my cluster, receive its data, write data to file
+    // // else wait for ping from fileproc, send my data to fileproc
+    // int tmp,nlines,nchars;
+    // MPI_Status status;
+    // MPI_Request request;
 
-                write_data(nlines,buf);
-            }
-            // if (flush_flag) fflush(fp);
+    // // comm and output buf of doubles
+    // if (buffer_flag == 0 || binary) {
+    //     if (filewriter) {
+    //         for (int iproc = 0; iproc < nclusterprocs; iproc++) {
+    //             if (iproc) {
+    //                 MPI_Irecv(buf,maxbuf*size_one,MPI_DOUBLE,me+iproc,0,world,&request);
+    //                 MPI_Send(&tmp,0,MPI_INT,me+iproc,0,world);
+    //                 MPI_Wait(&request,&status);
+    //                 MPI_Get_count(&status,MPI_DOUBLE,&nlines);
+    //                 nlines /= size_one;
+    //             } else nlines = nme;
 
-        } else {
-            MPI_Recv(&tmp,0,MPI_INT,fileproc,0,world,&status);
-            MPI_Rsend(buf,nme*size_one,MPI_DOUBLE,fileproc,0,world);
-        }
+    //             write_data(nlines,buf);
+    //         }
+    //         // if (flush_flag) fflush(fp);
 
-    // comm and output sbuf = one big string of formatted values per proc
-    } else {
-        if (filewriter) {
-            for (int iproc = 0; iproc < nclusterprocs; iproc++) {
-                if (iproc) {
-                    MPI_Irecv(sbuf,maxsbuf,MPI_CHAR,me+iproc,0,world,&request);
-                    MPI_Send(&tmp,0,MPI_INT,me+iproc,0,world);
-                    MPI_Wait(&request,&status);
-                    MPI_Get_count(&status,MPI_CHAR,&nchars);
-                } else nchars = nsme;
+    //     } else {
+    //         MPI_Recv(&tmp,0,MPI_INT,fileproc,0,world,&status);
+    //         MPI_Rsend(buf,nme*size_one,MPI_DOUBLE,fileproc,0,world);
+    //     }
 
-                write_data(nchars,(double *) sbuf);
-            }
-            // if (flush_flag) fflush(fp);
+    // // comm and output sbuf = one big string of formatted values per proc
+    // } else {
+    //     if (filewriter) {
+    //         for (int iproc = 0; iproc < nclusterprocs; iproc++) {
+    //             if (iproc) {
+    //                 MPI_Irecv(sbuf,maxsbuf,MPI_CHAR,me+iproc,0,world,&request);
+    //                 MPI_Send(&tmp,0,MPI_INT,me+iproc,0,world);
+    //                 MPI_Wait(&request,&status);
+    //                 MPI_Get_count(&status,MPI_CHAR,&nchars);
+    //             } else nchars = nsme;
 
-        } else {
-            MPI_Recv(&tmp,0,MPI_INT,fileproc,0,world,&status);
-            MPI_Rsend(sbuf,nsme,MPI_CHAR,fileproc,0,world);
-        }
-    }
+    //             write_data(nchars,(double *) sbuf);
+    //         }
+    //         // if (flush_flag) fflush(fp);
+
+    //     } else {
+    //         MPI_Recv(&tmp,0,MPI_INT,fileproc,0,world,&status);
+    //         MPI_Rsend(sbuf,nsme,MPI_CHAR,fileproc,0,world);
+    //     }
+    // }
 
     if (filewriter) {
         // closing the file
-        fclose(this->fp);
+        // fclose(this->fp);
 
         // if a command was provided
         if (this->command.length() > 0) {

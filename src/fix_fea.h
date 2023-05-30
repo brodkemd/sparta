@@ -33,9 +33,10 @@ FixStyle(fea,FixFea)
 #include "modify.h"
 #include "output.h"
 #include "dump.h"
+#include "compute.h"
 
 #include <string>
-// #include <iostream>
+#include <iostream>
 
 #include <sys/stat.h>
 
@@ -63,14 +64,21 @@ namespace SPARTA_NS {
              */
             FixFea(class SPARTA *, int, char **);
             FixFea(class SPARTA *sparta) : Fix(sparta) {} // needed for Kokkos
-            virtual ~FixFea();
+            // virtual ~FixFea();
             int setmask();
             void end_of_step();
 
+            void debug_msg() {
+                std::cout << "---> " << this->debug_num << "\n";
+                this->debug_num++;
+            }
+
         protected:
+            int debug_num = 1;
+            int compute_index;
             // std::string command = "";
-            char* surf_args[SURF_ARGS_SIZE];
-            class WriteSurf* writer;
+            // char* surf_args[SURF_ARGS_SIZE];
+            // class WriteSurf* writer;
     };
 }
 
