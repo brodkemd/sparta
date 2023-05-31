@@ -3,16 +3,18 @@
 
 #include <iostream>
 #include <fstream>
+#include <vector>
 
-void print() {
-    std::cout << '\n';
+template<typename T>
+void print_vector(std::vector<T>& vec) {
+    std::cout << "[";
+    for (int i = 0; i < vec.size() - 1; i++) {
+        std::cout << vec[i] << " ";
+    }
+    std::cout << vec.back() << "]\n";
 }
 
-template <typename T, typename... TAIL>
-void print(const T &t, TAIL... tail) {
-    std::cout << t << " ";
-    print(tail...);
-}
+void error(const char *file, int line, const char *str);
 
 
 #endif
