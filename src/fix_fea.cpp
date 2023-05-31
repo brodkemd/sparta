@@ -35,13 +35,14 @@ enum{INT,DOUBLE};  // several files
  * 10 : dump-file, file to dump surf info to
  * 11 : select-ID, what surface elements to dump
  * 12 : dump compute format, this is c_[*]
+ * 13 : temperature file, formatted as a surf dump file
  */
 FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // checking if the number of args is correct
     if (narg > 13)
-        error->all(FLERR,"Illegal fix fea command, too many inputs, format \"fix id fea EXE FILE\"");
+        error->all(FLERR,"Illegal fix fea command, too many inputs");
     else if (narg < 13)
-        error->all(FLERR,"Illegal fix fea command, too few inputs, format \"fix id fea EXE FILE\"");
+        error->all(FLERR,"Illegal fix fea command, too few inputs");
 
     // making sure there is a surface to analyze
     if (!surf->exist)
@@ -79,7 +80,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // command style: compute id surf group-id mix-id args
     char* fix_args[COMPUTE_SURF_ARGS_SIZE] = {
         (char*)"FFFF",
-        (char*)"surf/temp",
+        (char*)"surf/temp/dynamic",
                arg[7],
         (char*)std::to_string(this->nevery).c_str(),
         (char*)"c_CCCC"
@@ -101,7 +102,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         (char*)std::to_string(this->nevery).c_str(),
                arg[10],
         (char*)"id",
-        (char*)"c_CCCC[*]"
+        (char*)"c_CCCC"
     };
 
     // adding the needed compute

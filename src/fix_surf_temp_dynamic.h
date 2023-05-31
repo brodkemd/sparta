@@ -14,15 +14,20 @@
 
 #ifdef FIX_CLASS
 
-FixStyle(surf/temp,FixSurfTempDynamic)
+FixStyle(surf/temp/dynamic,FixSurfTempDynamic)
 
 #else
 
-#ifndef SPARTA_FIX_SURF_TEMP_H
-#define SPARTA_FIX_SURF_TEMP_H
+#ifndef SPARTA_FIX_SURF_TEMP_DYNAMIC_H
+#define SPARTA_FIX_SURF_TEMP_DYNAMIC_H
 
 #include "fix.h"
 #include "surf.h"
+#include <sys/stat.h>
+#include <fstream>
+#include <boost/algorithm/string.hpp>
+#include <vector>
+#include <iostream>
 
 namespace SPARTA_NS {
     class FixSurfTempDynamic : public Fix {
@@ -32,19 +37,30 @@ namespace SPARTA_NS {
             int setmask();
             virtual void init();
             virtual void end_of_step();
+            virtual void start_of_step();
+
+        protected:
+            void load_surf_temps(int _nlocal);
+            void write_elmer_file();
 
         private:
+            int file_format_flag;
+
+            bool file_handler;
             int source,icompute,ifix,firstflag;
             int groupbit;
-            double twall,emi;
+            int nprocs;
+            double emi;
             int tindex,qwindex;
 
             char *id_qw;
+            char *twall_file;
             class Compute *cqw;
             class Fix *fqw;
 
             double prefactor,threshold;
             double *tvector_me;
+            double *twall;
     };
 
 }

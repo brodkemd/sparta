@@ -4,7 +4,10 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-
+#include <algorithm>
+#include <regex>
+#include <string>
+ 
 template<typename T>
 void print_vector(std::vector<T>& vec) {
     std::cout << "[";
@@ -15,6 +18,7 @@ void print_vector(std::vector<T>& vec) {
 }
 
 void error(const char *file, int line, const char *str);
+
 
 
 #endif

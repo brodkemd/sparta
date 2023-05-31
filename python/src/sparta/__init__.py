@@ -3,6 +3,7 @@ from .sparta import Sparta, man
 from .molecule import Molecule, Species, VSS
 from ._tools_wrapper import *
 from ._paraview_wrapper import *
+from ._sim_setup import *
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 

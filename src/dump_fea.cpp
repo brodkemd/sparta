@@ -168,6 +168,8 @@ DumpFea::DumpFea(SPARTA *sparta, int narg, char **arg) : DumpSurf(sparta, narg, 
     cglobal = clocal = NULL;
     buflocal = NULL;
     // std::cout << "dump 2\n";
+
+    if (me == 0) this->filewriter = 1;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -323,8 +325,10 @@ void DumpFea::write() {
 
         // if a command was provided
         if (this->command.length() > 0) {
-            // running the command
+            // running the command and blocks until it is completed
+            MPI_Barrier(world);
             CommandResult command_result = EXEC(this->command);
+            MPI_Barrier(world);
 
             // if the command did not succeed
             if (command_result.exitstatus) {

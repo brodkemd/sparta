@@ -206,7 +206,6 @@ void Dump::init()
   }
 
   // setup boundary string
-
   int m = 0;
   for (int idim = 0; idim < 3; idim++) {
     for (int iside = 0; iside < 2; iside++) {
@@ -221,7 +220,6 @@ void Dump::init()
   boundstr[8] = '\0';
 
   // style-specific initialization
-
   init_style();
 }
 
@@ -353,7 +351,6 @@ void Dump::write()
   }
 
   // if file per timestep, close file if I am filewriter
-
   if (multifile) {
     if (compressed) {
       if (filewriter) pclose(fp);

@@ -6,12 +6,6 @@
 ElmerGridToSpartaSurf::ElmerGridToSpartaSurf(std::string _file_stem) {
     // setting the file
     this->file_stem = _file_stem;
-
-    // loading the boundary
-    this->load_boundary();
-
-    // loading the node data
-    this->load_nodes();
 }
 
 
@@ -19,7 +13,7 @@ ElmerGridToSpartaSurf::ElmerGridToSpartaSurf(std::string _file_stem) {
  * Loads boundary element ids and nodes from boundary file
 */
 void ElmerGridToSpartaSurf::load_boundary() {
-    std::cout << "Loading Boundary\n";
+    // std::cout << "Loading Boundary\n";
     // Create a text string, which is used to output the text file
     std::string line;
 
@@ -39,6 +33,7 @@ void ElmerGridToSpartaSurf::load_boundary() {
             // getting the latest line
             std::getline(boundary_file, line);
 
+            boost::algorithm::trim(line);
             // filters empty lines
             if (!(line.length())) continue;
 
@@ -51,8 +46,11 @@ void ElmerGridToSpartaSurf::load_boundary() {
 
             // if the line contains a certain number of values, erase the first 5
             if (v.size() > 5) {
-                v.erase(v.begin(), v.begin() + 5);
+                v.erase(v.begin()+1, v.begin() + 5);
             }
+
+            // for (std::string it : v) { std::cout << it << " "; }
+            // std::cout << "\n";
 
             // adding the data to the class vector
             this->boundary_data.push_back(v);
@@ -61,7 +59,6 @@ void ElmerGridToSpartaSurf::load_boundary() {
             count++;
         }
     } else error(FLERR, "boundary file did not open");
-    
 
     // Close the file
     boundary_file.close();
@@ -72,7 +69,7 @@ void ElmerGridToSpartaSurf::load_boundary() {
  * Loads node locations from the node file
 */
 void ElmerGridToSpartaSurf::load_nodes() {
-    std::cout << "Loading Nodes\n";
+    // std::cout << "Loading Nodes\n";
     // Create a text string, which is used to output the text file
     std::string line;
 
@@ -92,6 +89,8 @@ void ElmerGridToSpartaSurf::load_nodes() {
             // getting the latest line
             std::getline(node_file, line);
 
+            boost::algorithm::trim(line);
+
             // filters empty lines
             if (!(line.length())) continue;
 
@@ -110,13 +109,10 @@ void ElmerGridToSpartaSurf::load_nodes() {
             // adding the data to the class list
             this->node_data.push_back(temp);
         }
-    } else {
-        error(FLERR, "node file did not open");
-    }
+    } else { error(FLERR, "node file did not open"); }
 
     // Close the file
     node_file.close();
-
 }
 
 
@@ -124,6 +120,12 @@ void ElmerGridToSpartaSurf::load_nodes() {
  * the main function in this class
  */
 void ElmerGridToSpartaSurf::make_sparta_surf() {
+    // loading the boundary
+    this->load_boundary();
+
+    // loading the node data
+    this->load_nodes();
+
     // stores triangle data
     std::vector<std::pair<std::string, std::vector<std::string>>> tris;
 
@@ -169,7 +171,7 @@ void ElmerGridToSpartaSurf::make_sparta_surf() {
         }
     }
 
-    std::cout << "writing to: " << this->file_stem + ".surf" << "\n";
+    // std::cout << "writing to: " << this->file_stem + ".surf" << "\n";
 
     // writing to file
     std::ofstream surf_file;

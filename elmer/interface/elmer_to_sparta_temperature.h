@@ -2,7 +2,10 @@
 #define ELMER_TO_SPARTA_TEMPERATURE_H
 
 #include <iostream>
+
 #include "elmer_grid_to_sparta_surf.h"
+
+constexpr auto max_precision {std::numeric_limits<long double>::digits10 + 1};
 
 class ElmerToSpartaTemperature : public ElmerGridToSpartaSurf {
     public:
@@ -12,8 +15,9 @@ class ElmerToSpartaTemperature : public ElmerGridToSpartaSurf {
     private:
         void load_data();
         std::string data_file;
-        std::vector<std::vector<std::string>> data;
-    // ElmerToSpartaTemperature() {};
+        std::vector<std::string> data;
+
+        
 };
 
 #endif
