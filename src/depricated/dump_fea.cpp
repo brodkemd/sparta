@@ -318,7 +318,7 @@ void DumpFea::write() {
     //         MPI_Rsend(sbuf,nsme,MPI_CHAR,fileproc,0,world);
     //     }
     // }
-
+    MPI_Barrier(world);
     if (filewriter) {
         // closing the file
         // fclose(this->fp);
@@ -326,9 +326,9 @@ void DumpFea::write() {
         // if a command was provided
         if (this->command.length() > 0) {
             // running the command and blocks until it is completed
-            MPI_Barrier(world);
+            
             CommandResult command_result = EXEC(this->command);
-            MPI_Barrier(world);
+            
 
             // if the command did not succeed
             if (command_result.exitstatus) {
@@ -339,5 +339,5 @@ void DumpFea::write() {
             std::cout << "done running command\n";
         }
     }
-
+    MPI_Barrier(world);
 }

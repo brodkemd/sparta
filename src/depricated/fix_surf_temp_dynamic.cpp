@@ -43,20 +43,20 @@ enum{COMPUTE,FIX};
 
 /* ---------------------------------------------------------------------- */
 /**
-* 0 : ID, documented in fix command
-* 1 : surf/temp/dynamic, style name of this fix command
-* 2 : surf-ID, group ID for which surface elements to consider
-* 3 : Nevery, adjust surface temperature once every Nevery steps
-* 4 : source, computeID or fixID
+ * 0 : ID, documented in fix command
+ * 1 : surf/temp/dynamic, style name of this fix command
+ * 2 : surf-ID, group ID for which surface elements to consider
+ * 3 : Nevery, adjust surface temperature once every Nevery steps
+ * 4 : source, computeID or fixID
         computeID = c_ID or c_ID[n] for a compute that calculates per surf values
         fixID = f_ID or f_ID[n] for a fix that calculates per surf values 
-* 5 : Tsurf_file, path to surface temperature file 
-* 6 : Tsurf_file_format,
+ * 5 : Tsurf_file, path to surface temperature file 
+ * 6 : Tsurf_file_format,
         elmer = elmer data file format
         sparta = sparta surf data file format
-* 7 : emisurf = emissivity of the surface (unitless, 0 < emisurf <= 1)
-* 8 : customID = name of a custom per-surf variable to create
-*/
+ * 7 : emisurf = emissivity of the surface (unitless, 0 < emisurf <= 1)
+ * 8 : customID = name of a custom per-surf variable to create
+ */
 FixSurfTempDynamic::FixSurfTempDynamic(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (narg != 9)
         error->all(FLERR,"Illegal fix surf/temp/dynamic command");

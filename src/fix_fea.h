@@ -64,18 +64,40 @@ namespace SPARTA_NS {
              */
             FixFea(class SPARTA *, int, char **);
             FixFea(class SPARTA *sparta) : Fix(sparta) {} // needed for Kokkos
-            // virtual ~FixFea();
+            ~FixFea();
             int setmask();
-            void end_of_step();
+            virtual void init();
+            virtual void end_of_step();
+            virtual void start_of_step();
 
-            void debug_msg() {
-                std::cout << "---> " << this->debug_num << "\n";
-                this->debug_num++;
-            }
+            // void debug_msg() {
+            //     std::cout << "---> " << this->debug_num << "\n";
+            //     this->debug_num++;
+            // }
 
         protected:
-            int debug_num = 1;
-            int compute_index;
+            // int debug_num = 1;
+            // int compute_index;
+            std::string command;
+
+            // surface temperature vars
+            int file_format_flag;
+
+            bool file_handler;
+            int source,icompute,ifix,firstflag;
+            int groupbit;
+            int nprocs;
+            double emi;
+            int tindex,qwindex;
+
+            char *id_qw;
+            char *twall_file;
+            class Compute *cqw;
+            class Fix *fqw;
+
+            double prefactor,threshold;
+            double *tvector_me;
+            double *twall;
             // std::string command = "";
             // char* surf_args[SURF_ARGS_SIZE];
             // class WriteSurf* writer;
