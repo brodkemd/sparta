@@ -5,5 +5,5 @@ from ._tools_wrapper import *
 from ._paraview_wrapper import *
 from ._sim_setup import *
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 

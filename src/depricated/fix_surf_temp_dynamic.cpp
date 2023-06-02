@@ -54,8 +54,8 @@ enum{COMPUTE,FIX};
  * 6 : Tsurf_file_format,
         elmer = elmer data file format
         sparta = sparta surf data file format
- * 7 : emisurf = emissivity of the surface (unitless, 0 < emisurf <= 1)
- * 8 : customID = name of a custom per-surf variable to create
+ * 7 : emisurf, emissivity of the surface (unitless, 0 < emisurf <= 1)
+ * 8 : customID, name of a custom per-surf variable to create
  */
 FixSurfTempDynamic::FixSurfTempDynamic(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (narg != 9)

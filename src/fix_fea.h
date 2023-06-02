@@ -21,10 +21,12 @@ FixStyle(fea,FixFea)
 #ifndef SPARTA_FIX_FEA_H
 #define SPARTA_FIX_FEA_H
 
-#define DUMP_SURF_ARGS_SIZE 7
+// #define DUMP_SURF_ARGS_SIZE 7
 #define COMPUTE_SURF_ARGS_SIZE 5
-#define SURF_ARGS_SIZE 1
-#define DUMP_FEA_MODIFY_ARGS_SIZE 2
+// #define SURF_ARGS_SIZE 1
+// #define DUMP_FEA_MODIFY_ARGS_SIZE 2
+#define BOUNDARY_DATA_SIZE 4
+#define BOUNDARY_LINE_SIZE 8
 
 #include "fix.h"
 #include "error.h"
@@ -34,11 +36,15 @@ FixStyle(fea,FixFea)
 #include "output.h"
 #include "dump.h"
 #include "compute.h"
+#include "comm.h"
+#include "memory.h"
+#include "domain.h"
+#include "input.h"
+#include "update.h"
 
 #include <string>
-#include <iostream>
-
-#include <sys/stat.h>
+#include <vector>
+#include <array>
 
 namespace SPARTA_NS {
     /**
@@ -75,10 +81,22 @@ namespace SPARTA_NS {
             //     this->debug_num++;
             // }
 
-        protected:
+        private:
+            void load_boundary();
+            void load_data();
+            void load_sif(std::string sif_file);
+            void print(std::string str, bool indent = true, std::string end = "\n");
+
             // int debug_num = 1;
             // int compute_index;
             std::string command;
+
+            std::string file_stem;
+            std::string data_file;
+            std::string sif_format;
+            std::vector<double> data;
+            std::vector<std::array<double, 4>> boundary_data;
+
 
             // surface temperature vars
             int file_format_flag;

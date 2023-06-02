@@ -1,0 +1,60 @@
+        // // message
+        // std::cout << "--> " << comm->me << " reading surf file\n";
+        
+        // // init vars for use later
+        // std::string line; std::vector<std::string> v;
+        // std::ifstream file;
+
+        // // opening the file
+        // file.open(this->twall_file);
+        // if (!file.is_open()) error->all(FLERR, "twall_file did not open");
+
+        // // boolean for reading file
+        // bool go = false;
+
+        // // used as an index counter
+        // int index = 0;
+
+        // // reading the file
+        // while (file) {
+        //     // getting the latest line
+        //     std::getline(file, line);
+
+        //     // trimming whitespaces off of the line
+        //     boost::algorithm::trim(line);
+            
+        //     // filters empty lines
+        //     if (!(line.length())) continue;
+
+        //     // splitting the line at spaces
+        //     boost::split(v, line, boost::is_any_of(" "));
+            
+        //     // gets the data from the files
+        //     switch (this->file_format_flag) {
+        //         case 0: // handles elmer format
+        //             // if good to record data and the line only has one thing in it
+        //             if (go && v.size() == 1) {
+        //                 // error catching
+        //                 if (index >= nlocal) error->all(FLERR, "Index exceed bounds");
+                        
+        //                 // adding the data to the class list 
+        //                 this->twall[index] = std::stod(v[0]);
+        //                 index++;
+        //             } else {
+        //                 // start looking for data after a line that starts with "Perm"
+        //                 go = (v[0] == (std::string)"Perm:");
+        //             }
+        //             break;
+                
+        //         case 1: // sparta file
+        //             // if good to record data
+        //             if (go && v.size() == 2) {
+        //                 // adding the data to the class array, position in array is first value in array
+        //                 this->twall[std::stoi(v[0])-1] = std::stod(v[1]);
+        //             } else {
+        //                 // catches when the "surfs" section of the file starts
+        //                 if (v.size() >= 2) go = (v[1] == (std::string)"SURFS");
+        //             }
+        //             break;
+        //     }
+        // }

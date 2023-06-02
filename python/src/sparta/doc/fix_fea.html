@@ -8,28 +8,15 @@
     <PRE>fix ID fea ELMER_EXE ELMER_SIF_FILE 
     </PRE>
     <P>
-        <LI>id = documented in <A HREF = "fix.html">fix</A></LI>, just in set to something
-        <LI>style = style name of this fix command, for this it is fea</LI>
-        <li>nevery = execute every this many time steps</li>
-        <li>elmer_exe = path to elmer executable</li>
-        <li>elmer_sif_file = path to the sif file to run with elmer</li>
-        <li>surf_file = path or name of file to dump surface to</li>
-        <li>compute_id = id for compute</li>
-        <li>group_id = group ID for which surface elements to perform calculation on</li>
-        <li>mix_id = mixture ID for particles to perform calculation on</li>
-        <li>dump_id = id for the surf dump command for the data need for elmer</li>
-        <li>dump_file = file for the surf dump command for the data need for elmer</li>
-        <li>select_id = what surface elements to dump</li>
-        <li>dump_compute_format = this is has to be c_[*]</li>
-
+        <LI>ID is documented in <A HREF = "fix.html">fix</A></LI>
+        <LI>command = style name of this fix command</LI>
+        <li>ELMER_EXE = path to elmer executable</li>
+        <li>ELMER_SIF_FILE = path to input file for elmer</li>
     </P>
     <P><B>Examples:</B>
     </P>
-    <PRE>fix 1 fea 2 ELMEREXE case.sif out.surf 5 all all 8 out.dump all c_5[*]
+    <PRE>fix 1 field/grid gradBx gradBy NULL 
     </PRE>
     <P><B>Description:</B>
-    </P>
-    <P>
-    See Syntax.
     </P>
 </HTML>

@@ -62,7 +62,6 @@ void ElmerToSpartaTemperature::load_data() {
 
     // Close the file
     data_file.close();
-
 }
 
 /**
