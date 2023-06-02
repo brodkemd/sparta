@@ -71,9 +71,100 @@ static CommandResult EXEC(const std::string &command) {
     return CommandResult{result, exitcode};
 }
 
-/* ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+
+Elmer class methods
+
+---------------------------------------------------------------------- */
 
 /**
+ * Constructor takes output file and the error instance used in the FixFea class.
+ * The error instance is used to display error messages
+ * Do not need to check validity of output file path because is already checked in
+ * fixfea class
+*/
+FixFea::Elmer::Elmer(std::string output_file, Error*& _error) {
+    this->sif_path = output_file;
+    this->error = _error;
+}
+
+/**
+ * Writes collected commands to the output file. Will write the optional input
+ * "header" first if it is provided
+*/
+void FixFea::Elmer::write(std::string header) {
+    // Read from the text file
+    std::ofstream sif_file;
+
+    // opening the node file
+    sif_file.open(sif_path);
+
+    // making sure it is open
+    if (sif_file.is_open()) {
+        // if the header is provided, write it
+        if (header.length()) sif_file << header << "\n\n";
+
+        // writing each command in the format required by elmer
+        for (int i = 0; i < this->commands.size(); i++) {
+            sif_file << this->commands[i][0] << "\n";
+            for (int j = 1; j < this->commands[i].size()-1; j++) {
+                sif_file << this->tab << this->commands[i][j] << "\n";
+            }
+            sif_file << this->commands[i][this->commands[i].size()] << "\n\n";
+        }
+    } else {
+        // catching if the file did not open
+        error->all(FLERR, ((std::string)"sif file did not open in Elmer class, " + sif_path).c_str());
+    }
+
+    // Close the file
+    sif_file.close();
+
+    // clear no longer needed commands
+    this->commands.clear();
+}
+
+/**
+ * Adds a boundary condition
+*/
+void FixFea::Elmer::Boundary_Condition(int _n, std::vector<std::string> args) {
+    this->_add_section("Boundary Condition", std::to_string(_n), args);
+}
+
+/**
+ * Generic method to add a section, such as the "Boundary Condition" section above
+*/
+void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<std::string> args) {
+    // clearing the vector for good measure
+    this->v.clear();
+
+    // if _n was provided, add it, _n is "" if it is not provided
+    if (_n.length()) this->v.push_back(_name + " " + _n);
+    else             this->v.push_back(_name);
+
+    // adding the arguments to the temporary vector
+    for (int i = 0; i < args.size(); i++) this->v.push_back(args[i]);
+    
+    // adding the required "End" keyword to the end of the temp vector
+    this->v.push_back("End");
+
+    // adding the temp vector to the larger vector, each temp vector represents a command section
+    // like "Boundary Condition" or "Header"
+    this->commands.push_back(v);
+}
+
+/* ----------------------------------------------------------------------
+    
+    FixFea class methods
+
+ ---------------------------------------------------------------------- */
+
+
+/**
+ * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
+ * to si in sif file used as the format
+ * 
  * inputs, format INDEX : DESCRIPTION or VALUE
  * 0  : id
  * 1  : fea
@@ -85,7 +176,6 @@ static CommandResult EXEC(const std::string &command) {
  * 7  : Tsurf_file, path to surface temperature file 
  * 8  : Tsurf_file_format,
             elmer = elmer data file format
-            sparta = sparta surf data file format
  * 9  : emisurf, emissivity of the surface (unitless, 0 < emisurf <= 1)
  * 10 : customID, name of a custom per-surf variable to create
  * 11 : meshDBstem, stem path to the elmer mesh database
@@ -134,17 +224,21 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // adding the needed compute
     modify->add_compute(COMPUTE_SURF_ARGS_SIZE, compute_args);
+
+    // the compute index, it was just made so it is the number of computes minus 1 because it is an index
     icompute = modify->ncompute - 1;// modify->find_compute(id_qw);
 
     this->print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
 
     /********  start temperature stuff  **********/
 
+    // making sure the surface is the correct type
     if (surf->implicit)
         error->all(FLERR,"Cannot use fix fea with implicit surfs");
     if (surf->distributed)
         error->all(FLERR,"Cannot use fix fea with distributed surfs");
 
+    // get the surface group
     int igroup = surf->find_group(arg[5]);
     if (igroup < 0)
         error->all(FLERR,"Fix fea group ID does not exist");
@@ -168,8 +262,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     qwindex = 1;
 
     // error checks
-    // the compute index, it was just made so it is the number of computes minus 1 because it is an index
-    
     cqw = modify->compute[icompute];
     if (icompute < 0)
         error->all(FLERR,"Could not find fix fea compute ID");
@@ -182,6 +274,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
         error->all(FLERR,"Fix fea compute array is accessed out-of-range");
 
+    // getting the wall temperature file
     this->twall_file = arg[7];
 
     // if the twall file does not exist
@@ -189,20 +282,22 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, twall_file does not exist");
     this->print("Surf temperature file path: " + std::string(twall_file));
 
+    // getting the surface emissivity
     emi = input->numeric(FLERR,arg[9]);
     if (emi <= 0.0 || emi > 1.0)
         error->all(FLERR,"Fix fea emissivity must be > 0.0 and <= 1");
 
-    // parsing the file format
+    // parsing the file format, should be either elmer or sparta
     if (strcmp(arg[8],"elmer") == 0) {
         this->file_format_flag = 0;
-    } else if (strcmp(arg[8],"sparta") == 0) {
-        this->file_format_flag = 1;
+    // } else if (strcmp(arg[8],"sparta") == 0) {
+    //     this->file_format_flag = 1;
     } else {
         error->all(FLERR, "Fix fea temperature file format must be elmer or sparta");
     }
     this->print("Surf temperature file format: " + std::string(arg[8]));
 
+    // getting the variable name to create
     int n = strlen(arg[10]) + 1;
     char *id_custom = new char[n];
     strcpy(id_custom,arg[10]);
@@ -215,9 +310,9 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // prefactor and threshold in Stefan/Boltzmann equation
     // units of prefactor (SI) is K^4 / (watt - m^2)
     // same in 3d vs 2d, since SPARTA treats 2d cell volume as 1 m in z
-
     int dimension = domain->dimension;
 
+    // setting variables based on unit system
     if (strcmp(update->unit_style,"si") == 0) {
         prefactor = 1.0 / (emi * SB_SI);
         threshold = 1.0e-6;
@@ -242,7 +337,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     
     // getting the mesh database path stem from the args
     this->file_stem = std::string(arg[11]);
-
     this->print("Checking mesh database at: " + file_stem);
     
     // making sure all of the component files are a part of the database
@@ -252,52 +346,19 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
             error->all(FLERR,("Illegal fix fea command, mesh database incomplete, " + (this->file_stem + "." + exts[i]) + " does not exist").c_str());
     }
 
-
-    // // command style: compute id surf group-id mix-id args
-    // char* fix_args[COMPUTE_SURF_ARGS_SIZE] = {
-    //     (char*)"FFFF",
-    //     (char*)"surf/temp/dynamic",
-    //            arg[5],
-    //     (char*)std::to_string(this->nevery).c_str(),
-    //     (char*)"c_CCCC"
-    // };
-
-    // // dump id surf select-id nevery output_file id c_id[*]
-    // char* dump_args[DUMP_SURF_ARGS_SIZE] = {
-    //     (char*)"DDDD",
-    //     (char*)"fea",
-    //     (char*)"dummy",
-    //     (char*)std::to_string(this->nevery).c_str(),
-    //     (char*)"dummy.dump", // this dump command does not actually write anything
-    //     (char*)"id",
-    //     (char*)"c_CCCC"
-    // };
-    
-    // output->add_dump(DUMP_SURF_ARGS_SIZE-1, dump_args);
-
-    // initializing the surface writing class
-    // this->writer = new WriteSurf(sparta);
+    // making the elmer class
+    this->elmer = new Elmer(std::string(sif_path), this->error);
 
     // must have " 2>&1" at end to pipe stderr to stdout
     this->command = std::string(exe_path)+" "+std::string(sif_path)+" 2>&1";
 
-
-    // // dump arguments for the dump fea command
-    // char* dump_fea_modify_args[DUMP_FEA_MODIFY_ARGS_SIZE] = {
-    //     (char*)"command",
-    //     (char*)command.c_str()
-    // };
-
-    // std::cout << modify->compute[this->icompute]->id << "\n";
-
-
-    // error->all(FLERR, std::to_string(this->compute_index).c_str());
-    // modifying the fea dump to add command to run
-    // output->dump[output->ndump - 1]->modify_params(DUMP_FEA_MODIFY_ARGS_SIZE, dump_fea_modify_args);
-
+    // loading the boundary data
     this->load_boundary();
 
-    // debug_msg();
+    // getting the sif file format from the provided
+    this->load_sif(std::string(sif_path));
+
+    // temporary
     error->all(FLERR, "done setting up fix fea");
 }
 
@@ -305,6 +366,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
 FixFea::~FixFea() {
     delete [] id_qw;
+    delete this->elmer;
     memory->destroy(tvector_me);
     surf->remove_custom(tindex);
 }
@@ -336,7 +398,7 @@ void FixFea::init() {
 
 /**
  * Loading wall temperature info on start of step
-*/
+ */
 void FixFea::start_of_step() {
     int nlocal = surf->nlocal;
 
@@ -366,12 +428,12 @@ void FixFea::start_of_step() {
             for (int j = 1; j < BOUNDARY_DATA_SIZE; j++) {
                 // std::cout << this->data[std::stoi(boundary_data[i][j])-1] << " ";
                 // gets the data point corresponding to node id and adds it to the rolling sum
-                avg += this->data[boundary_data[i][j]-1];
+                avg += this->data[this->boundary_data[i][j]-1];
             }
             // std::cout << "\n";
             // computing the average by dividing the sum by the number of points and setting the
             // surface element
-            this->twall[i] = avg/(BOUNDARY_DATA_SIZE - 1);
+            this->twall[this->boundary_data[i][0]-1] = avg/(BOUNDARY_DATA_SIZE - 1);
         }
 
         // checking to make sure all values where set
@@ -464,12 +526,20 @@ void FixFea::end_of_step() {
     // Allreduce tvector_me with my owned surfs to tvector custom variable
     // so that all procs know new temperature of all surfs
     // NOTE: could possibly just Allreduce a vector size of surface group
+    // NOTE: all data is put into tvector
     double *tvector = surf->edvec[surf->ewhich[tindex]];
     MPI_Allreduce(tvector_me,tvector,nlocal,MPI_DOUBLE,MPI_SUM,world);
 
     MPI_Barrier(world);
     if (this->file_handler) {
-        // write_elmer_file();
+        this->print("Generating Boundary Conditions");
+        for (int i = 0; i < nlocal; i++) {
+            this->elmer->Boundary_Condition(i+1, {
+                "Target Boundaries(1) = " + std::to_string(this->boundary_data[i][0]-1),
+                "Temperature = " + std::to_string(tvector[this->boundary_data[i][0]-1])
+            });
+        }
+        this->elmer->write(this->sif_format);
 
         // if a command was provided
         if (this->command.length() > 0) {
@@ -492,7 +562,7 @@ void FixFea::end_of_step() {
 
 /**
  * loads data from the elmer output file
-*/
+ */
 void FixFea::load_sif(std::string sif_path) {
     this->print("Loading sif format from: " + sif_path);
 
@@ -523,7 +593,7 @@ void FixFea::load_sif(std::string sif_path) {
 
 /**
  * loads data from the elmer output file
-*/
+ */
 void FixFea::load_data() {
     this->print("Loading temperature data from: " + this->data_file);
     // std::cout << "loading data\n";
@@ -580,7 +650,7 @@ void FixFea::load_data() {
 
 /**
  * Loads boundary element ids and nodes from boundary file
-*/
+ */
 void FixFea::load_boundary() {
     this->print("Loading boundary from: " + this->file_stem + ".boundary");
 
@@ -595,7 +665,7 @@ void FixFea::load_boundary() {
 
     // temporary vector to store the split strings
     std::vector<std::string> v;
-    std::array<double, 4> v_int;
+    std::array<int, 4> v_int;
 
     // clearing for good measure
     this->boundary_data.clear();
@@ -654,7 +724,7 @@ void FixFea::print(std::string str, bool indent, std::string end) {
     else space = "";
 
     if (comm->me == 0) {
-        if (screen)  fprintf(screen,(space + str + end).c_str());
+        if (screen)  fprintf(screen, (space + str + end).c_str());
         if (logfile) fprintf(logfile,(space + str + end).c_str());
     }
 }

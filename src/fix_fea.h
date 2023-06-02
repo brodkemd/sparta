@@ -76,10 +76,23 @@ namespace SPARTA_NS {
             virtual void end_of_step();
             virtual void start_of_step();
 
-            // void debug_msg() {
-            //     std::cout << "---> " << this->debug_num << "\n";
-            //     this->debug_num++;
-            // }
+        protected:
+            class Elmer {
+                public:
+                    Elmer(std::string output_file, Error*& _error);
+                    void write(std::string header = "");
+                    void Boundary_Condition(int _n, std::vector<std::string> args);
+
+
+                private:
+                    std::string sif_path = "";
+                    std::string tab = "  ";
+                    std::vector<std::vector<std::string>> commands;
+                    std::vector<std::string> v;
+                    Error* error;
+
+                    void _add_section(std::string _name, std::string _n, std::vector<std::string> args);
+            };
 
         private:
             void load_boundary();
@@ -95,7 +108,7 @@ namespace SPARTA_NS {
             std::string data_file;
             std::string sif_format;
             std::vector<double> data;
-            std::vector<std::array<double, 4>> boundary_data;
+            std::vector<std::array<int, 4>> boundary_data;
 
 
             // surface temperature vars
@@ -116,9 +129,9 @@ namespace SPARTA_NS {
             double prefactor,threshold;
             double *tvector_me;
             double *twall;
-            // std::string command = "";
-            // char* surf_args[SURF_ARGS_SIZE];
-            // class WriteSurf* writer;
+
+            Elmer* elmer;
+
     };
 }
 
