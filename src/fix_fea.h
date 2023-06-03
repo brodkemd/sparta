@@ -45,6 +45,7 @@ FixStyle(fea,FixFea)
 #include <string>
 #include <vector>
 #include <array>
+#include <sstream>
 
 namespace SPARTA_NS {
     /**
@@ -94,6 +95,20 @@ namespace SPARTA_NS {
                     void _add_section(std::string _name, std::string _n, std::vector<std::string> args);
             };
 
+            class ConfigParser {
+                public:
+                    ConfigParser(std::string _file_name, Error*& _error, bool ignore_var_name_case = true);
+                    std::size_t size();
+                    std::pair<std::string, std::string> &operator[](int i);
+
+                private:
+                    Error* error;
+                    std::string file_name;
+                    std::vector<std::pair<std::string, std::string>> contents;
+                    
+                    void read_file(bool ignore_var_name_case = true);
+            };
+
         private:
             void load_boundary();
             void load_data();
@@ -102,18 +117,23 @@ namespace SPARTA_NS {
 
             // int debug_num = 1;
             // int compute_index;
-            std::string command;
 
-            std::string file_stem;
-            std::string data_file;
+            std::string exe_path;
+            std::string sif_path;
+
+            std::string command;
+            std::string tsurf_file;
+            std::string meshDBstem;
+            //std::string data_file;
+            std::string customID;
+            std::string groupID;
+            std::string mixID;
             std::string sif_format;
             std::vector<double> data;
             std::vector<std::array<int, 4>> boundary_data;
 
 
             // surface temperature vars
-            int file_format_flag;
-
             bool file_handler;
             int source,icompute,ifix,firstflag;
             int groupbit;
@@ -122,7 +142,6 @@ namespace SPARTA_NS {
             int tindex,qwindex;
 
             char *id_qw;
-            char *twall_file;
             class Compute *cqw;
             class Fix *fqw;
 
