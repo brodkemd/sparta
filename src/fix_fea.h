@@ -113,7 +113,8 @@ namespace SPARTA_NS {
             void load_boundary();
             void load_data();
             void load_sif(std::string sif_file);
-            void print(std::string str, bool indent = true, std::string end = "\n");
+            void print(std::string str, int num_indent = 1, std::string end = "\n");
+            bool run_condition();
 
             // int debug_num = 1;
             // int compute_index;
@@ -132,6 +133,8 @@ namespace SPARTA_NS {
             std::vector<double> data;
             std::vector<std::array<int, 4>> boundary_data;
 
+            int run_every;
+            int last_nlocal;
 
             // surface temperature vars
             bool file_handler;
@@ -148,6 +151,7 @@ namespace SPARTA_NS {
             double prefactor,threshold;
             double *tvector_me;
             double *twall;
+            double *qw_avg;
 
             Elmer* elmer;
 
