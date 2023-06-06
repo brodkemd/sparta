@@ -1,6 +1,6 @@
 from ._src import error
 from types import FunctionType
-import os
+import os, sys
 
 cwd:str = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 
@@ -16,7 +16,6 @@ _materials = {
         "Relative Permittivity" :1.00059,
         "Relative Permeability" :1.00000037
     },
-
     "Water (room temperature)" : {
         "Density" :998.3,
         "Heat conductivity" :0.58,
@@ -28,7 +27,6 @@ _materials = {
         "Relative Permittivity" :80.1,
         "Relative Permeability" :0.999992,
     },
-
     "Glycerol (room temperature)" : {
         "Density" :1261.0,
         "Heat conductivity" :0.28,
@@ -38,7 +36,6 @@ _materials = {
         "Sound speed" :1904.0,
         "Relative Permittivity" :42.5
     },
-
     "Ethanol (room temperature)" : {
         "Density" :789.0,
         "Heat conductivity" :0.171,
@@ -48,7 +45,6 @@ _materials = {
         "Sound speed" :1144.0,
         "Relative Permittivity" :24.3
     },
-
     "Oil, olive (25 C)" : {
         "Density" :915.0,
         "Heat conductivity" :0.17,
@@ -58,7 +54,6 @@ _materials = {
         "Sound speed" :1430.0,
         "Relative Permittivity" :3.1
     },
-    
     "Aluminium" : {
         "Density" :2700.0,
         "Youngs modulus" :70.0e9,
@@ -73,7 +68,6 @@ _materials = {
         "Sound speed" :5000.0,
         "Relative Permeability" :1.000022
     },
-        
     "Carbon Steel" : {
         "Density" :7850.0,
         "Youngs modulus" :200.0e9,
@@ -87,7 +81,6 @@ _materials = {
         "Yield strength" :472.0e6,
         "Sound speed" :5100.0
     },
-    
     "Alloy Steel" : {
         "Density" :7850.0,
         "Youngs modulus" :200.0e9,
@@ -101,7 +94,6 @@ _materials = {
         "Yield strength" :1080.0e6,
         "Sound speed" :5100.0
     },
-    
     "Stainless Steel" : {
         "Density" :7925.0,
         "Youngs modulus" :200.0e9,
@@ -115,7 +107,6 @@ _materials = {
         "Yield strength" :380.0e6,
         "Sound speed" :5100.0
     },
-
     "Austenitic stainless steel" : {
         "Density" :7810.0,
         "Youngs modulus" :197.0e9,
@@ -128,7 +119,6 @@ _materials = {
         "Magnetic permeability" :1.02,
         "Tensile strength" :379.0e6
     },
-
     "Copper" : {
         "Density" :8960.0,
         "Youngs modulus" :115.0e9,
@@ -143,7 +133,6 @@ _materials = {
         "Sound speed" :3810.0,
         "Relative Permeability" :0.999994
     },
-
     "Lead" : {
         "Density" :11340.0,
         "Youngs modulus" :16.0e9,
@@ -157,7 +146,6 @@ _materials = {
         "Electric conductivity" :4.808e6,
         "Sound speed" :1190.0
     },
-
     "Glass" : {
         "Density" :2235.0,
         "Heat expansion coeff." :3.5e-6,
@@ -167,7 +155,6 @@ _materials = {
         "Heat conductivity" :1.14,
         "Heat capacity" :710.0
     },
-
     "Polycarbonate" : {
         "Density" :1220.0,
         "Youngs modulus" :2.2e9,
@@ -177,7 +164,6 @@ _materials = {
         "Heat capacity" :1250.0,
         "Heat conductivity" :0.205
     },
-
     "Polyvinyl Chloride" : {
         "Density" :1380.0,
         "Youngs modulus" :3100.0e6,
@@ -187,7 +173,6 @@ _materials = {
         "Heat capacity" :900.0,
         "Heat conductivity" :0.16
     },
-
     "Gold" : {
         "Density" :19300.0,
         "Youngs modulus" :78.0e9,
@@ -201,7 +186,6 @@ _materials = {
         "Electric conductivity" :45.17e6,
         "Sound speed" :2030.0
     },
-
     "Silver" : {
         "Density" :10490.0,
         "Youngs modulus" :83.0e9,
@@ -215,7 +199,6 @@ _materials = {
         "Electric conductivity" :63.01e6,
         "Sound speed" :2680.0
     },
-
     "Platinum" : {
         "Density" :21450.0,
         "Youngs modulus" :144.79e9,
@@ -227,7 +210,6 @@ _materials = {
         "Electric conductivity" :9.523e6,
         "Sound speed" :2800.0,
     },
-
     "Iron" : {
         "Density" :7870.0,
         "Youngs modulus" :193.053e9    ,
@@ -239,7 +221,6 @@ _materials = {
         "Electric conductivity" :10.30e6,
         "Sound speed" :5000.0
     },
-
     "Water" : {
         "Density" :910.0,
         "Heat conductivity" :"Variable Temperature; Real MATC \"9.828*exp(-5.7E-03*(tx+273.15))\"",
@@ -249,7 +230,6 @@ _materials = {
         "Critical Shear Rate" :1.0E-6,
         "Viscosity" :"Variable Temperature; Real MATC \"(2.0*3.0*1.916E03 * exp( -139.0E03/(8.314 *(tx+273.15))))^(-1.0/3.0)\""
     },
-
     "Solid Silicon" : {
         "Density" :2330.0,
         "Youngs modulus" :185.0e9    ,
@@ -264,7 +244,6 @@ _materials = {
         "Melting Point" :1683.0,
         "Latent heat" :1.8e6
     },
-    
     "Liquid Silicon" : {
         "Liquid" :"Logical True",
         "Viscosity" :8.0e-4,
@@ -273,7 +252,6 @@ _materials = {
         "Emissivity" :0.3,
         "Heat expansion coeff." :1.08e-4
     },
-
     "Fused Silica (25 C)" : {
         "Density" :2200.0,
         "Youngs modulus" :72.0e9    ,
@@ -285,7 +263,6 @@ _materials = {
         "Relative Permittivity" :3.75,
         "Melting Point" :1956.0
     },
-
     "Liquid CO2": {
         "Liquid" :"Logical True",
         "Density" :"Variable Temperature; Real MATC \"44.01*2.768/(0.26212^(1+ (1-tx/304.21)^0.2908))\"",
@@ -293,7 +270,6 @@ _materials = {
         "Heat conductivity" :"Variable Temperature; Real MATC \"0.407 - 0.0008438*tx -9.626E-07*tx^2\"",
         "Heat capacity" :"Variable Temperature; Real MATC \"1E3*(-3553.844 + 46.88128*tx - 0.2017221*tx^2 + 2.897028E-04*tx^3)/44\""
     },
-
     "Gas CO2": {
         "Liquid" :"Logical False",
         "Density" :1.98,
@@ -303,14 +279,24 @@ _materials = {
     }
 }
 
+
 class Elmer:
-    sif_file:str = ""
-    tab = 2*" "
+    sif_file:str             = ""
+    exe:str                  = None
+    tab:str                  = 2*" "
     commands:list[list[str]] = []
 
 
-    def __init__(self, output_file:str) -> None:
+    def __init__(self, output_file:str, elmer_exe:str=None) -> None:
         self.sif_file = output_file
+        self.exe      = elmer_exe
+
+
+    def run(self):
+        if self.exe is not None:
+            self.write()
+            os.system(f"{self.exe} {self.sif_file}")
+        else: error("Can not run without setting elmer_exe in constructor (init method)")
 
 
     def write(self):
@@ -338,7 +324,7 @@ class Elmer:
             raise TypeError("invalid input type for args")
         
         self.commands[-1].append("End")
-        
+
 
     def Header(self, args:list[str]) -> None:
         self._add_section("Header", "", args)
@@ -377,8 +363,8 @@ class Elmer:
 
     def Material(self, _n:str|int, args:list[str]) -> None:
         self._add_section("Material", _n, args)
-    
-    
+
+
     # if material name is none, return available materials
     def MaterialDB(self, _n:int|str=None, material_name:str=None) -> list[str]|None:
         if material_name is None:
@@ -396,7 +382,7 @@ class Elmer:
                 _materials[_material_name]["Name"] = f"\"{material_name}\""
                 for item in _materials[_material_name]:
                     if not isinstance(_materials[_material_name][item], str):
-                        _materials[_material_name][item] = str(_materials[_material_name][item])
+                        _materials[_material_name][item] = f"Real {{:.{sys.float_info[6]}f}}".format(_materials[_material_name][item])
                 
                 for item in _materials[_material_name]:
                     _materials_list.append(f"{item} = {_materials[_material_name][item]}")

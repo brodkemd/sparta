@@ -1,0 +1,95 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="github-markdown-dark.css">
+<script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      },
+      svg: {
+        fontCache: 'global'
+      }
+    };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+<style>
+    .markdown-body {
+        box-sizing: border-box;
+        min-width: 200px;
+        max-width: 980px;
+        margin: -1;
+        padding: 45px;
+    }
+
+    @media (max-width: 767px) {
+        .markdown-body {
+            padding: 15px;
+        }
+    }
+</style>
+
+<body>
+<article class="markdown-body" id="MD">
+<h1 id="input-file">Input File</h1>
+<h2 id="sections">Sections</h2>
+<p>========================</p>
+<p>Each section started with a row containing the name of the section, sometimes a number, followed by a number of keyword commands, and ended with a row containing the word End. The names for starting new sections are:</p>
+<ul>
+<li>Header</li>
+<li>Simulation</li>
+<li>Constants</li>
+<li>Body $n$</li>
+<li>Material $n$</li>
+<li>Body Force $n$</li>
+<li>Equation $n$</li>
+<li>Solver $n$</li>
+<li>Boundary Condition $n$</li>
+<li>Initial Condition $n$</li>
+<li>Component $n$</li>
+</ul>
+<p>Here $n$ associated with the section name represents an integer identifier needed for distinguishing between
+sections of the same type.</p>
+<p>The description of the above is given in the subsections below</p>
+<h3 id="header">Header</h3>
+<p>The location of mesh files is given in the header section. If the Elmer mesh files are located in the directory <code>./mymesh</code>, the
+header section may simply be</p>
+<pre><code>Header
+  Mesh DB &quot;.&quot; &quot;mymesh&quot;
+End
+</code></pre>
+<p>Note that separate equations can nevertheless be discretized using different meshes if the location of mesh
+files is given in the solver section described below.</p>
+<h3 id="simulation">Simulation</h3>
+<p>The simulation section is used for giving general information that is not specific to a particular PDE model
+involved in the simulation. This information describes the coordinate system used, indicates whether the
+problem is stationary or evolutionary, defines the file names for outputting, etc. Without trying to describe
+many possibilities and the details of commands, we only give the following simple example:</p>
+<pre><code>Simulation
+  Coordinate System = &quot;Cartesian 2D&quot;
+  Coordinate Mapping(3) = 1 2 3
+  Coordinate Scaling = 0.001
+  Simulation Type = Steady State
+  Steady State Max Iterations = 1
+  Output Intervals(1) = 1
+  Post File = &quot;case.vtu&quot;
+  Output File = &quot;case.dat&quot;
+  Simulation Timing = True
+End
+</code></pre>
+<p>Currently the preferred method for visualization is to use VTU output and compatible visualization tool,
+such as Paraview. Hence the suffix .vtu is used in the value of the Post File. Historically ElmerPost
+with suffix .ep was used but this tool is obsolete.</p>
+
+</article>
+</body>
+
+<script>
+  md = document.getElementById("MD");
+
+  let bg = window.getComputedStyle(md).backgroundColor;
+  var color = window.getComputedStyle(md).color;
+  
+  document.body.style.backgroundColor = bg;
+  document.body.style.color = color;
+</script>

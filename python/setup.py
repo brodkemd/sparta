@@ -15,7 +15,8 @@ s = setup(
         'matplotlib',
         "numpy",
         "ffmpeg",
-        "PyQt5"
+        "PyQt5",
+        "markdown"
     ],
     name='sparta',
     version=__version__,
