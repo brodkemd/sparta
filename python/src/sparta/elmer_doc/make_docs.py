@@ -1,6 +1,6 @@
 import os, subprocess
 
-cwd = os.path.dirname(__file__)
+
 
 ## converts the input_file (markdown) to html
 def markdown2html(input_file:str, style:str="light"):
@@ -59,7 +59,7 @@ def markdown2html(input_file:str, style:str="light"):
     # Open the HTML file and write the output.
     with open(output_file, 'w') as f: f.write(html_format)
 
-
+cwd = os.path.dirname(__file__)
 for item in os.listdir(cwd):
     if item.endswith(".md"):
         input_path = os.path.join(cwd, item)

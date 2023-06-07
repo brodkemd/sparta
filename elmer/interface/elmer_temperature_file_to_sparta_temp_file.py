@@ -11,7 +11,6 @@ def read_file(_file_path:str) -> list[list[str]]:
             [eval(val) for val in line.strip().split()] for line in f.readlines()
         ]
 
-file = "/home/marekbrodke/Downloads/tutorials-GUI-files/TemperatureGeneric/case.dat"
 
 class Sparta_Surf_Temperature_file(elmer_to_sparta):
     data_file = ""

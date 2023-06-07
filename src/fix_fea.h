@@ -83,6 +83,7 @@ namespace SPARTA_NS {
                     Elmer(std::string output_file, Error*& _error);
                     void write(std::string header = "");
                     void Boundary_Condition(int _n, std::vector<std::string> args);
+                    void Initial_Condition(int _n, std::vector<std::string> args);
 
 
                 private:

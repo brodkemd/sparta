@@ -152,9 +152,7 @@ class Sparta:
     """
     def comment(self, comment:str) -> None: self.commands.append([f"# {comment}"])
 
-    '''
-    
-    '''
+
     def execute(self, 
         args:list[str]|str="", # command line args to sparta
         run_simulation:bool = True # whether or not to run the sparta exe

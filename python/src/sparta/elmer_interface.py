@@ -1,6 +1,7 @@
 from ._src import error
 from types import FunctionType
 import os, sys
+from shutil import copy2
 
 cwd:str = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 
@@ -417,10 +418,69 @@ class Elmer:
 
 
 """
+makes a python file from a sif file
+
+"""
+def py_from_sif(sif:str, exe:str=None, backup_sif:bool=False):
+    # getting the python file path from the sif file
+    py  = sif[:sif.rfind(".")+1] + "py"
+
+    if backup_sif: copy2(sif, sif+".backup")
+
+    print("Making:", py, "from", sif)
+
+    # adding the required header to the code
+    data = [ "from sparta.elmer_interface import Elmer, man\n" ]
+    if exe is None: data.append(f"e = Elmer(\"{sif}\")\n")
+    else:           data.append(f"e = Elmer(\"{sif}\", \"{exe}\")\n")
+
+    # loading the lines from the sif file, ignoring empty lines
+    lines = []
+    with open(sif, 'r') as f: lines = [line for line in f.readlines() if len(line.strip())]
+
+    # parsing lines in file
+    for line in lines:
+        # if the line starts with a space then is a section command
+        if not line.startswith(" "):
+            split_line = line.strip().split()
+            if len(split_line) > 1:
+                while "" in split_line: split_line.remove("")
+                
+                func = split_line[:-1]
+                id = split_line[-1]
+
+                for j in range(len(func)):
+                    func[j] = func[j][0].upper() + func[j][1:].lower()
+                
+                data.append("e." + "_".join(func) + "(" + id + ", [")
+
+            else:
+                if split_line[0].lower() == "end":
+                    data.append("])\n")
+                else:
+                    data.append("e."+split_line[0][0].upper() + split_line[0][1:].lower() + "([")
+
+        # if here then it is contents of the command
+        else:
+            # adding the line to the new file
+            line = line.replace("\"", "\\\"")
+            data.append(f"  \"{line.strip()}\",")
+    
+    if exe is not None:
+        data.append("e.run()\n")
+    else:
+        data.append("e.write()\n")
+    
+    # writing python file
+    with open(py, "w") as f:
+        for line in data: f.write(line + "\n")
+
+
+"""
 Pass the function to get info on it in the browser
 
 """
-def man(func:FunctionType=None, exit_after_call:bool=True, browser:str = "google-chrome") -> None:
+def man(func:FunctionType=None, exit_after_call:bool=True, browser:str = "xdg-open") -> None:
     if func is None:
         _doc_path = os.path.join(cwd, "elmer_doc", "ElmerSolverManual.pdf")
         print(f"opening {_doc_path} with {browser}")

@@ -135,6 +135,13 @@ void FixFea::Elmer::Boundary_Condition(int _n, std::vector<std::string> args) {
 }
 
 /**
+ * Adds a initial condition
+*/
+void FixFea::Elmer::Initial_Condition(int _n, std::vector<std::string> args) {
+    this->_add_section("Initial Condition", std::to_string(_n), args);
+}
+
+/**
  * Generic method to add a section, such as the "Boundary Condition" section above
 */
 void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<std::string> args) {
@@ -425,7 +432,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
             this->mixID = it.second;
             this->print("Mixture id: " + this->groupID);
 
-        } else error->all(FLERR, ("Invalid arg: " + it.first).c_str());
+        } else  error->all(FLERR, ("Invalid arg: " + it.first).c_str());
 
 
         for (int j = 0; j < required_args.size(); j++) {
@@ -525,13 +532,13 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     MPI_Comm_size(world, &nprocs);
 
     /********  end temperature stuff  **********/
-    
+
     // command style: 
     char* surf_collide_args[4] = {
         (char*)"SSSS",
         (char*)"diffuse",
         (char*)("s_" + this->customID).c_str(),
-        (char*)"0.5"
+        (char*)std::to_string(this->emi).c_str() // (char*)"0.5"
     };
 
     // adding surf collision model needed
@@ -547,6 +554,15 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // modifying params
     this->surf->modify_params(3, surf_modify_args);   
 
+    // char* group_args[4] = {
+    //     "GGGG",
+    //     "grid",
+    //     "intersect",
+    //     this->groupID.c_str(),
+    //     this->
+    // }
+
+    // surf->group()
     
     // temporary
     // error->all(FLERR, "done setting up fix fea");
