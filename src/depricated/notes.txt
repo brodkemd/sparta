@@ -268,3 +268,119 @@
 
     // getting the sif file format from the provided
     this->load_sif(std::string(sif_path));
+
+
+            class ConfigParser {
+                public:
+                    ConfigParser(std::string _file_name, Error*& _error, bool ignore_var_name_case = true);
+                    std::size_t size();
+                    std::pair<std::string, std::string> &operator[](int i);
+
+                private:
+                    Error* error;
+                    std::string file_name;
+                    std::vector<std::pair<std::string, std::string>> contents;
+                    
+                    void read_file(bool ignore_var_name_case = true);
+            };
+
+
+/**
+ * Constructor, sets config file and reads it in
+*/
+FixFea::ConfigParser::ConfigParser(std::string _file_name, Error*& _error, bool ignore_var_name_case) {
+    // referencing error
+    this->error = _error;
+
+    // making sure the config path exists
+    struct stat sb;
+    if (!(stat(_file_name.c_str(),  &sb) == 0))
+        this->error->all(FLERR, "fix fea config path does not exist");
+
+    this->file_name = _file_name;
+    
+    // loading the config file
+    this->read_file();
+}
+
+/**
+ * overloading [] to access the class vector while keeping it private
+*/
+std::pair<std::string, std::string> &FixFea::ConfigParser::operator[](int index) {
+    return this->contents[index];
+}
+
+/**
+ * returns the size of the class vector
+*/
+std::size_t FixFea::ConfigParser::size() {
+    return this->contents.size();
+}
+
+/**
+ * reads the config file
+*/
+void FixFea::ConfigParser::read_file(bool ignore_var_name_case) {
+    // opening the config file
+    std::ifstream file;
+    file.open(this->file_name);
+
+    // making sure the file is open, throws error if it isn't
+    if (file.is_open()) {
+        // temporary variables used in reading data
+        std::vector<std::string> lines;
+        std::stringstream buffer;
+        std::vector<std::string> v;
+        std::pair<std::string, std::string> temp;
+
+        // counts line numbers
+        int count = 0;
+
+        // reading the file
+        buffer << file.rdbuf();
+
+        // splitting the file contents at newlines
+        boost::split(lines, buffer.str(), boost::is_any_of("\n"));
+        
+        // clearing vars for good measure
+        buffer.clear();
+        this->contents.clear();
+
+        for (std::string line : lines) {
+            // trimming whitespaces off of the line
+            boost::algorithm::trim(line);
+
+            // filters empty lines
+            if (!(line.length()) || line[0] == '#') continue;
+
+            // splitting the line at spaces
+            boost::split(v, line, boost::is_any_of(" "));
+
+            // removing empty strings from vector
+            for (unsigned int i = 0; i < v.size(); i++) {
+                if ( v.at(i) == "" ) {
+                    //remove element if empty string
+                    v.erase(v.begin() + i);
+                    i--;
+                }
+            }
+
+            // making sure line is valid
+            if (v.size() != 2)
+                this->error->all(FLERR, ("fix fea config line " + std::to_string(count+1) + " invalid").c_str());
+            
+            // cleaning up the args
+            boost::algorithm::trim(v[0]); boost::algorithm::trim(v[1]);
+            
+            // if case insensitive for the variable names
+            if (ignore_var_name_case) boost::algorithm::to_lower(v[0]);
+            
+            // adding the arguments
+            temp.first = v[0]; temp.second = v[1];
+
+            // adding to class content vector
+            this->contents.push_back(temp);
+            count++;
+        }
+    } else this->error->all(FLERR, "fix fea config file did not open");
+}

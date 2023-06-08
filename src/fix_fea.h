@@ -41,6 +41,8 @@ FixStyle(fea,FixFea)
 #include "domain.h"
 #include "input.h"
 #include "update.h"
+#include "./TOML/toml.h"
+
 
 #include <string>
 #include <vector>
@@ -96,19 +98,7 @@ namespace SPARTA_NS {
                     void _add_section(std::string _name, std::string _n, std::vector<std::string> args);
             };
 
-            class ConfigParser {
-                public:
-                    ConfigParser(std::string _file_name, Error*& _error, bool ignore_var_name_case = true);
-                    std::size_t size();
-                    std::pair<std::string, std::string> &operator[](int i);
 
-                private:
-                    Error* error;
-                    std::string file_name;
-                    std::vector<std::pair<std::string, std::string>> contents;
-                    
-                    void read_file(bool ignore_var_name_case = true);
-            };
 
         private:
             void load_boundary();
@@ -156,7 +146,7 @@ namespace SPARTA_NS {
 
             Elmer* elmer;
 
-    };
+    };    
 }
 
 #endif

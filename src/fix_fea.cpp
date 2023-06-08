@@ -170,106 +170,6 @@ void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<
 
 ---------------------------------------------------------------------- */
 
-/**
- * Constructor, sets config file and reads it in
-*/
-FixFea::ConfigParser::ConfigParser(std::string _file_name, Error*& _error, bool ignore_var_name_case) {
-    // referencing error
-    this->error = _error;
-
-    // making sure the config path exists
-    struct stat sb;
-    if (!(stat(_file_name.c_str(),  &sb) == 0))
-        this->error->all(FLERR, "fix fea config path does not exist");
-
-    this->file_name = _file_name;
-    
-    // loading the config file
-    this->read_file();
-}
-
-/**
- * overloading [] to access the class vector while keeping it private
-*/
-std::pair<std::string, std::string> &FixFea::ConfigParser::operator[](int index) {
-    return this->contents[index];
-}
-
-/**
- * returns the size of the class vector
-*/
-std::size_t FixFea::ConfigParser::size() {
-    return this->contents.size();
-}
-
-/**
- * reads the config file
-*/
-void FixFea::ConfigParser::read_file(bool ignore_var_name_case) {
-    // opening the config file
-    std::ifstream file;
-    file.open(this->file_name);
-
-    // making sure the file is open, throws error if it isn't
-    if (file.is_open()) {
-        // temporary variables used in reading data
-        std::vector<std::string> lines;
-        std::stringstream buffer;
-        std::vector<std::string> v;
-        std::pair<std::string, std::string> temp;
-
-        // counts line numbers
-        int count = 0;
-
-        // reading the file
-        buffer << file.rdbuf();
-
-        // splitting the file contents at newlines
-        boost::split(lines, buffer.str(), boost::is_any_of("\n"));
-        
-        // clearing vars for good measure
-        buffer.clear();
-        this->contents.clear();
-
-        for (std::string line : lines) {
-            // trimming whitespaces off of the line
-            boost::algorithm::trim(line);
-
-            // filters empty lines
-            if (!(line.length()) || line[0] == '#') continue;
-
-            // splitting the line at spaces
-            boost::split(v, line, boost::is_any_of(" "));
-
-            // removing empty strings from vector
-            for (unsigned int i = 0; i < v.size(); i++) {
-                if ( v.at(i) == "" ) {
-                    //remove element if empty string
-                    v.erase(v.begin() + i);
-                    i--;
-                }
-            }
-
-            // making sure line is valid
-            if (v.size() != 2)
-                this->error->all(FLERR, ("fix fea config line " + std::to_string(count+1) + " invalid").c_str());
-            
-            // cleaning up the args
-            boost::algorithm::trim(v[0]); boost::algorithm::trim(v[1]);
-            
-            // if case insensitive for the variable names
-            if (ignore_var_name_case) boost::algorithm::to_lower(v[0]);
-            
-            // adding the arguments
-            temp.first = v[0]; temp.second = v[1];
-
-            // adding to class content vector
-            this->contents.push_back(temp);
-            count++;
-        }
-    } else this->error->all(FLERR, "fix fea config file did not open");
-}
-
 
 /* ----------------------------------------------------------------------
     
@@ -324,124 +224,124 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // Structure which would store the metadata
     struct stat sb;
 
-    // parsing args
-    ConfigParser inst{std::string(arg[2]), this->error};
-    std::pair<std::string, std::string> it;
+    // // parsing args
+    // ConfigParser inst{std::string(arg[2]), this->error};
+    // std::pair<std::string, std::string> it;
 
     std::vector<std::string> required_args = {
         "nevery", "exe", "sif", "groupid", "mixid", "tsurf_file", "emi", "customid", "meshdbstem"
     };
 
-    // going through the args
-    for (int i = 0; i < inst.size(); i++) {
-        it = inst[i];
+    // // going through the args
+    // for (int i = 0; i < inst.size(); i++) {
+    //     it = inst[i];
         
-        // how often to run this command
-        if (it.first == "nevery") {
-            // setting so that this command runs continuously to compute an average
-            this->nevery = 1;
+    //     // how often to run this command
+    //     if (it.first == "nevery") {
+    //         // setting so that this command runs continuously to compute an average
+    //         this->nevery = 1;
 
-            // this sets when to do the calculations, not just compute the average
-            this->run_every = std::stoi(it.second);
+    //         // this sets when to do the calculations, not just compute the average
+    //         this->run_every = std::stoi(it.second);
 
-            // error checking
-            if (this->run_every <= 0) error->all(FLERR,"Illegal fix fea command, nevery <= 0");
-            this->print("running every: " + std::to_string(this->run_every) + " steps");
+    //         // error checking
+    //         if (this->run_every <= 0) error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+    //         this->print("running every: " + std::to_string(this->run_every) + " steps");
 
-        // name of the custom variable to create
-        } else if (it.first == "customid") {
-            // getting the variable name to create
-            int n = it.second.length() + 1;
-            char *id_custom = new char[n];
-            strcpy(id_custom, it.second.c_str());
+    //     // name of the custom variable to create
+    //     } else if (it.first == "customid") {
+    //         // getting the variable name to create
+    //         int n = it.second.length() + 1;
+    //         char *id_custom = new char[n];
+    //         strcpy(id_custom, it.second.c_str());
 
-            this->customID = std::string(id_custom);
+    //         this->customID = std::string(id_custom);
 
-            // create per-surf temperature vector
-            tindex = surf->add_custom(id_custom,DOUBLE,0);
-            this->print("Created temperature variable: " + this->customID);
-            delete [] id_custom;
+    //         // create per-surf temperature vector
+    //         tindex = surf->add_custom(id_custom,DOUBLE,0);
+    //         this->print("Created temperature variable: " + this->customID);
+    //         delete [] id_custom;
 
-        // path to the elmer exe
-        } else if (it.first == "exe") {
-            this->exe_path = it.second;
+    //     // path to the elmer exe
+    //     } else if (it.first == "exe") {
+    //         this->exe_path = it.second;
 
-            // Calls the function with path as argument
-            // If the file/directory exists at the path returns 0
-            // If block executes if path exists
-            if (!(stat(this->exe_path.c_str(),  &sb) == 0))
-                error->all(FLERR,"Illegal fix fea command, exe path does not exist");
-            this->print("Elmer exe path: " + this->exe_path);
+    //         // Calls the function with path as argument
+    //         // If the file/directory exists at the path returns 0
+    //         // If block executes if path exists
+    //         if (!(stat(this->exe_path.c_str(),  &sb) == 0))
+    //             error->all(FLERR,"Illegal fix fea command, exe path does not exist");
+    //         this->print("Elmer exe path: " + this->exe_path);
 
-        // path to elmer sif file
-        } else if (it.first == "sif") {
-            this->sif_path = it.second;
+    //     // path to elmer sif file
+    //     } else if (it.first == "sif") {
+    //         this->sif_path = it.second;
 
-            // making sure the sif path exists
-            if (!(stat(this->sif_path.c_str(),  &sb) == 0))
-                error->all(FLERR,"Illegal fix fea command, sif path does not exist");
-            this->print("sif file path: " + this->sif_path);
+    //         // making sure the sif path exists
+    //         if (!(stat(this->sif_path.c_str(),  &sb) == 0))
+    //             error->all(FLERR,"Illegal fix fea command, sif path does not exist");
+    //         this->print("sif file path: " + this->sif_path);
 
-            // making the elmer class
-            this->elmer = new Elmer(this->sif_path, this->error);
+    //         // making the elmer class
+    //         this->elmer = new Elmer(this->sif_path, this->error);
 
-        // path to elmer mesh database file
-        } else if (it.first == "meshdbstem") {
-            this->meshDBstem = it.second;
+    //     // path to elmer mesh database file
+    //     } else if (it.first == "meshdbstem") {
+    //         this->meshDBstem = it.second;
 
-            // making sure all of the component files are a part of the database
-            std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
-            for (int i = 0; i < 4; i++) {
-                if (!(stat((this->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
-                    error->all(FLERR,("Illegal fix fea command, mesh database incomplete, " + (this->meshDBstem + "." + exts[i]) + " does not exist").c_str());
-            }
-            this->print("Using mesh database at: " + this->meshDBstem);
+    //         // making sure all of the component files are a part of the database
+    //         std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+    //         for (int i = 0; i < 4; i++) {
+    //             if (!(stat((this->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
+    //                 error->all(FLERR,("Illegal fix fea command, mesh database incomplete, " + (this->meshDBstem + "." + exts[i]) + " does not exist").c_str());
+    //         }
+    //         this->print("Using mesh database at: " + this->meshDBstem);
 
-        // path to surface temperature file
-        } else if (it.first == "tsurf_file") {
-            this->tsurf_file = it.second;
+    //     // path to surface temperature file
+    //     } else if (it.first == "tsurf_file") {
+    //         this->tsurf_file = it.second;
 
-            // if the twall file does not exist
-            if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
-                error->all(FLERR,"Illegal fix fea command, tsurf_file does not exist");
-            this->print("Surf temperature file path: " + this->tsurf_file);
+    //         // if the twall file does not exist
+    //         if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
+    //             error->all(FLERR,"Illegal fix fea command, tsurf_file does not exist");
+    //         this->print("Surf temperature file path: " + this->tsurf_file);
         
-        // surface group id
-        } else if (it.first == "groupid") {
-            this->groupID = it.second;
+    //     // surface group id
+    //     } else if (it.first == "groupid") {
+    //         this->groupID = it.second;
 
-            // get the surface group
-            int igroup = surf->find_group(this->groupID.c_str());
-            if (igroup < 0)
-                error->all(FLERR,"Fix fea group ID does not exist");
+    //         // get the surface group
+    //         int igroup = surf->find_group(this->groupID.c_str());
+    //         if (igroup < 0)
+    //             error->all(FLERR,"Fix fea group ID does not exist");
             
-            groupbit = surf->bitmask[igroup];
-            this->print("Surface group id: " + this->groupID);
+    //         groupbit = surf->bitmask[igroup];
+    //         this->print("Surface group id: " + this->groupID);
 
-        // emissivity of the surface
-        } else if (it.first == "emi") {
-            // getting the surface emissivity
-            emi = input->numeric(FLERR, it.second.c_str());
-            if (emi <= 0.0 || emi > 1.0)
-                error->all(FLERR,"Fix fea emissivity must be > 0.0 and <= 1");
+    //     // emissivity of the surface
+    //     } else if (it.first == "emi") {
+    //         // getting the surface emissivity
+    //         emi = input->numeric(FLERR, it.second.c_str());
+    //         if (emi <= 0.0 || emi > 1.0)
+    //             error->all(FLERR,"Fix fea emissivity must be > 0.0 and <= 1");
 
-            this->print("surface Emissivity: " + std::to_string(this->emi));
+    //         this->print("surface Emissivity: " + std::to_string(this->emi));
 
-        // gas mixture id
-        } else if (it.first == "mixid") {
-            this->mixID = it.second;
-            this->print("Mixture id: " + this->groupID);
+    //     // gas mixture id
+    //     } else if (it.first == "mixid") {
+    //         this->mixID = it.second;
+    //         this->print("Mixture id: " + this->groupID);
 
-        } else  error->all(FLERR, ("Invalid arg: " + it.first).c_str());
+    //     } else  error->all(FLERR, ("Invalid arg: " + it.first).c_str());
 
 
-        for (int j = 0; j < required_args.size(); j++) {
-            if (required_args[j] == it.first) {
-                required_args.erase(required_args.begin() + j);
-                break;
-            }
-        }
-    }
+    //     for (int j = 0; j < required_args.size(); j++) {
+    //         if (required_args[j] == it.first) {
+    //             required_args.erase(required_args.begin() + j);
+    //             break;
+    //         }
+    //     }
+    // }
     // making sure all of the required args are inputted
     if (required_args.size()) error->all(FLERR, "not all args inputted");
 
