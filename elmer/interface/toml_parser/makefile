@@ -1,15 +1,10 @@
-run: out.o main.o handles.o
-	g++ -o run out.o main.o handles.o
+CFLAGS = -O
+CC = g++
+SRC = toml.cpp main.cpp fixfea.cpp
+OBJ = $(SRC:.cpp = .o)
 
-main.o: main.cpp
-	g++ -o main.o -c main.cpp
-
-out.o: out.cpp
-	g++ -o out.o -c out.cpp 
-
-handles.o: handles.cpp
-	g++ -o handles.o -c handles.cpp 
-
+NumTest: $(OBJ)
+	$(CC) $(CFLAGS) -o run $(OBJ)
 
 clean:
-	rm *.o run
+	rm run *.o

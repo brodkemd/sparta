@@ -1,99 +1,78 @@
-#ifndef OUT_H
-#define OUT_H
+#ifndef FIXFEA_H
+#define FIXFEA_H
 
-#include <string>
-#include <iostream>
-#include <tuple>
+#include "toml.h"
+
 #include <sys/stat.h>
-
-#include "toml.hpp"
-
-#define FLERR __FILE__,__LINE__
-
-
-// Structure which would store the metadata
-struct stat sb;
-
-
-void error(std::string file, int line, std::string msg) {
-    std::cout << "ERROR: (" << file << ":" << line << ") " << msg << "\n";
-    exit(1);
-}
-
-
-
-namespace toml {
-    typedef toml::v3::node_view<toml::v3::node> node_t;
-    typedef toml::node_type var_type_t;
-
-    const toml::v3::node_type string_t =  toml::node_type::string;
-    const toml::v3::node_type integer_t =  toml::node_type::integer;
-    const toml::v3::node_type none_t = toml::node_type::none;
-    const toml::v3::node_type double_t =  toml::node_type::floating_point;
-
-    template<typename T>
-    void set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val);
-
-    // errors instead of setting to default
-    template<typename T>
-    void set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var);
-}
-
-
+#include <iostream>
 
 class Base {
     protected:
         std::string name;
-        toml::table contents;
 
-    public:        
+    public:
+        std::vector<std::string> contents;
+
         void write_contents(std::string& buffer) {
             for (auto it : this->contents) {
-                std::cout << it.first << "\n";
+                std::cout << it << "\n";
             }
         }
         
-        void set_contents(toml::node_t __tbl) {
-            if (__tbl.type() != toml::node_type::table) 
-                error(FLERR, name + " must be given a table");
+        // void set_contents(std::vector<std::string> in) {
+        //     this->contents = in
+        // }
 
-            // converting to a table
-            toml::table* _tbl = __tbl.as<toml::table>();
-            this->contents = (*_tbl);
-        }
+        // void set_contents(toml::table _tbl) {
+        //     this->contents = _tbl;
+        // }
 
-        void set_contents(toml::table _tbl) {
-            this->contents = _tbl;
-        }
+        // std::size_t length() {
+        //     return this->contents.size();
+        // }
+};
 
-        std::size_t length() {
-            return this->contents.size();
+
+class Header : public Base {
+    public:
+        Header() {
+            this->name = "Header";
         }
 };
 
 
-class Constants : Base {
-    Constants() {
-        this->name = "Constants";
-    }
+class Constants : public Base {
+    public:
+        Constants() {
+            this->name = "Constants";
+        }
 };
 
 
-class Simulation : Base {
-    Simulation() {
-        this->name = "Simulation";
-    }
+class Simulation : public Base {
+    public:
+        Simulation() {
+            this->name = "Simulation";
+        }
 };
 
 
 class Elmer {
     public:
-        Elmer() {};
+        Elmer() {
+            this->name = "elmer";
+            this->header = Header();
+            this->simulation = Simulation();
+            this->constants = Constants();
+        }
 
+        std::string name;
+
+        Header     header;
         Simulation simulation;
         Constants  constants;
 
-    public:
+
         std::string exe;
         std::string sif;
         std::string meshDBstem;
@@ -114,9 +93,12 @@ class FixFea {
         std::string customID;
 
         // under elmer
-        Elmer elmer = Elmer();       
+        Elmer elmer = Elmer();
 
-    private:
+        // Structure which would store the metadata
+        struct stat sb;     
+
+    public:
         template<typename dict>
         void run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
 
@@ -125,17 +107,17 @@ class FixFea {
 
         void print(std::string _msg) { std::cout << _msg << "\n"; }
 
-        /**
-         * executes a table
-        */
-        template<typename dict>
-        void FixFea::eval_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
+        // /**
+        //  * executes a table
+        // */
+        // template<typename dict>
+        // void FixFea::eval_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
 
-        /**
-         * executes a table that wrapped as a node_t type
-        */
-        template<typename dict>
-        void FixFea::eval_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options);
+        // /**
+        //  * executes a table that wrapped as a node_t type
+        // */
+        // template<typename dict>
+        // void FixFea::eval_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options);
 
     public:
         void handle_emi(std::string _caller, toml::node_t val);
@@ -231,7 +213,9 @@ class FixFea {
         void handle_elmer(std::string _caller, toml::node_t tbl);
 };
 
-typedef std::pair<std::string, void (FixFea::*)(std::string, toml::node_t)> dict_item_t;
-typedef std::vector<dict_item_t> dict_t;
+namespace toml {
+    typedef std::pair<std::string, void (FixFea::*)(std::string, toml::node_t)> dict_item_t;
+    typedef std::vector<dict_item_t> dict_t;
+}
 
 #endif

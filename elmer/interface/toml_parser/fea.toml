@@ -1,17 +1,17 @@
 [both]
 emi = 0.5
-tsurf_file = "fea_data/surf.temperature"
+tsurf_file = "/home/marekbrodke/OneDrive/Research/sparta/fea/Elmer_Case/surf.temperature"
 
 [sparta]
 nevery = 3
 groupID = "all"
 mixID = "all"
-customId = "temperature"
+customID = "temperature"
 
 [elmer]
 exe = "/home/marekbrodke/Documents/Apps/elmer/install/bin/ElmerSolver"
-sif = "fea_data/case.sif"
-meshDBstem = "/home/marekbrodke/OneDrive/Research/sparta/fea/300_polygon_sphere_100mm/mesh"
+sif = "/home/marekbrodke/OneDrive/Research/sparta/fea/Elmer_Case/case.sif"
+meshDBstem = "/home/marekbrodke/OneDrive/Research/sparta/fea/Elmer_Case/mesh"
 
 [elmer.header]
 Mesh_DB = [".", "."]
@@ -28,7 +28,7 @@ Output_Intervals = [100]
 Timestep_intervals = [10000]
 Timestep_Sizes = [1]
 Timestepping_Method = "BDF"
-BDF_Order = 2
+BDF_Order = 2.0
 Solver_Input_File = "case.sif"
 Output_File = "case.dat"
 Post_File = "case.vtu"
