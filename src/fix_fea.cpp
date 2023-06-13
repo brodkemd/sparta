@@ -21,6 +21,20 @@
 #include "stdlib.h"
 #include "string.h"
 
+#include "write_surf.h"
+#include "surf.h"
+#include "modify.h"
+#include "output.h"
+#include "dump.h"
+#include "compute.h"
+#include "comm.h"
+#include "memory.h"
+#include "domain.h"
+#include "input.h"
+#include "update.h"
+
+// #include "toml.h"
+
 #include <cmath>
 #include <fstream>
 #include <boost/algorithm/string.hpp>
@@ -34,6 +48,111 @@ using namespace SPARTA_NS;
 
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
+
+
+void toml::error(std::string msg) { throw msg; }
+
+template<typename T>
+void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val) {
+    // if the _val is none type, just set to default value immediately
+    if (_val.type() == none_t) {
+        _var = _default_val;
+        return;
+    }
+
+    if (_val.type() != _type) {
+        // adding the calling hierarchy to the name
+        _name = _caller + "." + _name;
+
+        // making message to user
+        std::stringstream ss;
+        ss << "\"" << _name << "\" has wrong type, " << _val.type();
+        ss << ", must be " << _type << " type";
+        error(ss.str());
+    }
+
+    std::optional<T> _var_opt = _val.value<T>();
+
+    if (_var_opt.has_value())
+        _var = _var_opt.value();
+    else 
+        _var = _default_val;
+}
+
+// errors instead of setting to default
+template<typename T>
+void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var) {
+    _name = _caller + "." + _name;
+
+    // if the _val is none type, just set to default value immediately
+    if (_val.type() == none_t) {
+        error("no value provided for \"" + _name + "\"");
+    }
+
+    if (_val.type() != _type) {
+        std::stringstream ss;
+        ss << "\"" << _name << "\" has wrong type, " << _val.type() << ", must be " << _type << " type";
+        error(ss.str());
+    }
+
+    // std::cout << _val << "\n";
+    std::optional<T> _var_opt = _val.value_exact<T>();
+
+    if (_var_opt.has_value()) {
+        _var = _var_opt.value();
+    } else {
+        error("no value provided for \"" + _name + "\"");
+    }
+}
+
+/**
+ * executes a table
+*/
+template<typename dict>
+void FixFea::run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options) {
+    if (_tbl.type() != toml::node_type::table) 
+        error->all(FLERR, (_caller + " must be given a table").c_str());
+
+    if (_caller.length())
+        _caller = _caller + "." + _name;
+    else
+        _caller = _name;
+
+    for (dict_item_t it : _options) {
+        toml::node_t val = _tbl[it.first];
+        (this->*it.second)(_caller, val);
+        _tbl.erase(it.first);
+    }
+
+    if (_tbl.size()) {
+        std::string msg;
+        if (_caller.length())
+            msg = "Invalid args in section \"" + _caller + "\":\n";
+        else
+            msg = "Invalid section:\n";
+        for (auto it : _tbl) {
+            msg+=("-> " + std::string(it.first.str()) + "\n");
+        }
+        error->all(FLERR, msg.c_str());
+    }
+}
+
+/**
+ * executes a table that wrapped as a node_t type
+*/
+template<typename dict>
+void FixFea::run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options) {
+
+    if (__tbl.type() != toml::node_type::table) 
+        error->all(FLERR, (_caller + " must be given a table").c_str());
+
+    // converting to a table
+    toml::table* _tbl = __tbl.as<toml::table>();
+
+    // calling the other definition because there is nothing else unique needed
+    run_table(_caller, _name, (*_tbl), _options);
+}
+
 
 // used in the EXEC function below, represents data returned from a system command
 struct CommandResult {
@@ -166,9 +285,17 @@ void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<
 
 /* ----------------------------------------------------------------------
     
-    ConfigPaser class methods
+    Config paser methods
 
 ---------------------------------------------------------------------- */
+
+//void FixFea::test ()
+
+// void handle_sparta(std::string _caller, play::node_t tbl) {
+//     TOML::dict_t options = {
+//         std::
+//     };
+// }
 
 
 /* ----------------------------------------------------------------------
@@ -177,6 +304,59 @@ void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<
 
  ---------------------------------------------------------------------- */
 
+void FixFea::handle_emi(std::string _caller, toml::node_t val) {
+    // std::cout << "--> handing: emi\n";
+    toml::set(_caller, "emi", toml::double_t, val, this->emi);
+    this->print("emi = " + std::to_string(this->emi));
+}
+
+void FixFea::handle_tsurf_file(std::string _caller, toml::node_t val) {
+    // std::cout << "--> handing: tsurf_file\n";
+    toml::set(_caller, "tsurf_file", toml::string_t, val, this->tsurf_file);
+
+    struct stat sb;
+    if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, tsurf_file does not exist");
+    this->print("tsurf_file = " + this->tsurf_file);
+}
+
+void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
+    // std::cout << "-> handing: both\n";
+    dict_t options = {
+        std::make_pair("emi", &FixFea::handle_emi),
+        std::make_pair("tsurf_file", &FixFea::handle_tsurf_file)
+    };
+
+    this->run_table(_caller, "both", tbl, options);
+}
+
+
+void FixFea::handle_sparta(std::string _caller, toml::node_t tbl) {
+    dict_t options = {
+        std::make_pair("nevery", &FixFea::handle_nevery),
+        std::make_pair("groupID", &FixFea::handle_groupID)
+    };
+
+    this->run_table(_caller, "sparta", tbl, options);
+}
+
+void FixFea::handle_nevery(std::string _caller, toml::node_t val) {
+    int64_t temp_nevery;
+    toml::set(_caller, "nevery", toml::integer_t, val, temp_nevery);
+    
+    if (temp_nevery-INT_MIN <= (uint64_t)INT_MAX-INT_MIN)
+        this->run_every = temp_nevery;
+    else
+        error->all(FLERR, "can not convert int64_t to int, the int64_t is too large");
+
+    // setting so that this command runs continuously to compute an average
+    this->nevery = 1;
+
+    // error checking
+    if (this->run_every <= 0) error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+    // this->print("running every: " + std::to_string(this->run_every) + " steps");
+    this->print("nevery = " + std::to_string(this->run_every));
+}
 
 /**
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
@@ -224,13 +404,41 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // Structure which would store the metadata
     struct stat sb;
 
+    if (!(stat(arg[2],  &sb) == 0))
+        error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
+    this->print("Loading config from: " + std::string(arg[2]));
+
+    toml::table tbl;
+    try {
+        tbl = toml::parse_file(arg[2]);
+    } catch (const toml::parse_error& err) {
+        error->all(FLERR, ("Parsing failed:\n" + std::string(err.description())).c_str());
+    }
+
+    dict_t base_options = {
+        std::make_pair("both", &FixFea::handle_both)
+    };
+
+    try {
+        // std::cout << toml::json_formatter(tbl) << "\n";
+        this->run_table("", "", tbl, base_options);
+    } catch(std::string e) {
+        error->all(FLERR, e.c_str());
+    }
+    
+    error->all(FLERR, "Done");
+
+    // toml::dict_t base_options = {
+    //     std::make_pair("sparta", )
+    // };
+
     // // parsing args
     // ConfigParser inst{std::string(arg[2]), this->error};
     // std::pair<std::string, std::string> it;
 
-    std::vector<std::string> required_args = {
-        "nevery", "exe", "sif", "groupid", "mixid", "tsurf_file", "emi", "customid", "meshdbstem"
-    };
+    // std::vector<std::string> required_args = {
+    //     "nevery", "exe", "sif", "groupid", "mixid", "tsurf_file", "emi", "customid", "meshdbstem"
+    // };
 
     // // going through the args
     // for (int i = 0; i < inst.size(); i++) {
@@ -343,7 +551,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     //     }
     // }
     // making sure all of the required args are inputted
-    if (required_args.size()) error->all(FLERR, "not all args inputted");
+    // if (required_args.size()) error->all(FLERR, "not all args inputted");
 
     // command style: compute id surf group-id mix-id args
     char* compute_args[COMPUTE_SURF_ARGS_SIZE] = {
@@ -369,8 +577,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // }
 
     // modify->add_fix();
-
-    
 
     /********  start temperature stuff  **********/
 

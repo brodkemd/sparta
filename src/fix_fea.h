@@ -30,24 +30,12 @@ FixStyle(fea,FixFea)
 
 #include "fix.h"
 #include "error.h"
-#include "write_surf.h"
-#include "surf.h"
-#include "modify.h"
-#include "output.h"
-#include "dump.h"
-#include "compute.h"
-#include "comm.h"
-#include "memory.h"
-#include "domain.h"
-#include "input.h"
-#include "update.h"
-#include "./TOML/toml.h"
 
+#include "toml.h"
 
 #include <string>
 #include <vector>
 #include <array>
-#include <sstream>
 
 namespace SPARTA_NS {
     /**
@@ -98,7 +86,19 @@ namespace SPARTA_NS {
                     void _add_section(std::string _name, std::string _n, std::vector<std::string> args);
             };
 
+            template<typename dict>
+            void run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
 
+            template<typename dict>
+            void run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options);
+        
+        public:
+            void handle_sparta(std::string _caller, toml::node_t tbl);
+            void handle_nevery(std::string _caller, toml::node_t val);
+
+            void handle_both(std::string _caller, toml::node_t tbl);
+            void handle_emi(std::string _caller, toml::node_t val);
+            void handle_tsurf_file(std::string _caller, toml::node_t val);
 
         private:
             void load_boundary();
@@ -146,8 +146,16 @@ namespace SPARTA_NS {
 
             Elmer* elmer;
 
-    };    
+    };
+    typedef std::pair<std::string, void (FixFea::*)(std::string, toml::node_t)> dict_item_t;
+    typedef std::vector<dict_item_t> dict_t;
+
 }
+
+// namespace toml {
+//     typedef std::tuple<std::string, SPARTA_NS::FixFea*, void (SPARTA_NS::FixFea::*)(std::string, SPARTA_NS::FixFea*, node_t)> dict_item_t;
+//     typedef std::vector<dict_item_t> dict_t;
+// }
 
 #endif
 #endif
