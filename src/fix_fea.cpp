@@ -32,6 +32,8 @@
 #include "domain.h"
 #include "input.h"
 #include "update.h"
+#include "particle.h"
+#include "mixture.h"
 
 // #include "toml.h"
 
@@ -50,60 +52,200 @@ enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
 
 
-void toml::error(std::string msg) { throw msg; }
 
-template<typename T>
-void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val) {
-    // if the _val is none type, just set to default value immediately
-    if (_val.type() == none_t) {
-        _var = _default_val;
-        return;
-    }
+void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
+    toml::dict_t options = {
+        std::make_pair("emi", &FixFea::handle_emi),
+        std::make_pair("tsurf_file", &FixFea::handle_tsurf_file)
+    };
 
-    if (_val.type() != _type) {
-        // adding the calling hierarchy to the name
-        _name = _caller + "." + _name;
-
-        // making message to user
-        std::stringstream ss;
-        ss << "\"" << _name << "\" has wrong type, " << _val.type();
-        ss << ", must be " << _type << " type";
-        error(ss.str());
-    }
-
-    std::optional<T> _var_opt = _val.value<T>();
-
-    if (_var_opt.has_value())
-        _var = _var_opt.value();
-    else 
-        _var = _default_val;
+    this->run_table(_caller, "both", tbl, options);
 }
 
-// errors instead of setting to default
-template<typename T>
-void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var) {
-    _name = _caller + "." + _name;
 
-    // if the _val is none type, just set to default value immediately
-    if (_val.type() == none_t) {
-        error("no value provided for \"" + _name + "\"");
-    }
+void FixFea::handle_emi(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "emi", toml::double_t, val, this->emi);
+    if (emi <= 0.0 || emi > 1.0)
+        error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
 
-    if (_val.type() != _type) {
-        std::stringstream ss;
-        ss << "\"" << _name << "\" has wrong type, " << _val.type() << ", must be " << _type << " type";
-        error(ss.str());
-    }
-
-    // std::cout << _val << "\n";
-    std::optional<T> _var_opt = _val.value_exact<T>();
-
-    if (_var_opt.has_value()) {
-        _var = _var_opt.value();
-    } else {
-        error("no value provided for \"" + _name + "\"");
-    }
+    this->print("emi = " + std::to_string(this->emi));
 }
+
+
+void FixFea::handle_tsurf_file(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "tsurf_file", toml::string_t, val, this->tsurf_file);
+
+    if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, tsurf_file path does not exist");
+
+    this->print("tsurf_file = " + this->tsurf_file);
+}
+
+
+
+void FixFea::handle_sparta(std::string _caller, toml::node_t tbl) {
+    toml::dict_t options = {
+        std::make_pair("nevery", &FixFea::handle_nevery),
+        std::make_pair("groupID", &FixFea::handle_groupID),
+        std::make_pair("mixID", &FixFea::handle_mixID),
+        std::make_pair("customID", &FixFea::handle_customID)
+    };
+
+    this->run_table(_caller, "sparta", tbl, options);
+}
+
+
+void FixFea::handle_nevery(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "nevery", toml::integer_t, val, this->run_every);
+    if (this->run_every <= 0)
+        error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+    this->print("nevery = " + std::to_string(this->run_every));
+}
+
+
+void FixFea::handle_groupID(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "groupID", toml::string_t, val, this->groupID);
+    // get the surface group
+    int igroup = surf->find_group(this->groupID.c_str());
+    if (igroup < 0)
+        error->all(FLERR,"Fix fea group ID does not exist");
+    
+    groupbit = surf->bitmask[igroup];
+    this->print("groupID = " + this->groupID);
+}
+
+
+void FixFea::handle_mixID(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "mixID", toml::string_t, val, this->mixID);
+    int imix = particle->find_mixture((char*)this->mixID.c_str());
+    if (imix < 0)
+        error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
+
+    ngroup = particle->mixture[imix]->ngroup;
+    this->print("mixID = " + this->mixID);
+}
+
+
+void FixFea::handle_customID(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "customID", toml::string_t, val, this->customID);
+    this->tindex = surf->add_custom((char*)this->customID.c_str(), DOUBLE, 0);
+    this->print("customID = " + this->customID);
+}
+
+
+void FixFea::handle_elmer(std::string _caller, toml::node_t tbl) {
+    toml::dict_t options = {
+        std::make_pair("exe", &FixFea::handle_exe),
+        std::make_pair("sif", &FixFea::handle_sif),
+        std::make_pair("meshDBstem", &FixFea::handle_meshDBstem),
+        std::make_pair("header", &FixFea::handle_header),
+        std::make_pair("simulation", &FixFea::handle_simulation),
+        std::make_pair("constants", &FixFea::handle_constants),
+        std::make_pair("solver", &FixFea::handle_solver),
+        std::make_pair("equation", &FixFea::handle_equation),
+        std::make_pair("material", &FixFea::handle_material),
+        std::make_pair("body", &FixFea::handle_body),
+        std::make_pair("initial_condition", &FixFea::handle_initial_condition),
+        std::make_pair("boundary_condition", &FixFea::handle_boundary_condition)
+    };
+
+    this->run_table(_caller, "elmer", tbl, options);
+}
+
+
+void FixFea::handle_exe(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "exe", toml::string_t, val, this->elmer.exe);
+
+    if (!(stat(this->elmer.exe.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, exe path does not exist");
+    
+    this->print("exe = " + this->elmer.exe);
+}
+
+void FixFea::handle_sif(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "sif", toml::string_t, val, this->elmer.sif);
+    
+    if (!(stat(this->elmer.sif.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, sif path does not exist");
+    
+    this->print("sif = " + this->elmer.sif);
+}
+
+void FixFea::handle_meshDBstem(std::string _caller, toml::node_t val) {
+    toml::set(_caller, "meshDBstem", toml::string_t, val, this->elmer.meshDBstem);
+
+    std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+    for (int i = 0; i < 4; i++) {
+        if (!(stat((this->elmer.meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
+            error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer.meshDBstem + "." + exts[i]) + " does not exist").c_str());
+    }
+    this->print("meshDBstem = " + this->elmer.meshDBstem);
+}
+
+
+void FixFea::handle_header(std::string _caller, toml::node_t __tbl) {
+    _caller = _caller + ".header";
+    toml::table_value_parser(_caller, __tbl, this->elmer.header.contents, "");
+}
+
+
+void FixFea::handle_simulation(std::string _caller, toml::node_t __tbl) {
+    _caller = _caller + ".simulation";
+    table_value_parser(_caller, __tbl, this->elmer.simulation.contents);
+}
+
+
+void FixFea::handle_constants(std::string _caller, toml::node_t __tbl) {
+    _caller = _caller + ".constants";
+    table_value_parser(_caller, __tbl, this->elmer.constants.contents);
+}
+
+
+void FixFea::handle_solver(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".solver";
+    id_table_value_parser(_caller, tbl, this->elmer.solvers);
+}
+
+
+void FixFea::handle_equation(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".equation";
+    id_table_value_parser(_caller, tbl, this->elmer.equations);
+}
+
+
+void FixFea::handle_material(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".material";
+    id_table_value_parser(_caller, tbl, this->elmer.materials);
+}
+
+
+void FixFea::handle_body(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".body";
+    id_table_value_parser(_caller, tbl, this->elmer.bodys);
+}
+
+
+void FixFea::handle_initial_condition(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".initial_condition";
+    id_table_value_parser(_caller, tbl, this->elmer.initial_conditions);
+}
+
+
+void FixFea::handle_boundary_condition(std::string _caller, toml::node_t tbl) {
+    _caller = _caller + ".boundary_condition";
+    id_table_value_parser(_caller, tbl, this->elmer.boundary_conditions);
+}
+
+
+
+
+/*-------------------------------------------------
+
+
+Utility functions
+
+
+-------------------------------------------------*/
 
 /**
  * executes a table
@@ -111,14 +253,14 @@ void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t 
 template<typename dict>
 void FixFea::run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options) {
     if (_tbl.type() != toml::node_type::table) 
-        error->all(FLERR, (_caller + " must be given a table").c_str());
+        error(FLERR, _caller + " must be given a table");
 
     if (_caller.length())
         _caller = _caller + "." + _name;
     else
         _caller = _name;
 
-    for (dict_item_t it : _options) {
+    for (toml::dict_item_t it : _options) {
         toml::node_t val = _tbl[it.first];
         (this->*it.second)(_caller, val);
         _tbl.erase(it.first);
@@ -133,9 +275,10 @@ void FixFea::run_table(std::string _caller, std::string _name, toml::table& _tbl
         for (auto it : _tbl) {
             msg+=("-> " + std::string(it.first.str()) + "\n");
         }
-        error->all(FLERR, msg.c_str());
+        error(FLERR, msg);
     }
 }
+
 
 /**
  * executes a table that wrapped as a node_t type
@@ -144,7 +287,7 @@ template<typename dict>
 void FixFea::run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options) {
 
     if (__tbl.type() != toml::node_type::table) 
-        error->all(FLERR, (_caller + " must be given a table").c_str());
+        error(FLERR, _caller + " must be given a table");
 
     // converting to a table
     toml::table* _tbl = __tbl.as<toml::table>();
@@ -152,7 +295,6 @@ void FixFea::run_table(std::string _caller, std::string _name, toml::node_t& __t
     // calling the other definition because there is nothing else unique needed
     run_table(_caller, _name, (*_tbl), _options);
 }
-
 
 // used in the EXEC function below, represents data returned from a system command
 struct CommandResult {
@@ -191,112 +333,6 @@ static CommandResult EXEC(const std::string &command) {
 }
 
 
-/* ----------------------------------------------------------------------
-
-Elmer class methods
-
----------------------------------------------------------------------- */
-
-/**
- * Constructor takes output file and the error instance used in the FixFea class.
- * The error instance is used to display error messages
- * Do not need to check validity of output file path because is already checked in
- * fixfea class
-*/
-FixFea::Elmer::Elmer(std::string output_file, Error*& _error) {
-    this->sif_path = output_file;
-    this->error = _error;
-}
-
-/**
- * Writes collected commands to the output file. Will write the optional input
- * "header" first if it is provided
-*/
-void FixFea::Elmer::write(std::string header) {
-    // Read from the text file
-    std::ofstream sif_file;
-
-    // this->error->message(FLERR, ("Writing sif file: " + sif_path).c_str());
-
-    // opening the node file
-    sif_file.open(sif_path);
-
-    // making sure it is open
-    if (sif_file.is_open()) {
-        // if the header is provided, write it
-        if (header.length()) sif_file << header << "\n\n";
-
-        // writing each command in the format required by elmer
-        for (int i = 0; i < this->commands.size(); i++) {
-            sif_file << this->commands[i][0] << "\n";
-            for (int j = 1; j < this->commands[i].size()-1; j++) {
-                sif_file << this->tab << this->commands[i][j] << "\n";
-            }
-            sif_file << this->commands[i][this->commands[i].size() - 1] << "\n\n";
-        }
-    } else {
-        // catching if the file did not open
-        error->all(FLERR, ((std::string)"sif file did not open in Elmer class, " + sif_path).c_str());
-    }
-
-    // Close the file
-    sif_file.close();
-
-    // clear no longer needed commands
-    this->commands.clear();
-}
-
-/**
- * Adds a boundary condition
-*/
-void FixFea::Elmer::Boundary_Condition(int _n, std::vector<std::string> args) {
-    this->_add_section("Boundary Condition", std::to_string(_n), args);
-}
-
-/**
- * Adds a initial condition
-*/
-void FixFea::Elmer::Initial_Condition(int _n, std::vector<std::string> args) {
-    this->_add_section("Initial Condition", std::to_string(_n), args);
-}
-
-/**
- * Generic method to add a section, such as the "Boundary Condition" section above
-*/
-void FixFea::Elmer::_add_section(std::string _name, std::string _n, std::vector<std::string> args) {
-    // clearing the vector for good measure
-    this->v.clear();
-
-    // if _n was provided, add it, _n is "" if it is not provided
-    if (_n.length()) this->v.push_back(_name + " " + _n);
-    else             this->v.push_back(_name);
-
-    // adding the arguments to the temporary vector
-    for (int i = 0; i < args.size(); i++) this->v.push_back(args[i]);
-    
-    // adding the required "End" keyword to the end of the temp vector
-    this->v.push_back("End");
-
-    // adding the temp vector to the larger vector, each temp vector represents a command section
-    // like "Boundary Condition" or "Header"
-    this->commands.push_back(v);
-}
-
-
-/* ----------------------------------------------------------------------
-    
-    Config paser methods
-
----------------------------------------------------------------------- */
-
-//void FixFea::test ()
-
-// void handle_sparta(std::string _caller, play::node_t tbl) {
-//     TOML::dict_t options = {
-//         std::
-//     };
-// }
-
 
 /* ----------------------------------------------------------------------
     
@@ -322,7 +358,7 @@ void FixFea::handle_tsurf_file(std::string _caller, toml::node_t val) {
 
 void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
     // std::cout << "-> handing: both\n";
-    dict_t options = {
+    toml::dict_t options = {
         std::make_pair("emi", &FixFea::handle_emi),
         std::make_pair("tsurf_file", &FixFea::handle_tsurf_file)
     };
@@ -332,7 +368,7 @@ void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
 
 
 void FixFea::handle_sparta(std::string _caller, toml::node_t tbl) {
-    dict_t options = {
+    toml::dict_t options = {
         std::make_pair("nevery", &FixFea::handle_nevery),
         std::make_pair("groupID", &FixFea::handle_groupID)
     };
@@ -415,7 +451,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR, ("Parsing failed:\n" + std::string(err.description())).c_str());
     }
 
-    dict_t base_options = {
+    toml::dict_t base_options = {
         std::make_pair("both", &FixFea::handle_both)
     };
 
@@ -428,130 +464,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     
     error->all(FLERR, "Done");
 
-    // toml::dict_t base_options = {
-    //     std::make_pair("sparta", )
-    // };
-
-    // // parsing args
-    // ConfigParser inst{std::string(arg[2]), this->error};
-    // std::pair<std::string, std::string> it;
-
-    // std::vector<std::string> required_args = {
-    //     "nevery", "exe", "sif", "groupid", "mixid", "tsurf_file", "emi", "customid", "meshdbstem"
-    // };
-
-    // // going through the args
-    // for (int i = 0; i < inst.size(); i++) {
-    //     it = inst[i];
-        
-    //     // how often to run this command
-    //     if (it.first == "nevery") {
-    //         // setting so that this command runs continuously to compute an average
-    //         this->nevery = 1;
-
-    //         // this sets when to do the calculations, not just compute the average
-    //         this->run_every = std::stoi(it.second);
-
-    //         // error checking
-    //         if (this->run_every <= 0) error->all(FLERR,"Illegal fix fea command, nevery <= 0");
-    //         this->print("running every: " + std::to_string(this->run_every) + " steps");
-
-    //     // name of the custom variable to create
-    //     } else if (it.first == "customid") {
-    //         // getting the variable name to create
-    //         int n = it.second.length() + 1;
-    //         char *id_custom = new char[n];
-    //         strcpy(id_custom, it.second.c_str());
-
-    //         this->customID = std::string(id_custom);
-
-    //         // create per-surf temperature vector
-    //         tindex = surf->add_custom(id_custom,DOUBLE,0);
-    //         this->print("Created temperature variable: " + this->customID);
-    //         delete [] id_custom;
-
-    //     // path to the elmer exe
-    //     } else if (it.first == "exe") {
-    //         this->exe_path = it.second;
-
-    //         // Calls the function with path as argument
-    //         // If the file/directory exists at the path returns 0
-    //         // If block executes if path exists
-    //         if (!(stat(this->exe_path.c_str(),  &sb) == 0))
-    //             error->all(FLERR,"Illegal fix fea command, exe path does not exist");
-    //         this->print("Elmer exe path: " + this->exe_path);
-
-    //     // path to elmer sif file
-    //     } else if (it.first == "sif") {
-    //         this->sif_path = it.second;
-
-    //         // making sure the sif path exists
-    //         if (!(stat(this->sif_path.c_str(),  &sb) == 0))
-    //             error->all(FLERR,"Illegal fix fea command, sif path does not exist");
-    //         this->print("sif file path: " + this->sif_path);
-
-    //         // making the elmer class
-    //         this->elmer = new Elmer(this->sif_path, this->error);
-
-    //     // path to elmer mesh database file
-    //     } else if (it.first == "meshdbstem") {
-    //         this->meshDBstem = it.second;
-
-    //         // making sure all of the component files are a part of the database
-    //         std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
-    //         for (int i = 0; i < 4; i++) {
-    //             if (!(stat((this->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
-    //                 error->all(FLERR,("Illegal fix fea command, mesh database incomplete, " + (this->meshDBstem + "." + exts[i]) + " does not exist").c_str());
-    //         }
-    //         this->print("Using mesh database at: " + this->meshDBstem);
-
-    //     // path to surface temperature file
-    //     } else if (it.first == "tsurf_file") {
-    //         this->tsurf_file = it.second;
-
-    //         // if the twall file does not exist
-    //         if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
-    //             error->all(FLERR,"Illegal fix fea command, tsurf_file does not exist");
-    //         this->print("Surf temperature file path: " + this->tsurf_file);
-        
-    //     // surface group id
-    //     } else if (it.first == "groupid") {
-    //         this->groupID = it.second;
-
-    //         // get the surface group
-    //         int igroup = surf->find_group(this->groupID.c_str());
-    //         if (igroup < 0)
-    //             error->all(FLERR,"Fix fea group ID does not exist");
-            
-    //         groupbit = surf->bitmask[igroup];
-    //         this->print("Surface group id: " + this->groupID);
-
-    //     // emissivity of the surface
-    //     } else if (it.first == "emi") {
-    //         // getting the surface emissivity
-    //         emi = input->numeric(FLERR, it.second.c_str());
-    //         if (emi <= 0.0 || emi > 1.0)
-    //             error->all(FLERR,"Fix fea emissivity must be > 0.0 and <= 1");
-
-    //         this->print("surface Emissivity: " + std::to_string(this->emi));
-
-    //     // gas mixture id
-    //     } else if (it.first == "mixid") {
-    //         this->mixID = it.second;
-    //         this->print("Mixture id: " + this->groupID);
-
-    //     } else  error->all(FLERR, ("Invalid arg: " + it.first).c_str());
-
-
-    //     for (int j = 0; j < required_args.size(); j++) {
-    //         if (required_args[j] == it.first) {
-    //             required_args.erase(required_args.begin() + j);
-    //             break;
-    //         }
-    //     }
-    // }
-    // making sure all of the required args are inputted
-    // if (required_args.size()) error->all(FLERR, "not all args inputted");
 
     // command style: compute id surf group-id mix-id args
     char* compute_args[COMPUTE_SURF_ARGS_SIZE] = {
@@ -678,7 +590,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
 FixFea::~FixFea() {
     delete [] id_qw;
-    delete this->elmer;
     memory->destroy(tvector_me);
     memory->destroy(twall);
     surf->remove_custom(tindex);
@@ -887,20 +798,30 @@ void FixFea::end_of_step() {
     }
 
     if (this->run_condition()) {
-        memset(tvector_me, 0, nlocal*sizeof(double));
+        // memset(tvector_me, 0, nlocal*sizeof(double));
 
-        m = 0;
-        for (i = me; i < nlocal; i += nprocs) {
-            if (dimension == 3) mask = tris[i].mask;
-            else mask = lines[i].mask;
-            if (!(mask & groupbit)) tvector_me[i] = twall[i];
-            else {
-                qw = qw_avg[i];
-                if (qw > threshold) tvector_me[i] = pow(prefactor*qw,0.25);
-                else tvector_me[i] = twall[i];
+        MPI_Barrier(world);
+        if (this->file_handler) {
+            this->elmer.boundary_conditions.resize(nlocal);
+            for (i = me; i < nlocal; i += nprocs) {
+                
             }
-            m++;
         }
+        MPI_Barrier(world);
+
+
+        // m = 0;
+        // for (i = me; i < nlocal; i += nprocs) {
+        //     if (dimension == 3) mask = tris[i].mask;
+        //     else mask = lines[i].mask;
+        //     if (!(mask & groupbit)) tvector_me[i] = twall[i];
+        //     else {
+        //         qw = qw_avg[i];
+        //         if (qw > threshold) tvector_me[i] = pow(prefactor*qw,0.25);
+        //         else tvector_me[i] = twall[i];
+        //     }
+        //     m++;
+        // }
 
         // Allreduce tvector_me with my owned surfs to tvector custom variable
         // so that all procs know new temperature of all surfs
@@ -912,6 +833,10 @@ void FixFea::end_of_step() {
         MPI_Barrier(world);
         if (this->file_handler) {
             this->print("Generating Boundary Conditions", 4);
+
+            this->elmer.boundary_conditions.clear();
+            this->elmer.initial_conditions.clear();
+
             for (int i = 0; i < nlocal; i++) {
                 this->elmer->Boundary_Condition(i+1, {
                     "Target Boundaries(1) = " + std::to_string(this->boundary_data[i][0]-1),

@@ -1,6 +1,6 @@
 CFLAGS = -O
 CC = g++
-SRC = toml.cpp main.cpp fixfea.cpp
+SRC = $(wildcard *.cpp)
 OBJ = $(SRC:.cpp = .o)
 
 NumTest: $(OBJ)

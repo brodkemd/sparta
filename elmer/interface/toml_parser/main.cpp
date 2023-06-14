@@ -3,6 +3,7 @@
 // #include <iomanip>
 // #include <cmath>
 // #include <limits>
+#include <fstream>
 
 int main(int argc, char** argv) {
 
@@ -29,8 +30,25 @@ int main(int argc, char** argv) {
         std::make_pair("both", &FixFea::handle_both)
     };
 
-    FixFea fix = FixFea();
-    fix.run_table("", "", tbl, items);
+
+    try {
+        FixFea fix = FixFea();
+        fix.run_table("", "", tbl, items);
+        
+        std::string buffer;
+        fix.get_elmer(buffer);
+
+        std::ofstream f("test.sif");
+        if (!(f.is_open()))
+            error(FLERR, "File did not open");
+        
+        f << buffer;
+        f.close();
+
+
+    } catch (...) {
+        error(FLERR, "in running table");
+    }
 
     return 0;
 }

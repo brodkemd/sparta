@@ -7,6 +7,7 @@
 
 #define FLERR __FILE__,__LINE__
 
+
 void error(std::string file, int line, std::string msg);
 
 
@@ -20,6 +21,7 @@ namespace toml {
     const toml::v3::node_type none_t = toml::node_type::none;
     const toml::v3::node_type array_t = toml::node_type::array;
     const toml::v3::node_type double_t =  toml::node_type::floating_point;
+    const toml::v3::node_type bool_t = toml::node_type::boolean;
 
     template<typename T>
     void set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val) {
@@ -44,7 +46,7 @@ namespace toml {
 
         if (_var_opt.has_value())
             _var = _var_opt.value();
-        else 
+        else
             _var = _default_val;
     }
 
