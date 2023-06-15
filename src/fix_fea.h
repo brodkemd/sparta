@@ -31,7 +31,7 @@ FixStyle(fea,FixFea)
 #include "fix.h"
 #include "error.h"
 
-#include "TOML/toml.hpp"
+#include "TOML/toml.h"
 
 #include <string>
 #include <vector>
@@ -84,6 +84,7 @@ namespace SPARTA_NS {
             void handle_emi(std::string _caller, toml::node_t val);
             void handle_tsurf_file(std::string _caller, toml::node_t val);
             void handle_both(std::string _caller, toml::node_t tbl);
+            void handle_compute(std::string _caller, toml::node_t val);
             void handle_nevery(std::string _caller, toml::node_t val);
             void handle_groupID(std::string _caller, toml::node_t val);
             void handle_mixID(std::string _caller, toml::node_t val);
@@ -120,6 +121,8 @@ namespace SPARTA_NS {
             std::string mixID;
             std::string customID;
 
+            std::vector<std::string> compute_args;
+
             // under elmer
             toml::Elmer elmer = toml::Elmer();
 
@@ -152,7 +155,7 @@ namespace SPARTA_NS {
             int groupbit;
             int ngroup;
             int nprocs;
-            double emi;
+
             int tindex,qwindex;
 
             char *id_qw;
@@ -165,7 +168,6 @@ namespace SPARTA_NS {
             double *qw_avg;
 
             // Elmer* elmer;
-
     };
 }
 
