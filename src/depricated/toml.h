@@ -1,19 +1,34 @@
-#ifndef TOML_H
-#define TOML_H
+#ifndef TOML_HPP
+#define TOML_HPP
 
-#include "toml.hpp"
+#include "toml_original.hpp"
+#include <iomanip>
+#include <algorithm>
 
+#pragma once
 namespace toml {
-    const std::string indicator = "$";
-    const std::string separator = ".";
-    const std::string elmer_separator = "=";
-    static toml::value data;
-
-
     void error(std::string _msg);
-    toml::value preprocess(toml::value& _tbl);
-    toml::value resolve_name(toml::string _name);
-    toml::value get_from(toml::value _data, std::string _path, std::string _orig_path = "");
+
+    typedef toml::v3::node_view<toml::v3::node> node_t;
+    typedef toml::node_type var_type_t;
+
+    const toml::v3::node_type string_t =  toml::node_type::string;
+    const toml::v3::node_type integer_t =  toml::node_type::integer;
+    const toml::v3::node_type table_t = toml::node_type::table;
+    const toml::v3::node_type none_t = toml::node_type::none;
+    const toml::v3::node_type array_t = toml::node_type::array;
+    const toml::v3::node_type double_t =  toml::node_type::floating_point;
+    const toml::v3::node_type bool_t = toml::node_type::boolean;
+
+    const std::string indicator = "$";
+
+    // template<typename T>
+    // void set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val);
+
+
+    // errors instead of setting to default
+    // template<typename T>
+    // void set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var);
 
 
     class Base {
@@ -113,7 +128,21 @@ namespace toml {
             std::string meshDBstem;
 
     };
-}
 
+    void format_name(std::string_view _s, std::string& _out);
+
+    int vec_to_arr(std::vector<std::string>& _vec, char**& _arr);
+
+    void join_array_sparta(std::string _caller, std::string _name, toml::node_t val, std::vector<std::string>& _buffer);
+
+
+
+    void table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<std::string>& _var, std::string _sep = "=", bool _specify_size = false);
+
+    bool is_int(const std::string& s);
+
+    template<typename T>
+    void id_table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<T>& _var, std::string _sep = "=", bool _specify_size = false);
+}
 
 #endif

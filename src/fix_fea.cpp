@@ -21,6 +21,7 @@
 #include "stdlib.h"
 #include "string.h"
 
+#include "error.h"
 #include "write_surf.h"
 #include "surf.h"
 #include "modify.h"
@@ -34,6 +35,8 @@
 #include "update.h"
 #include "particle.h"
 #include "mixture.h"
+
+#include "TOML/toml.h"
 
 // #include "toml.h"
 
@@ -51,256 +54,10 @@ using namespace SPARTA_NS;
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
 
+static int max_recursions = 10;
+static int num_recursions = 0;
 
 
-void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
-    toml::dict_t options = {
-        std::make_pair("emi", &FixFea::handle_emi),
-        std::make_pair("tsurf_file", &FixFea::handle_tsurf_file)
-    };
-
-    this->run_table(_caller, "both", tbl, options);
-}
-
-
-void FixFea::handle_emi(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "emi", toml::double_t, val, this->emi);
-    if (emi <= 0.0 || emi > 1.0)
-        error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
-
-    this->print("emi = " + std::to_string(this->emi));
-}
-
-
-void FixFea::handle_tsurf_file(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "tsurf_file", toml::string_t, val, this->tsurf_file);
-
-    if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
-        error->all(FLERR, "Illegal fix fea command, tsurf_file path does not exist");
-
-    this->print("tsurf_file = " + this->tsurf_file);
-}
-
-
-
-void FixFea::handle_sparta(std::string _caller, toml::node_t tbl) {
-    toml::dict_t options = {
-        std::make_pair("nevery", &FixFea::handle_nevery),
-        std::make_pair("groupID", &FixFea::handle_groupID),
-        std::make_pair("mixID", &FixFea::handle_mixID),
-        std::make_pair("customID", &FixFea::handle_customID),
-        std::make_pair("compute", &FixFea::handle_compute)
-    };
-
-    this->run_table(_caller, "sparta", tbl, options);
-}
-
-
-void FixFea::handle_nevery(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "nevery", toml::integer_t, val, this->run_every);
-    if (this->run_every <= 0)
-        error->all(FLERR,"Illegal fix fea command, nevery <= 0");
-    this->print("nevery = " + std::to_string(this->run_every));
-}
-
-
-void FixFea::handle_groupID(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "groupID", toml::string_t, val, this->groupID);
-    // get the surface group
-    int igroup = surf->find_group(this->groupID.c_str());
-    if (igroup < 0)
-        error->all(FLERR,"Fix fea group ID does not exist");
-    
-    groupbit = surf->bitmask[igroup];
-    this->print("groupID = " + this->groupID);
-}
-
-
-void FixFea::handle_mixID(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "mixID", toml::string_t, val, this->mixID);
-    int imix = particle->find_mixture((char*)this->mixID.c_str());
-    if (imix < 0)
-        error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
-
-    ngroup = particle->mixture[imix]->ngroup;
-    this->print("mixID = " + this->mixID);
-}
-
-
-void FixFea::handle_customID(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "customID", toml::string_t, val, this->customID);
-    this->tindex = surf->add_custom((char*)this->customID.c_str(), DOUBLE, 0);
-    this->print("customID = " + this->customID);
-}
-
-
-void FixFea::handle_compute(std::string _caller, toml::node_t val) {
-    toml::join_array_sparta(_caller, "compute", val, this->compute_args);
-}
-
-
-void FixFea::handle_elmer(std::string _caller, toml::node_t tbl) {
-    toml::dict_t options = {
-        std::make_pair("exe", &FixFea::handle_exe),
-        std::make_pair("sif", &FixFea::handle_sif),
-        std::make_pair("meshDBstem", &FixFea::handle_meshDBstem),
-        std::make_pair("header", &FixFea::handle_header),
-        std::make_pair("simulation", &FixFea::handle_simulation),
-        std::make_pair("constants", &FixFea::handle_constants),
-        std::make_pair("solver", &FixFea::handle_solver),
-        std::make_pair("equation", &FixFea::handle_equation),
-        std::make_pair("material", &FixFea::handle_material),
-        std::make_pair("body", &FixFea::handle_body),
-        std::make_pair("initial_condition", &FixFea::handle_initial_condition),
-        std::make_pair("boundary_condition", &FixFea::handle_boundary_condition)
-    };
-
-    this->run_table(_caller, "elmer", tbl, options);
-}
-
-
-void FixFea::handle_exe(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "exe", toml::string_t, val, this->elmer.exe);
-
-    if (!(stat(this->elmer.exe.c_str(),  &sb) == 0))
-        error->all(FLERR, "Illegal fix fea command, exe path does not exist");
-    
-    this->print("exe = " + this->elmer.exe);
-}
-
-void FixFea::handle_sif(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "sif", toml::string_t, val, this->elmer.sif);
-    
-    if (!(stat(this->elmer.sif.c_str(),  &sb) == 0))
-        error->all(FLERR, "Illegal fix fea command, sif path does not exist");
-    
-    this->print("sif = " + this->elmer.sif);
-}
-
-void FixFea::handle_meshDBstem(std::string _caller, toml::node_t val) {
-    toml::set(_caller, "meshDBstem", toml::string_t, val, this->elmer.meshDBstem);
-
-    std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
-    for (int i = 0; i < 4; i++) {
-        if (!(stat((this->elmer.meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
-            error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer.meshDBstem + "." + exts[i]) + " does not exist").c_str());
-    }
-    this->print("meshDBstem = " + this->elmer.meshDBstem);
-}
-
-
-void FixFea::handle_header(std::string _caller, toml::node_t __tbl) {
-    _caller = _caller + ".header";
-    toml::table_value_parser(_caller, __tbl, this->elmer.header.contents, "");
-}
-
-
-void FixFea::handle_simulation(std::string _caller, toml::node_t __tbl) {
-    _caller = _caller + ".simulation";
-    table_value_parser(_caller, __tbl, this->elmer.simulation.contents);
-}
-
-
-void FixFea::handle_constants(std::string _caller, toml::node_t __tbl) {
-    _caller = _caller + ".constants";
-    table_value_parser(_caller, __tbl, this->elmer.constants.contents);
-}
-
-
-void FixFea::handle_solver(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".solver";
-    id_table_value_parser(_caller, tbl, this->elmer.solvers);
-}
-
-
-void FixFea::handle_equation(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".equation";
-    id_table_value_parser(_caller, tbl, this->elmer.equations);
-}
-
-
-void FixFea::handle_material(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".material";
-    id_table_value_parser(_caller, tbl, this->elmer.materials);
-}
-
-
-void FixFea::handle_body(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".body";
-    id_table_value_parser(_caller, tbl, this->elmer.bodys);
-}
-
-
-void FixFea::handle_initial_condition(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".initial_condition";
-    id_table_value_parser(_caller, tbl, this->elmer.initial_conditions);
-}
-
-
-void FixFea::handle_boundary_condition(std::string _caller, toml::node_t tbl) {
-    _caller = _caller + ".boundary_condition";
-    id_table_value_parser(_caller, tbl, this->elmer.boundary_conditions);
-}
-
-
-
-
-/*-------------------------------------------------
-
-
-Utility functions
-
-
--------------------------------------------------*/
-
-/**
- * executes a table
-*/
-template<typename dict>
-void FixFea::run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options) {
-    if (_tbl.type() != toml::node_type::table) 
-        error->all(FLERR, (_caller + " must be given a table").c_str());
-
-    if (_caller.length())
-        _caller = _caller + "." + _name;
-    else
-        _caller = _name;
-
-    for (toml::dict_item_t it : _options) {
-        toml::node_t val = _tbl[it.first];
-        (this->*it.second)(_caller, val);
-        _tbl.erase(it.first);
-    }
-
-    if (_tbl.size()) {
-        std::string msg;
-        if (_caller.length())
-            msg = "Invalid args in section \"" + _caller + "\":\n";
-        else
-            msg = "Invalid section:\n";
-        for (auto it : _tbl) {
-            msg+=("-> " + std::string(it.first.str()) + "\n");
-        }
-        error->all(FLERR, msg.c_str());
-    }
-}
-
-
-/**
- * executes a table that wrapped as a node_t type
-*/
-template<typename dict>
-void FixFea::run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options) {
-
-    if (__tbl.type() != toml::node_type::table) 
-        error->all(FLERR, (_caller + " must be given a table").c_str());
-
-    // converting to a table
-    toml::table* _tbl = __tbl.as<toml::table>();
-
-    // calling the other definition because there is nothing else unique needed
-    run_table(_caller, _name, (*_tbl), _options);
-}
 
 // used in the EXEC function below, represents data returned from a system command
 struct CommandResult {
@@ -339,6 +96,214 @@ static CommandResult EXEC(const std::string &command) {
 }
 
 
+template<typename First, typename... Args>
+void to_elmer_section(std::vector<std::string>& _buffer, bool _specify_size, First first, Args... args) {
+    _buffer.clear();
+
+    toml::value _tbl = toml::find(toml::data, first, args...);
+
+    if (!(_tbl.is_table()))
+        toml::error("can only create elmer section from table");
+
+
+    std::string param_name;
+    std::string name;
+
+    std::string opt_str;
+    int opt_int;
+    double opt_double;
+    bool opt_bool;
+    std::ostringstream double_converter;
+    std::string arr_str;
+    toml::array arr;
+
+    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+
+    for (auto it : _tbl.as_table()) {
+        double_converter.str("");
+        name = it.first;
+        param_name = name;
+        std::replace(param_name.begin(), param_name.end(), '_', ' ');
+
+        if (it.second.is_array()) {
+            arr = it.second.as_array();
+            if (_specify_size)
+                arr_str = param_name + "(" + std::to_string(arr.size()) + ") " + toml::elmer_separator;
+            else
+                arr_str = param_name + " " + toml::elmer_separator;
+
+            for (auto elem : arr) {
+                double_converter.str("");
+                if (elem.is_string()) {
+                    opt_str = elem.as_string().str;
+                    arr_str += (" \"" + opt_str + "\"");
+                    
+                } else if (elem.is_integer()) {
+                    opt_int = elem.as_integer();
+                    arr_str += (" " + std::to_string(opt_int));
+
+                } else if (elem.is_floating()) {
+                    opt_double = elem.as_floating();
+                    double_converter << opt_double;
+                    arr_str += (" " + double_converter.str());
+                
+                } else if (elem.is_boolean()) {
+                    opt_bool = elem.as_boolean();
+
+                    if (opt_bool) 
+                        arr_str += (" True");
+                    else 
+                        arr_str += (" False");
+
+                } else {
+                    toml::error("invalid type in " + name);
+
+                }
+            }
+
+            _buffer.push_back(arr_str);
+
+        } else if (it.second.is_string()) {
+            opt_str = it.second.as_string();
+            
+            _buffer.push_back(
+                param_name + " " + toml::elmer_separator + " \"" + opt_str + "\""
+            );
+            
+        } else if (it.second.is_integer()) {
+            opt_int = it.second.as_integer();
+
+            _buffer.push_back(
+                param_name + " " + toml::elmer_separator + " " + std::to_string(opt_int)
+            );
+
+        } else if (it.second.is_floating()) {
+            opt_double = it.second.as_floating();
+
+            double_converter << opt_double;
+            _buffer.push_back(
+                param_name + " "  + toml::elmer_separator + " " + double_converter.str()
+            );
+
+
+        } else if (it.second.is_boolean()) {
+            opt_bool = it.second.as_boolean();
+
+            if (opt_bool) {
+                _buffer.push_back(
+                    param_name + " "  + toml::elmer_separator + " " + "True"
+                );
+            } else {
+                _buffer.push_back(
+                    param_name + " "  + toml::elmer_separator + " " + "False"
+                );
+            }
+
+        } else {
+            std::stringstream ss;
+            ss << "Invalid type for " << name << ", has type " << it.second.type();
+            toml::error(ss.str());
+        }
+    }
+}
+
+bool is_int(const std::string& s) {
+    std::string::const_iterator it = s.begin();
+    while (it != s.end() && std::isdigit(*it)) ++it;
+    return !s.empty() && it == s.end();
+}
+
+template<typename T, typename First, typename... Args>
+void to_elmer_section_with_id(std::vector<T>& _buffer, bool _specify_size, First first, Args... args) {
+    _buffer.clear();
+
+    toml::value _tbl = toml::find(toml::data, first, args...);
+
+    if (!(_tbl.is_table()))
+        toml::error("can only create elmer section with id from table");
+
+    for (auto it : _tbl.as_table()) {
+        if (is_int(it.first)) {
+            T _temp = T();
+            to_elmer_section(_temp.contents, _specify_size, first, args..., it.first);
+            _buffer.push_back(_temp);
+        } else {
+            toml::error("id for elmer section must be int");
+        }
+    }
+}
+
+toml::value toml::get_from(toml::value _data, std::string _path, std::string _orig_path) {
+    if (_orig_path.length() == 0) {
+        _orig_path = _path;
+    }
+
+    toml::value _temp_val;
+    std::string _name;
+
+    if (_path.find(toml::separator) != std::string::npos) {
+        _name = _path.substr(0, _path.find(toml::separator));
+
+        if (_data.contains(_name)) {
+            return get_from(_data[_name], _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
+        } else {
+            error("can not resolve path, " + _orig_path);
+        }
+
+    } else {
+        if (_data.contains(_path)) {
+            _temp_val = _data[_path];
+            if (_temp_val.is_string()) {
+                _data[_path] = resolve_name(_temp_val.as_string());
+            }
+            return _temp_val;
+        } else {
+            error("can not resolve path, " + _orig_path);
+        }
+    }
+    return _temp_val;
+}
+
+
+toml::value toml::resolve_name(toml::string _name) {
+    if (num_recursions > max_recursions)
+        error("reached max allowed recursion resolving " + (_name.str) + " (there is probably a circular definition somewhere)");
+
+    if (_name.str.substr(0, indicator.length()) == indicator) {
+        num_recursions++;
+        return get_from(data, _name.str.substr(indicator.length(), _name.str.length()));
+    }
+    return _name;
+}
+
+
+
+toml::value toml::preprocess(toml::value& _tbl) {
+    for (auto& it : _tbl.as_table()) {
+        num_recursions = 0;
+        if (it.second.is_table()) {
+            _tbl[it.first] = toml::preprocess(it.second);
+        } else {
+            if (it.second.is_array()) {
+                toml::array _arr = it.second.as_array();
+                for (auto& elem : _arr) {
+                    if (elem.is_string()){
+                        elem = resolve_name(elem.as_string());
+                    }
+                }
+                _tbl[it.first] = _arr;
+            } else if (it.second.is_string()) {
+                _tbl[it.first] = resolve_name(it.second.as_string());
+            }
+        }
+    }
+    return _tbl;
+}
+
+template<typename T, typename First, typename... Args>
+void set(T& _var, First first, Args... args) {
+    _var = toml::find<T>(toml::data, first, args...);
+}
 
 /* ----------------------------------------------------------------------
     
@@ -397,71 +362,93 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
     this->print("Loading config from: " + std::string(arg[2]));
 
-    toml::table tbl;
-    try {
-        tbl = toml::parse_file(arg[2]);
-    } catch (const toml::parse_error& err) {
-        error->all(FLERR, ("Parsing failed:\n" + std::string(err.description())).c_str());
-    }
+    // toml::value data;
 
-    toml::dict_t base_options = {
-        std::make_pair("sparta", &FixFea::handle_sparta),
-        std::make_pair("elmer", &FixFea::handle_elmer),
-        std::make_pair("both", &FixFea::handle_both)
-    };
     try {
-        // std::cout << toml::json_formatter(tbl) << "\n";
-        this->run_table("", "", tbl, base_options);
-    } catch(std::string e) {
-        error->all(FLERR, e.c_str());
+        toml::data = toml::parse(arg[2]);
+    } catch (const toml::syntax_error& e) {
+        error->all(FLERR, e.what());
     } catch (...) {
-        error->all(FLERR, "occurred when running loading the data from the toml table");
+        error->all(FLERR, "unidentified error occurred while parsing file");
     }
+
+    this->elmer = new toml::Elmer();
+
+    try {
+        toml::data = toml::preprocess(toml::data);
+
+        set(this->emi, "both", "emi");
+        set(this->tsurf_file, "both", "tsurf_file");
+        set(this->meshDBstem, "both", "meshDBstem");
+        set(this->compute_args, "sparta", "compute");
+        set(this->nevery, "sparta", "nevery");
+        set(this->run_every, "sparta", "run_every");
+        set(this->groupID, "sparta", "groupID");
+        set(this->mixID, "sparta", "mixID");
+        set(this->customID, "sparta", "customID");
+        
+        set(this->elmer->sif, "elmer", "sif");
+        set(this->elmer->exe, "elmer", "exe");
+        set(this->elmer->meshDBstem, "both", "meshDBstem");
+
+        to_elmer_section(this->elmer->header.contents, false, "elmer", "header");
+        to_elmer_section(this->elmer->simulation.contents, true, "elmer", "simulation");
+        to_elmer_section(this->elmer->constants.contents, true, "elmer", "constants");
+        to_elmer_section_with_id(this->elmer->bodys, true, "elmer", "body");
+        to_elmer_section_with_id(this->elmer->materials, true, "elmer", "material");
+        to_elmer_section_with_id(this->elmer->solvers, true, "elmer", "solver");
+        to_elmer_section_with_id(this->elmer->equations, true, "elmer", "equationz");
+
+
+    } catch (std::exception& e) {
+        error->all(FLERR, e.what());
+    } catch (std::string _msg) {
+        error->all(FLERR, _msg.c_str()); 
+    } catch (...) {
+        error->all(FLERR, "unidentified error occurred while setting variables");
+    }
+
+    error->all(FLERR, "done");
+
+    // toml::dict_t base_options = {
+    //     std::make_pair("sparta", &FixFea::handle_sparta),
+    //     std::make_pair("elmer", &FixFea::handle_elmer),
+    //     std::make_pair("both", &FixFea::handle_both)
+    // };
+    // try {
+    //     // std::cout << toml::json_formatter(tbl) << "\n";
+    //     this->run_table("", "", data.as_table(), base_options);
+    // } catch(std::string e) {
+    //     error->all(FLERR, e.c_str());
+    // } catch (...) {
+    //     error->all(FLERR, "occurred when running loading the data from the toml table");
+    // }
+
+    error->all(FLERR, "done");    
+
+    char** arr;
+    int size;
+
+    if (this->compute_args[2] != this->groupID)
+        this->compute_args.insert(compute_args.begin() + 2, this->groupID);
     
-    error->all(FLERR, "Done");
+    if (this->compute_args[3] != this->mixID)
+        this->compute_args.insert(compute_args.begin() + 3, this->mixID);
 
-
-    const int compute_args_size = this->compute_args.size();
-
-    // command style: compute id surf group-id mix-id args
-    char* compute_args[compute_args_size] = {
-        (char*)"CCCC",
-        (char*)"surf",
-        (char*)this->groupID.c_str(),
-        (char*)this->mixID.c_str(),
-        (char*)"etot"
-    };
+    // size = toml::vec_to_arr(this->compute_args, arr);
+    this->compute_args.clear(); // no longer needed
 
     // adding the needed compute
-    modify->add_compute(COMPUTE_SURF_ARGS_SIZE, compute_args);
+    modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
     icompute = modify->ncompute - 1;// modify->find_compute(id_qw);
     this->print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
+    error->all(FLERR, "Done");
 
-    // char* fix_ave_args[4] = {
-    //     (char*)"AAAA",
-    //     (char*)"ave/surf",
-    //            arg[5],
-    //     (char*)"1"
-    // }
-
-    // modify->add_fix();
 
     /********  start temperature stuff  **********/
 
-    source = COMPUTE;
-    // int n = strlen(arg[4]);
-    // id_qw = new char[n];
-    // strcpy(id_qw,&arg[4][2]);
-
-    // char *ptr = strchr(id_qw,'[');
-    // if (ptr) {
-    //     if (id_qw[strlen(id_qw)-1] != ']')
-    //         error->all(FLERR,"Invalid source in fix fea command");
-    //     qwindex = atoi(ptr+1);
-    //     *ptr = '\0';
-    // } else
     
     // setting to 1 because the compute create above only has one compute value, namely etot
     qwindex = 1;
@@ -542,12 +529,14 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     
     // temporary
     // error->all(FLERR, "done setting up fix fea");
+    delete [] arr;
 }
 
 /* ---------------------------------------------------------------------- */
 
 FixFea::~FixFea() {
     delete [] id_qw;
+    delete this->elmer;
     memory->destroy(tvector_me);
     memory->destroy(twall);
     surf->remove_custom(tindex);
@@ -1004,6 +993,12 @@ void FixFea::print(std::string str, int num_indent, std::string end) {
 }
 
 
+void FixFea::get_elmer(std::string& _buffer) {
+    this->elmer->join(_buffer);
+}
+
+
+
 /*-----------------------------------------------------------
 
 
@@ -1017,59 +1012,7 @@ toml namespace definitions
 void toml::error(std::string _msg) { throw _msg; }
 
 
-template<typename T>
-void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val) {
-    // if the _val is none type, just set to default value immediately
-    if (_val.type() == none_t) {
-        _var = _default_val;
-        return;
-    }
 
-    if (_val.type() != _type) {
-        // adding the calling hierarchy to the name
-        _name = _caller + "." + _name;
-
-        // making message to user
-        std::stringstream ss;
-        ss << "\"" << _name << "\" has wrong type, " << _val.type();
-        ss << ", must be " << _type << " type";
-        error(ss.str());
-    }
-
-    std::optional<T> _var_opt = _val.value<T>();
-
-    if (_var_opt.has_value())
-        _var = _var_opt.value();
-    else
-        _var = _default_val;
-}
-
-
-// errors instead of setting to default
-template<typename T>
-void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var) {
-    _name = _caller + "." + _name;
-
-    // if the _val is none type, just set to default value immediately
-    if (_val.type() == none_t) {
-        error("no value provided for \"" + _name + "\"");
-    }
-
-    if (_val.type() != _type) {
-        std::stringstream ss;
-        ss << "\"" << _name << "\" has wrong type, " << _val.type() << ", must be " << _type << " type";
-        error(ss.str());
-    }
-
-    //std::cout << _val << "\n";
-    std::optional<T> _var_opt = _val.value<T>();
-
-    if (_var_opt.has_value()) {
-        _var = _var_opt.value();
-    } else {
-        error("no value provided for \"" + _name + "\"");
-    }
-}
 
 
 void toml::Base::join(std::string& _buffer) {
@@ -1149,258 +1092,680 @@ void toml::Elmer::join(std::string& _buffer) {
         _buffer += (_temp);
     }
 }
-        
-
-void toml::format_name(std::string_view _s, std::string& _out) {
-    _out.clear();
-    _out = _s;
-    std::replace(_out.begin(), _out.end(), '_', ' ');
-}
 
 
-void toml::table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<std::string>& _var, std::string _sep, bool _specify_size) {
+// void toml::format_name(std::string_view _s, std::string& _out) {
+//     _out.clear();
+//     _out = _s;
+//     std::replace(_out.begin(), _out.end(), '_', ' ');
+// }
+
+
+// void toml::table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<std::string>& _var, std::string _sep, bool _specify_size) {
     
-    if (__tbl.type() != toml::node_type::table)
-        error(_caller + " must be given a table");
+//     if (__tbl.type() != toml::node_type::table)
+//         error(_caller + " must be given a table");
 
-    // std::cout << "Running table for: " << _caller << "\n";
+//     // std::cout << "Running table for: " << _caller << "\n";
 
-    // converting to a table
-    toml::table* _tbl = __tbl.as<toml::table>();
+//     // converting to a table
+//     toml::table* _tbl = __tbl.as<toml::table>();
 
-    std::string param_name;
-    std::string name;
+//     std::string param_name;
+//     std::string name;
 
-    std::optional<std::string> opt_str;
-    std::optional<int64_t> opt_int;
-    std::optional<double> opt_double;
-    std::optional<bool> opt_bool;
-    std::ostringstream double_converter;
-    std::string arr_str;
-    toml::array arr;
+//     std::optional<std::string> opt_str;
+//     std::optional<int64_t> opt_int;
+//     std::optional<double> opt_double;
+//     std::optional<bool> opt_bool;
+//     std::ostringstream double_converter;
+//     std::string arr_str;
+//     toml::array arr;
 
-    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+//     double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
 
-    _var.clear();
+//     _var.clear();
 
-    for (auto it : (*_tbl)) {
-        double_converter.str("");
-        name = it.first.str();
-        name = _caller + "." + name;
-        format_name(it.first.str(), param_name);
+//     for (auto it : (*_tbl)) {
+//         double_converter.str("");
+//         name = it.first.str();
+//         name = _caller + "." + name;
+//         format_name(it.first.str(), param_name);
 
-        //std::cout << "  running: " << name << "\n";
+//         //std::cout << "  running: " << name << "\n";
 
-        if (toml::array_t == it.second.type()) {
-            arr = *it.second.as_array();
-            if (_specify_size)
-                arr_str = param_name + "(" + std::to_string(arr.size()) + ") " + _sep;
-            else
-                arr_str = param_name + _sep;
+//         if (toml::array_t == it.second.type()) {
+//             arr = *it.second.as_array();
+//             if (_specify_size)
+//                 arr_str = param_name + "(" + std::to_string(arr.size()) + ") " + _sep;
+//             else
+//                 arr_str = param_name + _sep;
 
-            for (auto&& elem : arr) {
-                double_converter.str("");
-                if (toml::string_t == elem.type()) {
-                    opt_str = elem.value<std::string>();
-                    if (opt_str.has_value()) {
-                        arr_str += (" \"" + opt_str.value() + "\"");
-                    } else
-                        error("could not get value for " + name);
+//             for (auto&& elem : arr) {
+//                 double_converter.str("");
+//                 if (toml::string_t == elem.type()) {
+//                     opt_str = elem.value<std::string>();
+//                     if (opt_str.has_value()) {
+//                         arr_str += (" \"" + opt_str.value() + "\"");
+//                     } else
+//                         error("could not get value for " + name);
 
                     
-                } else if (toml::integer_t == elem.type()) {
-                    opt_int = elem.value<double>();
-                    if (opt_int.has_value()) {
-                        arr_str += (" " + std::to_string(opt_int.value()));
+//                 } else if (toml::integer_t == elem.type()) {
+//                     opt_int = elem.value<double>();
+//                     if (opt_int.has_value()) {
+//                         arr_str += (" " + std::to_string(opt_int.value()));
 
-                    } else
-                        error("could not get value for " + name);
+//                     } else
+//                         error("could not get value for " + name);
 
-                } else if (toml::double_t == elem.type()) {
-                    opt_double = elem.value<double>();
-                    if (opt_double.has_value()) {
-                        double_converter << opt_double.value();
-                        arr_str += (" " + double_converter.str());
+//                 } else if (toml::double_t == elem.type()) {
+//                     opt_double = elem.value<double>();
+//                     if (opt_double.has_value()) {
+//                         double_converter << opt_double.value();
+//                         arr_str += (" " + double_converter.str());
 
-                    } else
-                        error("could not get value for " + name);
+//                     } else
+//                         error("could not get value for " + name);
                 
-                } else if (toml::bool_t == elem.type()) {
-                    opt_bool = elem.value<bool>();
-                    if (opt_bool.has_value()) {
-                        if (opt_bool.value()) 
-                            arr_str += (" True");
-                        else 
-                            arr_str += (" False");
+//                 } else if (toml::bool_t == elem.type()) {
+//                     opt_bool = elem.value<bool>();
+//                     if (opt_bool.has_value()) {
+//                         if (opt_bool.value()) 
+//                             arr_str += (" True");
+//                         else 
+//                             arr_str += (" False");
                         
-                    } else
-                        error("could not get value for " + name);
-                } else {
-                    error("invalid type in " + name);
+//                     } else
+//                         error("could not get value for " + name);
+//                 } else {
+//                     error("invalid type in " + name);
 
-                }
-            }
+//                 }
+//             }
 
-            _var.push_back(arr_str);
+//             _var.push_back(arr_str);
 
-        } else if (toml::string_t == it.second.type()) {
-            opt_str = it.second.value<std::string>();
-            if (opt_str.has_value()) {
-                _var.push_back(
-                    param_name + " " + _sep + " \"" + opt_str.value() + "\""
-                );
-            } else
-                error("could not get value for " + name);
-
-            
-        } else if (toml::integer_t == it.second.type()) {
-            opt_int = it.second.value<double>();
-            if (opt_int.has_value()) {
-                _var.push_back(
-                    param_name + " " + _sep + " " + std::to_string(opt_int.value())
-                );
-            } else
-                error("could not get value for " + name);
-
-        } else if (toml::double_t == it.second.type()) {
-            opt_double = it.second.value<double>();
-            if (opt_double.has_value()) {
-                double_converter << opt_double.value();
-                _var.push_back(
-                    param_name + " "  + _sep + " " + double_converter.str()
-                );
-            } else
-                error("could not get value for " + name);
-
-        } else if (toml::bool_t == it.second.type()) {
-            opt_bool = it.second.value<bool>();
-            if (opt_bool.has_value()) {
-                if (opt_bool.value()) {
-                    _var.push_back(
-                        param_name + " "  + _sep + " " + "True"
-                    );
-                } else {
-                    _var.push_back(
-                        param_name + " "  + _sep + " " + "False"
-                    );
-                }
-            } else
-                error("could not get value for " + name);
-
-        } else {
-            std::stringstream ss;
-            ss << "Invalid type for " << name << ", has type " << it.second.type();
-            error(ss.str());
-        }
-
-        // std::cout << param_name << " : " << it.second.type() << "\n";
-    }
-
-    // for (auto it : _var) {
-    //     std::cout << "=> " << it << "\n";
-    // }
-}
-
-bool toml::is_int(const std::string& s) {
-    std::string::const_iterator it = s.begin();
-    while (it != s.end() && std::isdigit(*it)) ++it;
-    return !s.empty() && it == s.end();
-}
-
-template<typename T>
-void toml::id_table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<T>& _var, std::string _sep, bool _specify_size) {
-    if (__tbl.type() != toml::node_type::table)
-        error(_caller + " must be given a table");
-
-    // std::cout << "Running id table for: " << _caller << "\n";
-
-    // converting to a table
-    toml::table* _tbl = __tbl.as<toml::table>();
-
-    std::string _name;
-    std::string _key;
-
-    for (auto it : (*_tbl)) {
-        _key = it.first.str();
-        if (!(is_int(_key)))
-            error("elements for " + _caller + " must be a positive integer, not " + _key);
-
-        _name = _caller + "." + _key;
-
-        T inst = T();
-        inst.id = std::stoi(_key);
-
-        table_value_parser(_name, (*_tbl)[_key], inst.contents, _sep, _specify_size);
-        
-
-        _var.push_back(inst);
-
-        // std::cout << " <> "<< it.first.str() << "\n";
-    }
-
-}
-
-
-void toml::join_array_sparta(std::string _caller, std::string _name, toml::node_t val, std::vector<std::string>& _buffer) {
-    _caller = _caller + "." + _name;
-    if (val.type() != toml::array_t)
-        error("can not join, " + _caller + ", it is not an array");
-    
-    toml::array arr;
-
-    std::optional<std::string> opt_str;
-    std::optional<int64_t> opt_int;
-    std::optional<double> opt_double;
-    std::optional<bool> opt_bool;
-    std::ostringstream double_converter;
-    toml::array arr;
-
-    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
-
-    arr = *val.as_array();
-
-    _buffer.clear();
-
-    for (auto&& elem : arr) {
-        double_converter.str("");
-        if (toml::string_t == elem.type()) {
-            opt_str = elem.value<std::string>();
-            if (opt_str.has_value()) {
-                _buffer.push_back(opt_str.value());
-            } else
-                error("could not get value for " + _caller);
+//         } else if (toml::string_t == it.second.type()) {
+//             opt_str = it.second.value<std::string>();
+//             if (opt_str.has_value()) {
+//                 _var.push_back(
+//                     param_name + " " + _sep + " \"" + opt_str.value() + "\""
+//                 );
+//             } else
+//                 error("could not get value for " + name);
 
             
-        } else if (toml::integer_t == elem.type()) {
-            opt_int = elem.value<double>();
-            if (opt_int.has_value()) {
-                _buffer.push_back(std::to_string(opt_int.value()));
+//         } else if (toml::integer_t == it.second.type()) {
+//             opt_int = it.second.value<double>();
+//             if (opt_int.has_value()) {
+//                 _var.push_back(
+//                     param_name + " " + _sep + " " + std::to_string(opt_int.value())
+//                 );
+//             } else
+//                 error("could not get value for " + name);
 
-            } else
-                error("could not get value for " + _caller);
+//         } else if (toml::double_t == it.second.type()) {
+//             opt_double = it.second.value<double>();
+//             if (opt_double.has_value()) {
+//                 double_converter << opt_double.value();
+//                 _var.push_back(
+//                     param_name + " "  + _sep + " " + double_converter.str()
+//                 );
+//             } else
+//                 error("could not get value for " + name);
 
-        } else if (toml::double_t == elem.type()) {
-            opt_double = elem.value<double>();
-            if (opt_double.has_value()) {
-                double_converter << opt_double.value();
-                _buffer.push_back(double_converter.str());
+//         } else if (toml::bool_t == it.second.type()) {
+//             opt_bool = it.second.value<bool>();
+//             if (opt_bool.has_value()) {
+//                 if (opt_bool.value()) {
+//                     _var.push_back(
+//                         param_name + " "  + _sep + " " + "True"
+//                     );
+//                 } else {
+//                     _var.push_back(
+//                         param_name + " "  + _sep + " " + "False"
+//                     );
+//                 }
+//             } else
+//                 error("could not get value for " + name);
 
-            } else
-                error("could not get value for " + _caller);
+//         } else {
+//             std::stringstream ss;
+//             ss << "Invalid type for " << name << ", has type " << it.second.type();
+//             error(ss.str());
+//         }
+
+//         // std::cout << param_name << " : " << it.second.type() << "\n";
+//     }
+
+//     // for (auto it : _var) {
+//     //     std::cout << "=> " << it << "\n";
+//     // }
+// }
+
+// bool toml::is_int(const std::string& s) {
+//     std::string::const_iterator it = s.begin();
+//     while (it != s.end() && std::isdigit(*it)) ++it;
+//     return !s.empty() && it == s.end();
+// }
+
+// template<typename T>
+// void toml::id_table_value_parser(std::string _caller, toml::node_t __tbl, std::vector<T>& _var, std::string _sep, bool _specify_size) {
+//     if (__tbl.type() != toml::node_type::table)
+//         error(_caller + " must be given a table");
+
+//     // std::cout << "Running id table for: " << _caller << "\n";
+
+//     // converting to a table
+//     toml::table* _tbl = __tbl.as<toml::table>();
+
+//     std::string _name;
+//     std::string _key;
+
+//     for (auto it : (*_tbl)) {
+//         _key = it.first.str();
+//         if (!(is_int(_key)))
+//             error("elements for " + _caller + " must be a positive integer, not " + _key);
+
+//         _name = _caller + "." + _key;
+
+//         T inst = T();
+//         inst.id = std::stoi(_key);
+
+//         table_value_parser(_name, (*_tbl)[_key], inst.contents, _sep, _specify_size);
         
-        // } else if (toml::bool_t == elem.type()) {
-        //     opt_bool = elem.value<bool>();
-        //     if (opt_bool.has_value()) {
-        //         if (opt_bool.value()) 
-        //             arr_str += (" True");
-        //         else 
-        //             arr_str += (" False");
+
+//         _var.push_back(inst);
+
+//         // std::cout << " <> "<< it.first.str() << "\n";
+//     }
+
+// }
+
+
+// void toml::join_array_sparta(std::string _caller, std::string _name, toml::node_t val, std::vector<std::string>& _buffer) {
+//     _caller = _caller + "." + _name;
+//     if (val.type() != toml::array_t)
+//         error("can not join, " + _caller + ", it is not an array");
+
+//     std::optional<std::string> opt_str;
+//     std::optional<int64_t> opt_int;
+//     std::optional<double> opt_double;
+//     std::optional<bool> opt_bool;
+//     std::ostringstream double_converter;
+//     toml::array arr;
+
+//     double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+
+//     arr = *val.as_array();
+
+//     _buffer.clear();
+
+//     for (auto&& elem : arr) {
+//         double_converter.str("");
+//         if (toml::string_t == elem.type()) {
+//             opt_str = elem.value<std::string>();
+//             if (opt_str.has_value()) {
+//                 _buffer.push_back(opt_str.value());
+//             } else
+//                 error("could not get value for " + _caller);
+
+            
+//         } else if (toml::integer_t == elem.type()) {
+//             opt_int = elem.value<double>();
+//             if (opt_int.has_value()) {
+//                 _buffer.push_back(std::to_string(opt_int.value()));
+
+//             } else
+//                 error("could not get value for " + _caller);
+
+//         } else if (toml::double_t == elem.type()) {
+//             opt_double = elem.value<double>();
+//             if (opt_double.has_value()) {
+//                 double_converter << opt_double.value();
+//                 _buffer.push_back(double_converter.str());
+
+//             } else
+//                 error("could not get value for " + _caller);
+        
+//         // } else if (toml::bool_t == elem.type()) {
+//         //     opt_bool = elem.value<bool>();
+//         //     if (opt_bool.has_value()) {
+//         //         if (opt_bool.value()) 
+//         //             arr_str += (" True");
+//         //         else 
+//         //             arr_str += (" False");
                 
-        //     } else
-        //         error("could not get value for " + name);
-        } else {
-            error("invalid type in " + _caller);
+//         //     } else
+//         //         error("could not get value for " + name);
+//         } else {
+//             error("invalid type in " + _caller);
 
-        }
-    }
-}
+//         }
+//     }
+// }
+
+
+// int toml::vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+//     const int _size = _vec.size();
+
+//     _arr = new char*[_size];
+
+//     for (int i = 0; i < _size; i++)
+//         _arr[i] = (char*)_vec[i].c_str();
+    
+//     return _size;
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// void FixFea::handle_both(std::string _caller, toml::node_t tbl) {
+//     toml::dict_t options = {
+//         std::make_pair("emi", &FixFea::handle_emi),
+//         std::make_pair("tsurf_file", &FixFea::handle_tsurf_file)
+//     };
+
+//     this->run_table(_caller, "both", tbl, options);
+// }
+
+
+// void FixFea::handle_emi(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "emi", toml::double_t, val, this->emi);
+//     if (emi <= 0.0 || emi > 1.0)
+//         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
+
+//     this->print("emi = " + std::to_string(this->emi));
+// }
+
+
+// void FixFea::handle_tsurf_file(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "tsurf_file", toml::string_t, val, this->tsurf_file);
+
+//     if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
+//         error->all(FLERR, "Illegal fix fea command, tsurf_file path does not exist");
+
+//     this->print("tsurf_file = " + this->tsurf_file);
+// }
+
+
+
+// void FixFea::handle_sparta(std::string _caller, toml::node_t tbl) {
+//     toml::dict_t options = {
+//         std::make_pair("nevery", &FixFea::handle_nevery),
+//         std::make_pair("groupID", &FixFea::handle_groupID),
+//         std::make_pair("mixID", &FixFea::handle_mixID),
+//         std::make_pair("customID", &FixFea::handle_customID),
+//         std::make_pair("compute", &FixFea::handle_compute)
+//     };
+
+//     this->run_table(_caller, "sparta", tbl, options);
+// }
+
+
+// void FixFea::handle_nevery(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "nevery", toml::integer_t, val, this->run_every);
+//     if (this->run_every <= 0)
+//         error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+//     this->print("nevery = " + std::to_string(this->run_every));
+// }
+
+
+// void FixFea::handle_groupID(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "groupID", toml::string_t, val, this->groupID);
+//     // get the surface group
+//     int igroup = surf->find_group(this->groupID.c_str());
+//     if (igroup < 0)
+//         error->all(FLERR,"Fix fea group ID does not exist");
+    
+//     groupbit = surf->bitmask[igroup];
+//     this->print("groupID = " + this->groupID);
+// }
+
+
+// void FixFea::handle_mixID(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "mixID", toml::string_t, val, this->mixID);
+//     int imix = particle->find_mixture((char*)this->mixID.c_str());
+//     if (imix < 0)
+//         error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
+
+//     ngroup = particle->mixture[imix]->ngroup;
+//     this->print("mixID = " + this->mixID);
+// }
+
+
+// void FixFea::handle_customID(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "customID", toml::string_t, val, this->customID);
+//     this->tindex = surf->add_custom((char*)this->customID.c_str(), DOUBLE, 0);
+//     this->print("customID = " + this->customID);
+// }
+
+
+// void FixFea::handle_compute(std::string _caller, toml::node_t val) {
+//     toml::join_array_sparta(_caller, "compute", val, this->compute_args);
+// }
+
+
+// void FixFea::handle_elmer(std::string _caller, toml::node_t tbl) {
+//     toml::dict_t options = {
+//         std::make_pair("exe", &FixFea::handle_exe),
+//         std::make_pair("sif", &FixFea::handle_sif),
+//         std::make_pair("meshDBstem", &FixFea::handle_meshDBstem),
+//         std::make_pair("header", &FixFea::handle_header),
+//         std::make_pair("simulation", &FixFea::handle_simulation),
+//         std::make_pair("constants", &FixFea::handle_constants),
+//         std::make_pair("solver", &FixFea::handle_solver),
+//         std::make_pair("equation", &FixFea::handle_equation),
+//         std::make_pair("material", &FixFea::handle_material),
+//         std::make_pair("body", &FixFea::handle_body),
+//         std::make_pair("initial_condition", &FixFea::handle_initial_condition),
+//         std::make_pair("boundary_condition", &FixFea::handle_boundary_condition)
+//     };
+
+//     this->run_table(_caller, "elmer", tbl, options);
+// }
+
+
+// void FixFea::handle_exe(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "exe", toml::string_t, val, this->elmer.exe);
+
+//     if (!(stat(this->elmer.exe.c_str(),  &sb) == 0))
+//         error->all(FLERR, "Illegal fix fea command, exe path does not exist");
+    
+//     this->print("exe = " + this->elmer.exe);
+// }
+
+// void FixFea::handle_sif(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "sif", toml::string_t, val, this->elmer.sif);
+    
+//     if (!(stat(this->elmer.sif.c_str(),  &sb) == 0))
+//         error->all(FLERR, "Illegal fix fea command, sif path does not exist");
+    
+//     this->print("sif = " + this->elmer.sif);
+// }
+
+// void FixFea::handle_meshDBstem(std::string _caller, toml::node_t val) {
+//     this->set(_caller, "meshDBstem", toml::string_t, val, this->elmer.meshDBstem);
+
+//     std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+//     for (int i = 0; i < 4; i++) {
+//         if (!(stat((this->elmer.meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
+//             error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer.meshDBstem + "." + exts[i]) + " does not exist").c_str());
+//     }
+//     this->print("meshDBstem = " + this->elmer.meshDBstem);
+// }
+
+
+// void FixFea::handle_header(std::string _caller, toml::node_t __tbl) {
+//     _caller = _caller + ".header";
+//     toml::table_value_parser(_caller, __tbl, this->elmer.header.contents, "");
+// }
+
+
+// void FixFea::handle_simulation(std::string _caller, toml::node_t __tbl) {
+//     _caller = _caller + ".simulation";
+//     table_value_parser(_caller, __tbl, this->elmer.simulation.contents);
+// }
+
+
+// void FixFea::handle_constants(std::string _caller, toml::node_t __tbl) {
+//     _caller = _caller + ".constants";
+//     table_value_parser(_caller, __tbl, this->elmer.constants.contents);
+// }
+
+
+// void FixFea::handle_solver(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".solver";
+//     id_table_value_parser(_caller, tbl, this->elmer.solvers);
+// }
+
+
+// void FixFea::handle_equation(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".equation";
+//     id_table_value_parser(_caller, tbl, this->elmer.equations);
+// }
+
+
+// void FixFea::handle_material(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".material";
+//     id_table_value_parser(_caller, tbl, this->elmer.materials);
+// }
+
+
+// void FixFea::handle_body(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".body";
+//     id_table_value_parser(_caller, tbl, this->elmer.bodys);
+// }
+
+
+// void FixFea::handle_initial_condition(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".initial_condition";
+//     id_table_value_parser(_caller, tbl, this->elmer.initial_conditions);
+// }
+
+
+// void FixFea::handle_boundary_condition(std::string _caller, toml::node_t tbl) {
+//     _caller = _caller + ".boundary_condition";
+//     id_table_value_parser(_caller, tbl, this->elmer.boundary_conditions);
+// }
+
+
+
+
+/*-------------------------------------------------
+
+
+Utility functions
+
+
+-------------------------------------------------*/
+
+// /**
+//  * executes a table
+// */
+// template<typename dict>
+// void FixFea::run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options) {
+//     if () 
+//         error->all(FLERR, (_caller + " must be given a table").c_str());
+
+//     if (_caller.length())
+//         _caller = _caller + "." + _name;
+//     else
+//         _caller = _name;
+
+//     for (toml::dict_item_t it : _options) {
+//         toml::node_t val = _tbl[it.first];
+//         (this->*it.second)(_caller, val);
+//         _tbl.erase(it.first);
+//     }
+
+//     if (_tbl.size()) {
+//         std::string msg;
+//         if (_caller.length())
+//             msg = "Invalid args in section \"" + _caller + "\":\n";
+//         else
+//             msg = "Invalid section:\n";
+//         for (auto it : _tbl) {
+//             msg+=("-> " + std::string(it.first.str()) + "\n");
+//         }
+//         error->all(FLERR, msg.c_str());
+//     }
+// }
+
+
+// /**
+//  * executes a table that wrapped as a node_t type
+// */
+// template<typename dict>
+// void FixFea::run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options) {
+
+//     if (__tbl.type() != toml::node_type::table) 
+//         error->all(FLERR, (_caller + " must be given a table").c_str());
+
+//     // converting to a table
+//     toml::table* _tbl = __tbl.as<toml::table>();
+
+//     // calling the other definition because there is nothing else unique needed
+//     run_table(_caller, _name, (*_tbl), _options);
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// template<typename T>
+// void toml::set(std::string _caller, std::string _name, var_type_t _type, node_t _val, T& _var, T _default_val) {
+//     // if the _val is none type, just set to default value immediately
+//     if (_val.type() == none_t) {
+//         _var = _default_val;
+//         return;
+//     }
+
+//     if (_val.type() != _type) {
+//         // adding the calling hierarchy to the name
+//         _name = _caller + "." + _name;
+
+//         // making message to user
+//         std::stringstream ss;
+//         ss << "\"" << _name << "\" has wrong type, " << _val.type();
+//         ss << ", must be " << _type << " type";
+//         error(ss.str());
+//     }
+
+//     std::optional<T> _var_opt = _val.value<T>();
+
+//     if (_var_opt.has_value())
+//         _var = _var_opt.value();
+//     else
+//         _var = _default_val;
+// }
+
+// toml::node_t FixFea::get_var(toml::node_t _tbl, std::string _path, std::string _orig_path) {
+//     if (_tbl.type() == toml::table_t) {
+//         get_var((*_tbl.as_table()), _path, _orig_path);
+//     } else {
+
+//     }
+// }
+
+
+// toml::node_t FixFea::get_var(toml::table _tbl, std::string _path, std::string _orig_path) {
+//     if (_orig_path.length() == 0) {
+//         _orig_path = _path;
+//     }
+//     std::string _name;
+//     std::string _sep = ".";
+//     toml::node_t _to_return;
+
+//     if (_path.find(_sep) != std::string::npos) {
+//         _name = _path.substr(0, _path.find(_sep));
+
+//         if (_tbl.contains(std::string_view(_name))) {
+//             _to_return = get_var(_tbl[_name], _path.substr(_path.find(_sep) + _sep.length(), _path.length()), _orig_path);
+//         } else {
+//             error->all(FLERR, ("Could not resolve path, " + _orig_path).c_str());
+//         }   
+//     } else {
+//         if (_tbl.contains(_path)) {
+//             _to_return = _tbl[_path];
+//             if (_to_return.type() == toml::string_t) {
+//                 _to_return = this->resolve_name(_to_return, _path);
+//             }
+//         } else {
+//             error->all(FLERR, ("Could not resolve path, " + _orig_path).c_str());
+//         }
+//     }
+
+//     return _to_return;
+
+// }
+
+
+// toml::node_t FixFea::resolve_name(toml::node_t _val, std::string _path) {
+//     if (_val.type() == toml::string_t) {
+//         std::string _temp;
+//         std::optional<std::string> _var_opt_temp = _val.value<std::string>();
+//         if (_var_opt_temp.has_value()) {
+//             _temp = _var_opt_temp.value();
+//             if (_temp.substr(0, toml::indicator.length()) == toml::indicator) {
+//                 if (this->recursion_num > this->max_recursion) {
+//                     error->all(FLERR, ("reached max allowed recursion resolving " + _path + " (there is probably a circular definition somewhere)").c_str());
+//                 }
+
+//                 this->recursion_num++;
+//                 _temp = _temp.substr(toml::indicator.length(), _temp.length());
+
+//                 return get_var(this->tbl, _temp);
+//             }
+//         } else error->all(FLERR, (char*)"no value gotten for optional var");
+//     } else if (_val.type() == toml::none_t)
+//         error->all(FLERR, ("could not resolve path, " + _path).c_str());
+
+//     return _val;
+// }
+
+
+// // errors instead of setting to default
+// template<typename T>
+// void FixFea::set(std::string _caller, std::string _name, toml::var_type_t _type, toml::node_t _val, T& _var) {
+//     _name = _caller + "." + _name;
+
+//     // if the _val is none type, just set to default value immediately
+//     if (_val.type() == toml::none_t) {
+//         error->all(FLERR, ("no value provided for \"" + _name + "\"").c_str());
+//     }
+
+//     if (_val.type() == toml::string_t) {
+//         _val = this->resolve_name(_val, _caller);
+//     }
+
+//     //std::cout << _val << "\n";
+//     std::optional<T> _var_opt = _val.value<T>();
+
+//     if (_val.type() != _type) {
+//         std::stringstream ss;
+//         ss << "\"" << _name << "\" has wrong type, " << _val.type() << ", must be " << _type << " type";
+//         error->all(FLERR, ss.str().c_str());
+//     }
+
+//     _var_opt = _val.value<T>();
+
+//     if (_var_opt.has_value()) {
+//         _var = _var_opt.value();
+//     } else {
+//         error->all(FLERR, ("no value provided for \"" + _name + "\"").c_str());
+//     }
+// }

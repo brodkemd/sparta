@@ -29,14 +29,15 @@ FixStyle(fea,FixFea)
 #define BOUNDARY_LINE_SIZE 8
 
 #include "fix.h"
-#include "error.h"
-
-#include "TOML/toml.h"
 
 #include <string>
 #include <vector>
 #include <array>
 #include <sys/stat.h>
+
+namespace toml {
+    class Elmer;
+}
 
 namespace SPARTA_NS {
     /**
@@ -70,39 +71,46 @@ namespace SPARTA_NS {
 
         protected:
 
-            template<typename dict>
-            void run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
+            // template<typename dict>
+            // void run_table(std::string _caller, std::string _name, toml::table& _tbl, dict& _options);
 
-            template<typename dict>
-            void run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options);
+            // template<typename dict>
+            // void run_table(std::string _caller, std::string _name, toml::node_t& __tbl, dict& _options);
 
-            void get_elmer(std::string& _buffer) {
-                this->elmer.join(_buffer);
-            }
-        
-        public:
-            void handle_emi(std::string _caller, toml::node_t val);
-            void handle_tsurf_file(std::string _caller, toml::node_t val);
-            void handle_both(std::string _caller, toml::node_t tbl);
-            void handle_compute(std::string _caller, toml::node_t val);
-            void handle_nevery(std::string _caller, toml::node_t val);
-            void handle_groupID(std::string _caller, toml::node_t val);
-            void handle_mixID(std::string _caller, toml::node_t val);
-            void handle_customID(std::string _caller, toml::node_t val);
-            void handle_sparta(std::string _caller, toml::node_t tbl);
-            void handle_exe(std::string _caller, toml::node_t val);
-            void handle_sif(std::string _caller, toml::node_t val);
-            void handle_meshDBstem(std::string _caller, toml::node_t val);
-            void handle_header(std::string _caller, toml::node_t tbl);
-            void handle_simulation(std::string _caller, toml::node_t tbl);
-            void handle_constants(std::string _caller, toml::node_t tbl);
-            void handle_solver(std::string _caller, toml::node_t tbl);
-            void handle_equation(std::string _caller, toml::node_t tbl);
-            void handle_material(std::string _caller, toml::node_t tbl);
-            void handle_body(std::string _caller, toml::node_t tbl);
-            void handle_initial_condition(std::string _caller, toml::node_t tbl);
-            void handle_boundary_condition(std::string _caller, toml::node_t tbl);
-            void handle_elmer(std::string _caller, toml::node_t tbl);
+            void get_elmer(std::string& _buffer);
+
+            // template<typename T>
+            // void set(std::string _caller, std::string _name, toml::var_type_t _type, toml::node_t _val, T& _var);
+
+
+            // toml::node_t resolve_name(toml::node_t _val, std::string _path);
+
+            // toml::node_t get_var(toml::node_t _tbl, std::string _path, std::string _orig_path = "");
+            // toml::node_t get_var(toml::table _tbl, std::string _path, std::string _orig_path = "");
+                
+        // public:
+        //     void handle_emi(std::string _caller, toml::node_t val);
+        //     void handle_tsurf_file(std::string _caller, toml::node_t val);
+        //     void handle_both(std::string _caller, toml::node_t tbl);
+        //     void handle_compute(std::string _caller, toml::node_t val);
+        //     void handle_nevery(std::string _caller, toml::node_t val);
+        //     void handle_groupID(std::string _caller, toml::node_t val);
+        //     void handle_mixID(std::string _caller, toml::node_t val);
+        //     void handle_customID(std::string _caller, toml::node_t val);
+        //     void handle_sparta(std::string _caller, toml::node_t tbl);
+        //     void handle_exe(std::string _caller, toml::node_t val);
+        //     void handle_sif(std::string _caller, toml::node_t val);
+        //     void handle_meshDBstem(std::string _caller, toml::node_t val);
+        //     void handle_header(std::string _caller, toml::node_t tbl);
+        //     void handle_simulation(std::string _caller, toml::node_t tbl);
+        //     void handle_constants(std::string _caller, toml::node_t tbl);
+        //     void handle_solver(std::string _caller, toml::node_t tbl);
+        //     void handle_equation(std::string _caller, toml::node_t tbl);
+        //     void handle_material(std::string _caller, toml::node_t tbl);
+        //     void handle_body(std::string _caller, toml::node_t tbl);
+        //     void handle_initial_condition(std::string _caller, toml::node_t tbl);
+        //     void handle_boundary_condition(std::string _caller, toml::node_t tbl);
+        //     void handle_elmer(std::string _caller, toml::node_t tbl);
 
         private:
             void load_boundary();
@@ -111,9 +119,11 @@ namespace SPARTA_NS {
             void print(std::string str, int num_indent = 1, std::string end = "\n");
             bool run_condition();
 
+
             // under "both"
             double emi;
             std::string tsurf_file;
+
 
             // under "sparta"
             int nevery;
@@ -124,25 +134,14 @@ namespace SPARTA_NS {
             std::vector<std::string> compute_args;
 
             // under elmer
-            toml::Elmer elmer = toml::Elmer();
+            class toml::Elmer* elmer;
 
             // Structure which would store the metadata
             struct stat sb;
-
-            // int debug_num = 1;
-            // int compute_index;
-
             std::string exe_path;
             std::string sif_path;
-
             std::string command;
-            // std::string tsurf_file;
             std::string meshDBstem;
-            // //std::string data_file;
-            // std::string customID;
-            // std::string groupID;
-            // std::string mixID;
-            // std::string sif_format;
             std::vector<double> data;
             std::vector<std::array<int, 4>> boundary_data;
 
@@ -167,14 +166,13 @@ namespace SPARTA_NS {
             double *twall;
             double *qw_avg;
 
-            // Elmer* elmer;
     };
 }
 
-namespace toml {
-    typedef std::pair<std::string, void (SPARTA_NS::FixFea::*)(std::string, toml::node_t)> dict_item_t;
-    typedef std::vector<dict_item_t> dict_t;
-}
+// namespace toml {
+//     typedef std::pair<std::string, void (SPARTA_NS::FixFea::*)(std::string, toml::value)> dict_item_t;
+//     typedef std::vector<dict_item_t> dict_t;
+// }
 
 
 #endif
