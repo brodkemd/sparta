@@ -132,6 +132,8 @@ namespace SPARTA_NS {
             std::string customID;
 
             std::vector<std::string> compute_args;
+            std::vector<std::string> surf_collide_args;
+            std::vector<std::string> surf_modify_args;
 
             // under elmer
             class toml::Elmer* elmer;

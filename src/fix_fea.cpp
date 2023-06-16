@@ -44,7 +44,6 @@
 #include <fstream>
 #include <boost/algorithm/string.hpp>
 #include <iostream>
-#include <sys/stat.h>
 
 using namespace SPARTA_NS;
 
@@ -233,6 +232,74 @@ void to_elmer_section_with_id(std::vector<T>& _buffer, bool _specify_size, First
     }
 }
 
+int countFreq(std::string pat, std::string txt) {
+    int M = pat.length();
+    int N = txt.length();
+    int res = 0;
+ 
+    /* A loop to slide pat[] one by one */
+    for (int i = 0; i <= N - M; i++) {
+        /* For current index i, check for
+           pattern match */
+        int j;
+        for (j = 0; j < M; j++)
+            if (txt[i + j] != pat[j])
+                break;
+ 
+        // if pat[0...M-1] = txt[i, i+1, ...i+M-1]
+        if (j == M) {
+            res++;
+        }
+    }
+    return res;
+}
+
+toml::value toml::handle_arr(toml::value _data, std::string& _path, std::string _orig_path) {
+    toml::key _temp;
+
+    if (!(_data.is_table()))
+        error("can not resolve path, " + _orig_path + ", can only index an element of a table");
+
+
+    if (_path.find(toml::start_index) != std::string::npos) {
+        std::cout << "handling arr:" << _path << "\n";
+        
+        _temp = _path.substr(0, _path.find(toml::start_index));
+        boost::algorithm::trim(_temp);
+        std::cout << "temp: " << _temp << "\n";
+        if (_path.find(toml::start_index) != 0) {
+            std::cout << "in if\n";
+            if (_data.contains(_temp)) {
+                std::cout << "getting\n";
+                // std::cout << _data << "\n";
+                ;//.at(_temp);
+                _data = toml::find(_data, _temp);
+                std::cout << "_data: " << _data << "\n";
+            } else
+                toml::error("can not resolve path, " + _orig_path);
+        }
+        std::cout << "HERERERE\n";
+        if (!(_data.is_array()))
+            toml::error("can not resolve path, " + _orig_path + ", tried indexing something that is not an array");
+
+
+        int index;
+        for (int i = 0; i < countFreq(_path, toml::start_index); i++) {
+            _temp = _path.substr(_path.find(toml::start_index) + toml::start_index.length(), _path.find(toml::end_index));
+            boost::algorithm::trim(_temp);
+            index = std::stoi(_temp);
+            if (index >= _data.as_array().size() || index < 0)
+                toml::error("can not resolve path, " + _orig_path + ", index out of bounds");
+            std::cout << "index = " << index << "\n";
+            _data = _data.as_array()[index];
+            _path = _path.substr(_path.find(end_index) + end_index.length(), _path.length());
+        }
+
+    }
+    return _data;
+}
+
+
 toml::value toml::get_from(toml::value _data, std::string _path, std::string _orig_path) {
     if (_orig_path.length() == 0) {
         _orig_path = _path;
@@ -243,15 +310,24 @@ toml::value toml::get_from(toml::value _data, std::string _path, std::string _or
 
     if (_path.find(toml::separator) != std::string::npos) {
         _name = _path.substr(0, _path.find(toml::separator));
-
-        if (_data.contains(_name)) {
+        _data = toml::handle_arr(_data, _name, _orig_path);
+        if (_name.length() == 0) {
+            return get_from(_data, _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
+        } else if (_data.contains(_name)) {
             return get_from(_data[_name], _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
         } else {
             error("can not resolve path, " + _orig_path);
         }
 
     } else {
-        if (_data.contains(_path)) {
+        _data = handle_arr(_data, _path, _orig_path);
+
+        if (_path.length() == 0) {
+            if (data.is_string()) {
+                _data = resolve_name(_data.as_string());
+            }
+            return _data;
+        } else if (_data.contains(_path)) {
             _temp_val = _data[_path];
             if (_temp_val.is_string()) {
                 _data[_path] = resolve_name(_temp_val.as_string());
@@ -266,10 +342,10 @@ toml::value toml::get_from(toml::value _data, std::string _path, std::string _or
 
 
 toml::value toml::resolve_name(toml::string _name) {
-    if (num_recursions > max_recursions)
-        error("reached max allowed recursion resolving " + (_name.str) + " (there is probably a circular definition somewhere)");
-
     if (_name.str.substr(0, indicator.length()) == indicator) {
+        if (num_recursions > max_recursions)
+            error("reached max allowed recursion resolving " + (_name.str) + " (there is probably a circular definition somewhere)");
+        std::cout << "resolving: " << _name << "\n";
         num_recursions++;
         return get_from(data, _name.str.substr(indicator.length(), _name.str.length()));
     }
@@ -300,10 +376,29 @@ toml::value toml::preprocess(toml::value& _tbl) {
     return _tbl;
 }
 
+// template<typename T>
+// void inform_setting(std::string _name, T& _var) {
+//     std::cout << _name << " = " << _var << "\n";
+// }
+
+
 template<typename T, typename First, typename... Args>
 void set(T& _var, First first, Args... args) {
     _var = toml::find<T>(toml::data, first, args...);
 }
+
+
+int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+    const int _size = _vec.size();
+
+    _arr = new char*[_size];
+
+    for (int i = 0; i < _size; i++)
+        _arr[i] = (char*)_vec[i].c_str();
+    
+    return _size;
+}
+
 
 /* ----------------------------------------------------------------------
     
@@ -375,30 +470,58 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->elmer = new toml::Elmer();
 
     try {
+        this->print("Preprocessing");
         toml::data = toml::preprocess(toml::data);
+        this->print("Done Preprocessing");
 
-        set(this->emi, "both", "emi");
-        set(this->tsurf_file, "both", "tsurf_file");
-        set(this->meshDBstem, "both", "meshDBstem");
-        set(this->compute_args, "sparta", "compute");
-        set(this->nevery, "sparta", "nevery");
-        set(this->run_every, "sparta", "run_every");
-        set(this->groupID, "sparta", "groupID");
-        set(this->mixID, "sparta", "mixID");
-        set(this->customID, "sparta", "customID");
+        set(this->emi,               "both",   "emi");
+        // inform_setting("emi", this->emi);
         
-        set(this->elmer->sif, "elmer", "sif");
-        set(this->elmer->exe, "elmer", "exe");
-        set(this->elmer->meshDBstem, "both", "meshDBstem");
+        set(this->tsurf_file,        "both",   "tsurf_file");
+        // inform_setting("tsurf_file", this->tsurf_file);
+        
+        set(this->meshDBstem,        "both",   "meshDBstem");
+        // inform_setting("meshDBstem", this->meshDBstem);
+        
+        set(this->compute_args,      "sparta", "compute");
 
-        to_elmer_section(this->elmer->header.contents, false, "elmer", "header");
-        to_elmer_section(this->elmer->simulation.contents, true, "elmer", "simulation");
-        to_elmer_section(this->elmer->constants.contents, true, "elmer", "constants");
-        to_elmer_section_with_id(this->elmer->bodys, true, "elmer", "body");
-        to_elmer_section_with_id(this->elmer->materials, true, "elmer", "material");
-        to_elmer_section_with_id(this->elmer->solvers, true, "elmer", "solver");
-        to_elmer_section_with_id(this->elmer->equations, true, "elmer", "equationz");
+        set(this->nevery,            "sparta", "nevery");
+        //inform_setting("nevery", this->nevery);
+        
+        set(this->run_every,         "sparta", "run_every");
+        //inform_setting("run_every", this->run_every);
+        
+        set(this->groupID,           "sparta", "groupID");
+        //inform_setting("groupID", this->groupID);
+        
+        set(this->mixID,             "sparta", "mixID");
+        //inform_setting("mixID", this->mixID);
+        
+        set(this->customID,          "sparta", "customID");
+        //inform_setting("customID", this->customID);
+        
+        set(this->qwindex,           "sparta", "qwindex");
+        //inform_setting("qwindex", this->qwindex);
+        
+        set(this->surf_collide_args, "sparta", "surf_collide");
+        set(this->surf_modify_args,  "sparta", "surf_modify");
+        
+        set(this->elmer->sif,        "elmer",  "sif");
+        //inform_setting("elmer.sif", this->elmer->sif);
+        
+        set(this->elmer->exe,        "elmer",  "exe");
+        //inform_setting("elmer.exe", this->elmer->exe);
+        
+        set(this->elmer->meshDBstem, "both",   "meshDBstem");
+        //inform_setting("elmer.meshDBstem", this->elmer->meshDBstem);
 
+        to_elmer_section(this->elmer->header.contents,     false, "elmer", "header");
+        to_elmer_section(this->elmer->simulation.contents, true,  "elmer", "simulation");
+        to_elmer_section(this->elmer->constants.contents,  true,  "elmer", "constants");
+        to_elmer_section_with_id(this->elmer->bodys,       true,  "elmer", "body");
+        to_elmer_section_with_id(this->elmer->materials,   true,  "elmer", "material");
+        to_elmer_section_with_id(this->elmer->solvers,     true,  "elmer", "solver");
+        to_elmer_section_with_id(this->elmer->equations,   true,  "elmer", "equation");
 
     } catch (std::exception& e) {
         error->all(FLERR, e.what());
@@ -408,34 +531,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR, "unidentified error occurred while setting variables");
     }
 
-    error->all(FLERR, "done");
-
-    // toml::dict_t base_options = {
-    //     std::make_pair("sparta", &FixFea::handle_sparta),
-    //     std::make_pair("elmer", &FixFea::handle_elmer),
-    //     std::make_pair("both", &FixFea::handle_both)
-    // };
-    // try {
-    //     // std::cout << toml::json_formatter(tbl) << "\n";
-    //     this->run_table("", "", data.as_table(), base_options);
-    // } catch(std::string e) {
-    //     error->all(FLERR, e.c_str());
-    // } catch (...) {
-    //     error->all(FLERR, "occurred when running loading the data from the toml table");
-    // }
-
-    error->all(FLERR, "done");    
 
     char** arr;
     int size;
-
-    if (this->compute_args[2] != this->groupID)
-        this->compute_args.insert(compute_args.begin() + 2, this->groupID);
     
-    if (this->compute_args[3] != this->mixID)
-        this->compute_args.insert(compute_args.begin() + 3, this->mixID);
-
-    // size = toml::vec_to_arr(this->compute_args, arr);
+    size = vec_to_arr(this->compute_args, arr);
     this->compute_args.clear(); // no longer needed
 
     // adding the needed compute
@@ -444,14 +544,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
     icompute = modify->ncompute - 1;// modify->find_compute(id_qw);
     this->print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
-    error->all(FLERR, "Done");
-
 
     /********  start temperature stuff  **********/
-
-    
-    // setting to 1 because the compute create above only has one compute value, namely etot
-    qwindex = 1;
 
     // error checks
     cqw = modify->compute[icompute];
@@ -496,16 +590,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     /********  end temperature stuff  **********/
 
+    this->surf_collide_args[2] = "s_" + this->surf_collide_args[2];
+    size = vec_to_arr(this->surf_collide_args, arr);
+    this->surf_collide_args.clear();
+
     // command style: 
-    char* surf_collide_args[4] = {
-        (char*)"SSSS",
-        (char*)"diffuse",
-        (char*)("s_" + this->customID).c_str(),
-        (char*)std::to_string(this->emi).c_str() // (char*)"0.5"
-    };
+    // char* surf_collide_args[4] = {
+    //     (char*)"SSSS",
+    //     (char*)"diffuse",
+    //     (char*)("s_" + this->customID).c_str(),
+    //     (char*)std::to_string(this->emi).c_str() // (char*)"0.5"
+    // };
 
     // adding surf collision model needed
-    this->surf->add_collide(4, surf_collide_args);
+    this->surf->add_collide(size, arr);
 
     // command style: 
     char* surf_modify_args[3] = {

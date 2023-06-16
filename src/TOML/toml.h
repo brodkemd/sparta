@@ -5,12 +5,15 @@
 
 namespace toml {
     const std::string indicator = "$";
+    const std::string start_index = "[";
+    const std::string end_index = "]";
     const std::string separator = ".";
     const std::string elmer_separator = "=";
     static toml::value data;
 
 
     void error(std::string _msg);
+    toml::value handle_arr(toml::value _data, std::string& _path, std::string _orig_path);
     toml::value preprocess(toml::value& _tbl);
     toml::value resolve_name(toml::string _name);
     toml::value get_from(toml::value _data, std::string _path, std::string _orig_path = "");
