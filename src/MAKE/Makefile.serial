@@ -1,19 +1,20 @@
 # serial = Linux box, g++, serial (no MPI)
 
-SHELL = /bin/sh
+SHELL = /bin/bash
 
 # ---------------------------------------------------------------------
 # compiler/linker settings
 # specify flags and libraries needed for your compiler
 
 CC =		g++
-CCFLAGS =	-O3
+CCFLAGS =	-O3 $(shell python3.10-config --cflags --embed)
+
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		g++
-LINKFLAGS =	-O
-LIB =           
+LINKFLAGS =	-O $(shell python3.10-config --embed --ldflags)
+LIB =  
 SIZE =		size
 
 ARCHIVE =	ar
@@ -63,6 +64,7 @@ JPG_INC =
 JPG_PATH = 	
 JPG_LIB =	
 
+
 # ---------------------------------------------------------------------
 # build rules and dependencies
 # no need to edit this section
@@ -79,7 +81,7 @@ vpath %.h ..
 # Link target
 
 $(EXE):	$(OBJ)
-	$(LINK) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(EXTRA_LIB) $(LIB) -o $(EXE)
+	$(LINK) $(EXTRA_PATH) $(OBJ) $(EXTRA_LIB) $(LIB) $(LINKFLAGS) -o $(EXE)
 	$(SIZE) $(EXE)
 
 # Library targets

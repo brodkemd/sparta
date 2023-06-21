@@ -53,8 +53,8 @@ using namespace SPARTA_NS;
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
 
-static int max_recursions = 10;
-static int num_recursions = 0;
+// static int max_recursions = 10;
+// static int num_recursions = 0;
 
 
 
@@ -95,310 +95,12 @@ static CommandResult EXEC(const std::string &command) {
 }
 
 
-template<typename First, typename... Args>
-void to_elmer_section(std::vector<std::string>& _buffer, bool _specify_size, First first, Args... args) {
-    _buffer.clear();
-
-    toml::value _tbl = toml::find(toml::data, first, args...);
-
-    if (!(_tbl.is_table()))
-        toml::error("can only create elmer section from table");
-
-
-    std::string param_name;
-    std::string name;
-
-    std::string opt_str;
-    int opt_int;
-    double opt_double;
-    bool opt_bool;
-    std::ostringstream double_converter;
-    std::string arr_str;
-    toml::array arr;
-
-    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
-
-    for (auto it : _tbl.as_table()) {
-        double_converter.str("");
-        name = it.first;
-        param_name = name;
-        std::replace(param_name.begin(), param_name.end(), '_', ' ');
-
-        if (it.second.is_array()) {
-            arr = it.second.as_array();
-            if (_specify_size)
-                arr_str = param_name + "(" + std::to_string(arr.size()) + ") " + toml::elmer_separator;
-            else
-                arr_str = param_name + " " + toml::elmer_separator;
-
-            for (auto elem : arr) {
-                double_converter.str("");
-                if (elem.is_string()) {
-                    opt_str = elem.as_string().str;
-                    arr_str += (" \"" + opt_str + "\"");
-                    
-                } else if (elem.is_integer()) {
-                    opt_int = elem.as_integer();
-                    arr_str += (" " + std::to_string(opt_int));
-
-                } else if (elem.is_floating()) {
-                    opt_double = elem.as_floating();
-                    double_converter << opt_double;
-                    arr_str += (" " + double_converter.str());
-                
-                } else if (elem.is_boolean()) {
-                    opt_bool = elem.as_boolean();
-
-                    if (opt_bool) 
-                        arr_str += (" True");
-                    else 
-                        arr_str += (" False");
-
-                } else {
-                    toml::error("invalid type in " + name);
-
-                }
-            }
-
-            _buffer.push_back(arr_str);
-
-        } else if (it.second.is_string()) {
-            opt_str = it.second.as_string();
-            
-            _buffer.push_back(
-                param_name + " " + toml::elmer_separator + " \"" + opt_str + "\""
-            );
-            
-        } else if (it.second.is_integer()) {
-            opt_int = it.second.as_integer();
-
-            _buffer.push_back(
-                param_name + " " + toml::elmer_separator + " " + std::to_string(opt_int)
-            );
-
-        } else if (it.second.is_floating()) {
-            opt_double = it.second.as_floating();
-
-            double_converter << opt_double;
-            _buffer.push_back(
-                param_name + " "  + toml::elmer_separator + " " + double_converter.str()
-            );
-
-
-        } else if (it.second.is_boolean()) {
-            opt_bool = it.second.as_boolean();
-
-            if (opt_bool) {
-                _buffer.push_back(
-                    param_name + " "  + toml::elmer_separator + " " + "True"
-                );
-            } else {
-                _buffer.push_back(
-                    param_name + " "  + toml::elmer_separator + " " + "False"
-                );
-            }
-
-        } else {
-            std::stringstream ss;
-            ss << "Invalid type for " << name << ", has type " << it.second.type();
-            toml::error(ss.str());
-        }
-    }
-}
-
-bool is_int(const std::string& s) {
-    std::string::const_iterator it = s.begin();
-    while (it != s.end() && std::isdigit(*it)) ++it;
-    return !s.empty() && it == s.end();
-}
-
-template<typename T, typename First, typename... Args>
-void to_elmer_section_with_id(std::vector<T>& _buffer, bool _specify_size, First first, Args... args) {
-    _buffer.clear();
-
-    toml::value _tbl = toml::find(toml::data, first, args...);
-
-    if (!(_tbl.is_table()))
-        toml::error("can only create elmer section with id from table");
-
-    for (auto it : _tbl.as_table()) {
-        if (is_int(it.first)) {
-            T _temp = T();
-            to_elmer_section(_temp.contents, _specify_size, first, args..., it.first);
-            _buffer.push_back(_temp);
-        } else {
-            toml::error("id for elmer section must be int");
-        }
-    }
-}
-
-int countFreq(std::string pat, std::string txt) {
-    int M = pat.length();
-    int N = txt.length();
-    int res = 0;
- 
-    /* A loop to slide pat[] one by one */
-    for (int i = 0; i <= N - M; i++) {
-        /* For current index i, check for
-           pattern match */
-        int j;
-        for (j = 0; j < M; j++)
-            if (txt[i + j] != pat[j])
-                break;
- 
-        // if pat[0...M-1] = txt[i, i+1, ...i+M-1]
-        if (j == M) {
-            res++;
-        }
-    }
-    return res;
-}
-
-toml::value toml::handle_arr(toml::value _data, std::string& _path, std::string _orig_path) {
-    toml::key _temp;
-
-    if (!(_data.is_table()))
-        error("can not resolve path, " + _orig_path + ", can only index an element of a table");
-
-
-    if (_path.find(toml::start_index) != std::string::npos) {
-        std::cout << "handling arr:" << _path << "\n";
-        
-        _temp = _path.substr(0, _path.find(toml::start_index));
-        boost::algorithm::trim(_temp);
-        std::cout << "temp: " << _temp << "\n";
-        if (_path.find(toml::start_index) != 0) {
-            std::cout << "in if\n";
-            if (_data.contains(_temp)) {
-                std::cout << "getting\n";
-                // std::cout << _data << "\n";
-                ;//.at(_temp);
-                _data = toml::find(_data, _temp);
-                std::cout << "_data: " << _data << "\n";
-            } else
-                toml::error("can not resolve path, " + _orig_path);
-        }
-        std::cout << "HERERERE\n";
-        if (!(_data.is_array()))
-            toml::error("can not resolve path, " + _orig_path + ", tried indexing something that is not an array");
-
-
-        int index;
-        for (int i = 0; i < countFreq(_path, toml::start_index); i++) {
-            _temp = _path.substr(_path.find(toml::start_index) + toml::start_index.length(), _path.find(toml::end_index));
-            boost::algorithm::trim(_temp);
-            index = std::stoi(_temp);
-            if (index >= _data.as_array().size() || index < 0)
-                toml::error("can not resolve path, " + _orig_path + ", index out of bounds");
-            std::cout << "index = " << index << "\n";
-            _data = _data.as_array()[index];
-            _path = _path.substr(_path.find(end_index) + end_index.length(), _path.length());
-        }
-
-    }
-    return _data;
-}
-
-
-toml::value toml::get_from(toml::value _data, std::string _path, std::string _orig_path) {
-    if (_orig_path.length() == 0) {
-        _orig_path = _path;
-    }
-
-    toml::value _temp_val;
-    std::string _name;
-
-    if (_path.find(toml::separator) != std::string::npos) {
-        _name = _path.substr(0, _path.find(toml::separator));
-        _data = toml::handle_arr(_data, _name, _orig_path);
-        if (_name.length() == 0) {
-            return get_from(_data, _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
-        } else if (_data.contains(_name)) {
-            return get_from(_data[_name], _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
-        } else {
-            error("can not resolve path, " + _orig_path);
-        }
-
-    } else {
-        _data = handle_arr(_data, _path, _orig_path);
-
-        if (_path.length() == 0) {
-            if (data.is_string()) {
-                _data = resolve_name(_data.as_string());
-            }
-            return _data;
-        } else if (_data.contains(_path)) {
-            _temp_val = _data[_path];
-            if (_temp_val.is_string()) {
-                _data[_path] = resolve_name(_temp_val.as_string());
-            }
-            return _temp_val;
-        } else {
-            error("can not resolve path, " + _orig_path);
-        }
-    }
-    return _temp_val;
-}
-
-
-toml::value toml::resolve_name(toml::string _name) {
-    if (_name.str.substr(0, indicator.length()) == indicator) {
-        if (num_recursions > max_recursions)
-            error("reached max allowed recursion resolving " + (_name.str) + " (there is probably a circular definition somewhere)");
-        std::cout << "resolving: " << _name << "\n";
-        num_recursions++;
-        return get_from(data, _name.str.substr(indicator.length(), _name.str.length()));
-    }
-    return _name;
-}
-
-
-
-toml::value toml::preprocess(toml::value& _tbl) {
-    for (auto& it : _tbl.as_table()) {
-        num_recursions = 0;
-        if (it.second.is_table()) {
-            _tbl[it.first] = toml::preprocess(it.second);
-        } else {
-            if (it.second.is_array()) {
-                toml::array _arr = it.second.as_array();
-                for (auto& elem : _arr) {
-                    if (elem.is_string()){
-                        elem = resolve_name(elem.as_string());
-                    }
-                }
-                _tbl[it.first] = _arr;
-            } else if (it.second.is_string()) {
-                _tbl[it.first] = resolve_name(it.second.as_string());
-            }
-        }
-    }
-    return _tbl;
-}
-
-// template<typename T>
-// void inform_setting(std::string _name, T& _var) {
-//     std::cout << _name << " = " << _var << "\n";
-// }
-
-
-template<typename T, typename First, typename... Args>
-void set(T& _var, First first, Args... args) {
-    _var = toml::find<T>(toml::data, first, args...);
-}
-
-
 int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
     const int _size = _vec.size();
-
     _arr = new char*[_size];
-
-    for (int i = 0; i < _size; i++)
-        _arr[i] = (char*)_vec[i].c_str();
-    
+    for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
     return _size;
 }
-
 
 /* ----------------------------------------------------------------------
     
@@ -459,77 +161,120 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // toml::value data;
 
-    try {
-        toml::data = toml::parse(arg[2]);
-    } catch (const toml::syntax_error& e) {
-        error->all(FLERR, e.what());
-    } catch (...) {
-        error->all(FLERR, "unidentified error occurred while parsing file");
-    }
+    // try {
+    //     toml::data = toml::parse(arg[2]);
+    // } catch (const toml::syntax_error& e) {
+    //     error->all(FLERR, e.what());
+    // } catch (...) {
+    //     error->all(FLERR, "unidentified error occurred while parsing file");
+    // }
 
     this->elmer = new toml::Elmer();
 
     try {
-        this->print("Preprocessing");
-        toml::data = toml::preprocess(toml::data);
-        this->print("Done Preprocessing");
+        toml::handler s(arg[2]);
 
-        set(this->emi,               "both",   "emi");
-        // inform_setting("emi", this->emi);
-        
-        set(this->tsurf_file,        "both",   "tsurf_file");
-        // inform_setting("tsurf_file", this->tsurf_file);
-        
-        set(this->meshDBstem,        "both",   "meshDBstem");
-        // inform_setting("meshDBstem", this->meshDBstem);
-        
-        set(this->compute_args,      "sparta", "compute");
+        s.get_at_path(this->emi,               "both.emi");
+        s.get_at_path(this->tsurf_file,        "both.tsurf_file");
+        s.get_at_path(this->meshDBstem,        "both.meshDBstem");
+        s.get_at_path(this->compute_args,      "sparta.compute");
+        s.get_at_path(this->nevery,            "sparta.nevery");
+        s.get_at_path(this->run_every,         "sparta.run_every");
+        s.get_at_path(this->groupID,           "sparta.groupID");
+        s.get_at_path(this->mixID,             "sparta.mixID");
+        s.get_at_path(this->customID,          "sparta.customID");
+        s.get_at_path(this->qwindex,           "sparta.qwindex");
+        s.get_at_path(this->surf_collide_args, "sparta.surf_collide");
+        s.get_at_path(this->surf_modify_args,  "sparta.surf_modify");
+        s.get_at_path(this->elmer->sif,        "elmer.sif");
+        s.get_at_path(this->elmer->exe,        "elmer.exe");
+        s.get_at_path(this->elmer->meshDBstem, "both.meshDBstem");
 
-        set(this->nevery,            "sparta", "nevery");
-        //inform_setting("nevery", this->nevery);
-        
-        set(this->run_every,         "sparta", "run_every");
-        //inform_setting("run_every", this->run_every);
-        
-        set(this->groupID,           "sparta", "groupID");
-        //inform_setting("groupID", this->groupID);
-        
-        set(this->mixID,             "sparta", "mixID");
-        //inform_setting("mixID", this->mixID);
-        
-        set(this->customID,          "sparta", "customID");
-        //inform_setting("customID", this->customID);
-        
-        set(this->qwindex,           "sparta", "qwindex");
-        //inform_setting("qwindex", this->qwindex);
-        
-        set(this->surf_collide_args, "sparta", "surf_collide");
-        set(this->surf_modify_args,  "sparta", "surf_modify");
-        
-        set(this->elmer->sif,        "elmer",  "sif");
-        //inform_setting("elmer.sif", this->elmer->sif);
-        
-        set(this->elmer->exe,        "elmer",  "exe");
-        //inform_setting("elmer.exe", this->elmer->exe);
-        
-        set(this->elmer->meshDBstem, "both",   "meshDBstem");
-        //inform_setting("elmer.meshDBstem", this->elmer->meshDBstem);
+        // to_elmer_section(this->elmer->header.contents,     false, "elmer", "header");
+        // to_elmer_section(this->elmer->simulation.contents, true,  "elmer", "simulation");
+        // to_elmer_section(this->elmer->constants.contents,  true,  "elmer", "constants");
+        // to_elmer_section_with_id(this->elmer->bodys,       true,  "elmer", "body");
+        // to_elmer_section_with_id(this->elmer->materials,   true,  "elmer", "material");
+        // to_elmer_section_with_id(this->elmer->solvers,     true,  "elmer", "solver");
+        // to_elmer_section_with_id(this->elmer->equations,   true,  "elmer", "equation");
 
-        to_elmer_section(this->elmer->header.contents,     false, "elmer", "header");
-        to_elmer_section(this->elmer->simulation.contents, true,  "elmer", "simulation");
-        to_elmer_section(this->elmer->constants.contents,  true,  "elmer", "constants");
-        to_elmer_section_with_id(this->elmer->bodys,       true,  "elmer", "body");
-        to_elmer_section_with_id(this->elmer->materials,   true,  "elmer", "material");
-        to_elmer_section_with_id(this->elmer->solvers,     true,  "elmer", "solver");
-        to_elmer_section_with_id(this->elmer->equations,   true,  "elmer", "equation");
-
-    } catch (std::exception& e) {
-        error->all(FLERR, e.what());
+    
     } catch (std::string _msg) {
         error->all(FLERR, _msg.c_str()); 
+    } catch (std::exception& e) {
+        error->all(FLERR, e.what());
     } catch (...) {
         error->all(FLERR, "unidentified error occurred while setting variables");
     }
+
+
+    if (emi <= 0.0 || emi > 1.0)
+        error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
+
+    this->print("emi = " + std::to_string(this->emi));
+
+
+    if (!(stat(this->tsurf_file.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, tsurf_file path does not exist");
+
+    this->print("tsurf_file = " + this->tsurf_file);
+
+
+    if (this->run_every <= 0)
+        error->all(FLERR,"Illegal fix fea command, run_every <= 0");
+
+    this->print("run_every = " + std::to_string(this->run_every));
+
+
+    if (this->nevery <= 0)
+        error->all(FLERR,"Illegal fix fea command, nevery <= 0");
+    
+    if (this->run_every % this->nevery != 0)
+        error->all(FLERR, "Illegal fix fea command, run_every must be a multiple of nevery");
+
+    this->print("nevery = " + std::to_string(this->nevery));
+
+
+    // get the surface group
+    int igroup = surf->find_group(this->groupID.c_str());
+    if (igroup < 0)
+        error->all(FLERR,"Fix fea group ID does not exist");
+    
+    groupbit = surf->bitmask[igroup];
+    this->print("groupID = " + this->groupID);
+
+
+    int imix = particle->find_mixture((char*)this->mixID.c_str());
+    if (imix < 0)
+        error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
+
+    ngroup = particle->mixture[imix]->ngroup;
+    this->print("mixID = " + this->mixID);
+    
+
+    this->tindex = surf->add_custom((char*)this->customID.c_str(), DOUBLE, 0);
+    this->print("customID = " + this->customID);
+    
+
+    if (!(stat(this->elmer->exe.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, exe path does not exist");
+    
+    this->print("exe = " + this->elmer->exe);
+
+
+    if (!(stat(this->elmer->sif.c_str(),  &sb) == 0))
+        error->all(FLERR, "Illegal fix fea command, sif path does not exist");
+    
+    this->print("sif = " + this->elmer->sif);
+    
+
+    std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+    for (int i = 0; i < 4; i++) {
+        if (!(stat((this->elmer->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
+            error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer->meshDBstem + "." + exts[i]) + " does not exist").c_str());
+    }
+    this->print("meshDBstem = " + this->elmer->meshDBstem);
+
 
 
     char** arr;
@@ -606,14 +351,17 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->surf->add_collide(size, arr);
 
     // command style: 
-    char* surf_modify_args[3] = {
-        (char*)"all",
-        (char*)"collide",
-        (char*)"SSSS"
-    };
+    // char* surf_modify_args[3] = {
+    //     (char*)"all",
+    //     (char*)"collide",
+    //     (char*)"SSSS"
+    // };
+
+    size = vec_to_arr(this->surf_modify_args, arr);
+    this->surf_modify_args.clear();
 
     // modifying params
-    this->surf->modify_params(3, surf_modify_args);   
+    this->surf->modify_params(size, arr);
 
     // char* group_args[4] = {
     //     "GGGG",
@@ -628,6 +376,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // temporary
     // error->all(FLERR, "done setting up fix fea");
     delete [] arr;
+    error->all(FLERR, "done");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1085,8 +834,8 @@ void FixFea::print(std::string str, int num_indent, std::string end) {
         space += "  ";
 
     if (comm->me == 0) {
-        if (screen)  fprintf(screen, (space + str + end).c_str());
-        if (logfile) fprintf(logfile,(space + str + end).c_str());
+        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
     }
 }
 
@@ -1190,6 +939,315 @@ void toml::Elmer::join(std::string& _buffer) {
         _buffer += (_temp);
     }
 }
+
+// template<typename First, typename... Args>
+// void to_elmer_section(std::vector<std::string>& _buffer, bool _specify_size, First first, Args... args) {
+//     _buffer.clear();
+
+//     toml::value _tbl = toml::find(toml::data, first, args...);
+
+//     if (!(_tbl.is_table()))
+//         toml::error("can only create elmer section from table");
+
+
+//     std::string param_name;
+//     std::string name;
+
+//     std::string opt_str;
+//     int opt_int;
+//     double opt_double;
+//     bool opt_bool;
+//     std::ostringstream double_converter;
+//     std::string arr_str;
+//     toml::array arr;
+
+//     double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+
+//     for (auto it : _tbl.as_table()) {
+//         double_converter.str("");
+//         name = it.first;
+//         param_name = name;
+//         std::replace(param_name.begin(), param_name.end(), '_', ' ');
+
+//         if (it.second.is_array()) {
+//             arr = it.second.as_array();
+//             if (_specify_size)
+//                 arr_str = param_name + "(" + std::to_string(arr.size()) + ") " + toml::elmer_separator;
+//             else
+//                 arr_str = param_name + " " + toml::elmer_separator;
+
+//             for (auto elem : arr) {
+//                 double_converter.str("");
+//                 if (elem.is_string()) {
+//                     opt_str = elem.as_string().str;
+//                     arr_str += (" \"" + opt_str + "\"");
+                    
+//                 } else if (elem.is_integer()) {
+//                     opt_int = elem.as_integer();
+//                     arr_str += (" " + std::to_string(opt_int));
+
+//                 } else if (elem.is_floating()) {
+//                     opt_double = elem.as_floating();
+//                     double_converter << opt_double;
+//                     arr_str += (" " + double_converter.str());
+                
+//                 } else if (elem.is_boolean()) {
+//                     opt_bool = elem.as_boolean();
+
+//                     if (opt_bool) 
+//                         arr_str += (" True");
+//                     else 
+//                         arr_str += (" False");
+
+//                 } else {
+//                     toml::error("invalid type in " + name);
+
+//                 }
+//             }
+
+//             _buffer.push_back(arr_str);
+
+//         } else if (it.second.is_string()) {
+//             opt_str = it.second.as_string();
+            
+//             _buffer.push_back(
+//                 param_name + " " + toml::elmer_separator + " \"" + opt_str + "\""
+//             );
+            
+//         } else if (it.second.is_integer()) {
+//             opt_int = it.second.as_integer();
+
+//             _buffer.push_back(
+//                 param_name + " " + toml::elmer_separator + " " + std::to_string(opt_int)
+//             );
+
+//         } else if (it.second.is_floating()) {
+//             opt_double = it.second.as_floating();
+
+//             double_converter << opt_double;
+//             _buffer.push_back(
+//                 param_name + " "  + toml::elmer_separator + " " + double_converter.str()
+//             );
+
+
+//         } else if (it.second.is_boolean()) {
+//             opt_bool = it.second.as_boolean();
+
+//             if (opt_bool) {
+//                 _buffer.push_back(
+//                     param_name + " "  + toml::elmer_separator + " " + "True"
+//                 );
+//             } else {
+//                 _buffer.push_back(
+//                     param_name + " "  + toml::elmer_separator + " " + "False"
+//                 );
+//             }
+
+//         } else {
+//             std::stringstream ss;
+//             ss << "Invalid type for " << name << ", has type " << it.second.type();
+//             toml::error(ss.str());
+//         }
+//     }
+// }
+
+// bool is_int(const std::string& s) {
+//     std::string::const_iterator it = s.begin();
+//     while (it != s.end() && std::isdigit(*it)) ++it;
+//     return !s.empty() && it == s.end();
+// }
+
+// template<typename T, typename First, typename... Args>
+// void to_elmer_section_with_id(std::vector<T>& _buffer, bool _specify_size, First first, Args... args) {
+//     _buffer.clear();
+
+//     toml::value _tbl = toml::find(toml::data, first, args...);
+
+//     if (!(_tbl.is_table()))
+//         toml::error("can only create elmer section with id from table");
+
+//     for (auto it : _tbl.as_table()) {
+//         if (is_int(it.first)) {
+//             T _temp = T();
+//             to_elmer_section(_temp.contents, _specify_size, first, args..., it.first);
+//             _buffer.push_back(_temp);
+//         } else {
+//             toml::error("id for elmer section must be int");
+//         }
+//     }
+// }
+
+// int countFreq(std::string pat, std::string txt) {
+//     int M = pat.length();
+//     int N = txt.length();
+//     int res = 0;
+ 
+//     /* A loop to slide pat[] one by one */
+//     for (int i = 0; i <= N - M; i++) {
+//         /* For current index i, check for
+//            pattern match */
+//         int j;
+//         for (j = 0; j < M; j++)
+//             if (txt[i + j] != pat[j])
+//                 break;
+ 
+//         // if pat[0...M-1] = txt[i, i+1, ...i+M-1]
+//         if (j == M) {
+//             res++;
+//         }
+//     }
+//     return res;
+// }
+
+// toml::value toml::handle_arr(toml::value _data, std::string& _path, std::string _orig_path) {
+//     toml::key _temp;
+
+//     if (!(_data.is_table()))
+//         error("can not resolve path, " + _orig_path + ", can only index an element of a table");
+
+
+//     if (_path.find(toml::start_index) != std::string::npos) {
+//         std::cout << "handling arr:" << _path << "\n";
+        
+//         _temp = _path.substr(0, _path.find(toml::start_index));
+//         boost::algorithm::trim(_temp);
+//         std::cout << "temp: " << _temp << "\n";
+//         if (_path.find(toml::start_index) != 0) {
+//             std::cout << "in if\n";
+//             if (_data.contains(_temp)) {
+//                 std::cout << "getting\n";
+//                 // std::cout << _data << "\n";
+//                 ;//.at(_temp);
+//                 _data = toml::find(_data, _temp);
+//                 std::cout << "_data: " << _data << "\n";
+//             } else
+//                 toml::error("can not resolve path, " + _orig_path);
+//         }
+//         std::cout << "HERERERE\n";
+//         if (!(_data.is_array()))
+//             toml::error("can not resolve path, " + _orig_path + ", tried indexing something that is not an array");
+
+
+//         int index;
+//         for (int i = 0; i < countFreq(_path, toml::start_index); i++) {
+//             _temp = _path.substr(_path.find(toml::start_index) + toml::start_index.length(), _path.find(toml::end_index));
+//             boost::algorithm::trim(_temp);
+//             index = std::stoi(_temp);
+//             if (index >= _data.as_array().size() || index < 0)
+//                 toml::error("can not resolve path, " + _orig_path + ", index out of bounds");
+//             std::cout << "index = " << index << "\n";
+//             _data = _data.as_array()[index];
+//             _path = _path.substr(_path.find(end_index) + end_index.length(), _path.length());
+//         }
+
+//     }
+//     return _data;
+// }
+
+
+// toml::value toml::get_from(std::string _path, std::string _orig_path) {
+//     if (_orig_path.length() == 0) {
+//         _orig_path = _path;
+//     }
+
+//     toml::value _temp_val;
+//     std::string _name;
+
+    
+
+//     // if (_path.find(toml::separator) != std::string::npos) {
+//     //     _name = _path.substr(0, _path.find(toml::separator));
+//     //     _data = toml::handle_arr(_data, _name, _orig_path);
+//     //     if (_name.length() == 0) {
+//     //         return get_from(_data, _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
+//     //     } else if (_data.contains(_name)) {
+//     //         return get_from(_data[_name], _path.substr(_path.find(toml::separator) + toml::separator.length(), _path.length()), _orig_path);
+//     //     } else {
+//     //         error("can not resolve path, " + _orig_path);
+//     //     }
+
+//     // } else {
+//     //     _data = handle_arr(_data, _path, _orig_path);
+
+//     //     if (_path.length() == 0) {
+//     //         if (data.is_string()) {
+//     //             _data = resolve_name(_data.as_string());
+//     //         }
+//     //         return _data;
+//     //     } else if (_data.contains(_path)) {
+//     //         _temp_val = _data[_path];
+//     //         if (_temp_val.is_string()) {
+//     //             _data[_path] = resolve_name(_temp_val.as_string());
+//     //         }
+//     //         return _temp_val;
+//     //     } else {
+//     //         error("can not resolve path, " + _orig_path);
+//     //     }
+//     // }
+//     return _temp_val;
+// }
+
+
+// toml::value toml::resolve_name(toml::string _name) {
+//     if (_name.str.substr(0, indicator.length()) == indicator) {
+//         if (num_recursions > max_recursions)
+//             error("reached max allowed recursion resolving " + (_name.str) + " (there is probably a circular definition somewhere)");
+//         std::cout << "resolving: " << _name << "\n";
+//         num_recursions++;
+//         return get_from(_name.str.substr(indicator.length(), _name.str.length()));
+//     }
+//     return _name;
+// }
+
+
+// template <typename First, typename... Args>
+// toml::value toml::preprocess(First first, Args... args) {
+//     toml::value _tbl = toml::find(toml::data, first, args...);
+//     if (!(_tbl.is_table()))
+//         toml::error("did not get a table in preprocess");
+
+//     for (auto& it : _tbl) {
+//         num_recursions = 0;
+//         if (it.second.is_table()) {
+//             toml::preprocess(first, args..., it.first);
+//         } else {
+//             if (it.second.is_array()) {
+//                 toml::array _arr = it.second.as_array();
+//                 for (auto& elem : _arr) {
+//                     if (elem.is_string()){
+//                         elem = resolve_name(elem.as_string());
+//                     }
+//                 }
+//                 toml::data[it.first] = _arr;
+//             } else if (it.second.is_string()) {
+//                 toml::data[it.first] = resolve_name(it.second.as_string());
+//             }
+//         }
+//     }
+// }
+
+// // template<typename T>
+// // void inform_setting(std::string _name, T& _var) {
+// //     std::cout << _name << " = " << _var << "\n";
+// // }
+
+
+// template<typename T, typename First, typename... Args>
+// void set(T& _var, First first, Args... args) {
+//     _var = toml::find<T>(toml::data, first, args...);
+// }
+
+
+// int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+//     const int _size = _vec.size();
+
+//     _arr = new char*[_size];
+
+//     for (int i = 0; i < _size; i++)
+//         _arr[i] = (char*)_vec[i].c_str();
+    
+//     return _size;
+// }
 
 
 // void toml::format_name(std::string_view _s, std::string& _out) {
@@ -1445,16 +1503,7 @@ void toml::Elmer::join(std::string& _buffer) {
 // }
 
 
-// int toml::vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
-//     const int _size = _vec.size();
 
-//     _arr = new char*[_size];
-
-//     for (int i = 0; i < _size; i++)
-//         _arr[i] = (char*)_vec[i].c_str();
-    
-//     return _size;
-// }
 
 
 
