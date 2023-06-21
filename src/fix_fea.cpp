@@ -50,12 +50,9 @@ using namespace SPARTA_NS;
 #define SB_SI 5.670374419e-8
 #define SB_CGS 5.670374419e-5
 
+
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
-
-// static int max_recursions = 10;
-// static int num_recursions = 0;
-
 
 
 // used in the EXEC function below, represents data returned from a system command
@@ -63,6 +60,7 @@ struct CommandResult {
     std::string output;
     int exitstatus;
 };
+
 
 /**
  * Execute system command and get STDOUT result.
@@ -159,16 +157,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
     this->print("Loading config from: " + std::string(arg[2]));
 
-    // toml::value data;
-
-    // try {
-    //     toml::data = toml::parse(arg[2]);
-    // } catch (const toml::syntax_error& e) {
-    //     error->all(FLERR, e.what());
-    // } catch (...) {
-    //     error->all(FLERR, "unidentified error occurred while parsing file");
-    // }
-
     this->elmer = new toml::Elmer();
 
     try {
@@ -176,19 +164,24 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
         s.get_at_path(this->emi,               "both.emi");
         s.get_at_path(this->tsurf_file,        "both.tsurf_file");
-        s.get_at_path(this->meshDBstem,        "both.meshDBstem");
-        s.get_at_path(this->compute_args,      "sparta.compute");
-        s.get_at_path(this->nevery,            "sparta.nevery");
         s.get_at_path(this->run_every,         "sparta.run_every");
+        s.get_at_path(this->nevery,            "sparta.nevery");
         s.get_at_path(this->groupID,           "sparta.groupID");
         s.get_at_path(this->mixID,             "sparta.mixID");
         s.get_at_path(this->customID,          "sparta.customID");
         s.get_at_path(this->qwindex,           "sparta.qwindex");
+
+        s.get_at_path(this->meshDBstem,        "both.meshDBstem");
+        s.get_at_path(this->elmer->exe,        "elmer.exe");
+        s.get_at_path(this->elmer->sif,        "elmer.sif");
+        s.get_at_path(this->elmer->meshDBstem, "both.meshDBstem");
+
+        s.get_at_path(this->compute_args,      "sparta.compute");
         s.get_at_path(this->surf_collide_args, "sparta.surf_collide");
         s.get_at_path(this->surf_modify_args,  "sparta.surf_modify");
-        s.get_at_path(this->elmer->sif,        "elmer.sif");
-        s.get_at_path(this->elmer->exe,        "elmer.exe");
-        s.get_at_path(this->elmer->meshDBstem, "both.meshDBstem");
+        
+        
+        
 
         // to_elmer_section(this->elmer->header.contents,     false, "elmer", "header");
         // to_elmer_section(this->elmer->simulation.contents, true,  "elmer", "simulation");
@@ -206,7 +199,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     } catch (...) {
         error->all(FLERR, "unidentified error occurred while setting variables");
     }
-
 
     if (emi <= 0.0 || emi > 1.0)
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
@@ -254,6 +246,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     this->tindex = surf->add_custom((char*)this->customID.c_str(), DOUBLE, 0);
     this->print("customID = " + this->customID);
+
+
+    // error checks
+    cqw = modify->compute[icompute];
+    if (icompute < 0)
+        error->all(FLERR,"Could not find fix fea compute ID");
+    if (cqw->per_surf_flag == 0)
+        error->all(FLERR,"Fix fea compute does not compute per-surf info");
+    if (qwindex == 0 && cqw->size_per_surf_cols > 0)
+        error->all(FLERR,"Fix fea compute does not compute per-surf vector");
+    if (qwindex > 0 && cqw->size_per_surf_cols == 0)
+        error->all(FLERR,"Fix fea compute does not compute per-surf array");
+    if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
+        error->all(FLERR,"Fix fea compute array is accessed out-of-range");
     
 
     if (!(stat(this->elmer->exe.c_str(),  &sb) == 0))
@@ -276,7 +282,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->print("meshDBstem = " + this->elmer->meshDBstem);
 
 
-
     char** arr;
     int size;
     
@@ -290,27 +295,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     icompute = modify->ncompute - 1;// modify->find_compute(id_qw);
     this->print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
 
-    /********  start temperature stuff  **********/
-
-    // error checks
-    cqw = modify->compute[icompute];
-    if (icompute < 0)
-        error->all(FLERR,"Could not find fix fea compute ID");
-    if (cqw->per_surf_flag == 0)
-        error->all(FLERR,"Fix fea compute does not compute per-surf info");
-    if (qwindex == 0 && cqw->size_per_surf_cols > 0)
-        error->all(FLERR,"Fix fea compute does not compute per-surf vector");
-    if (qwindex > 0 && cqw->size_per_surf_cols == 0)
-        error->all(FLERR,"Fix fea compute does not compute per-surf array");
-    if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
-        error->all(FLERR,"Fix fea compute array is accessed out-of-range");
-
-   
-
     // prefactor and threshold in Stefan/Boltzmann equation
     // units of prefactor (SI) is K^4 / (watt - m^2)
     // same in 3d vs 2d, since SPARTA treats 2d cell volume as 1 m in z
-    // int dimension = domain->dimension;
+    this->dimension = domain->dimension;
 
     // setting variables based on unit system
     if (strcmp(update->unit_style, "si") == 0) {
@@ -321,9 +309,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         threshold = 1.0e-3;
     }
 
-    // trigger setup of list of owned surf elements belonging to surf group
-    firstflag = 1;
-
     // initialize data structure
     tvector_me = NULL;
 
@@ -333,48 +318,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
 
-    /********  end temperature stuff  **********/
-
     this->surf_collide_args[2] = "s_" + this->surf_collide_args[2];
     size = vec_to_arr(this->surf_collide_args, arr);
     this->surf_collide_args.clear();
 
-    // command style: 
-    // char* surf_collide_args[4] = {
-    //     (char*)"SSSS",
-    //     (char*)"diffuse",
-    //     (char*)("s_" + this->customID).c_str(),
-    //     (char*)std::to_string(this->emi).c_str() // (char*)"0.5"
-    // };
-
     // adding surf collision model needed
     this->surf->add_collide(size, arr);
-
-    // command style: 
-    // char* surf_modify_args[3] = {
-    //     (char*)"all",
-    //     (char*)"collide",
-    //     (char*)"SSSS"
-    // };
 
     size = vec_to_arr(this->surf_modify_args, arr);
     this->surf_modify_args.clear();
 
     // modifying params
     this->surf->modify_params(size, arr);
-
-    // char* group_args[4] = {
-    //     "GGGG",
-    //     "grid",
-    //     "intersect",
-    //     this->groupID.c_str(),
-    //     this->
-    // }
-
-    // surf->group()
-    
+   
     // temporary
-    // error->all(FLERR, "done setting up fix fea");
     delete [] arr;
     error->all(FLERR, "done");
 }
@@ -400,9 +357,6 @@ int FixFea::setmask() { return 0 | END_OF_STEP | START_OF_STEP; }
 
 void FixFea::init() {
     this->print("fix fea init");
-    // one-time initialization of temperature for all surfs in custom vector
-    if (!firstflag) return;
-    firstflag = 0;
 
     // must have " 2>&1" at end to pipe stderr to stdout
     this->command = std::string(this->exe_path)+" "+std::string(this->sif_path)+" 2>&1";
@@ -490,7 +444,8 @@ void FixFea::start_of_step() {
 
         // checking to make sure all values where set
         for (int i = 0; i < nlocal; i++) {
-            if (this->twall[i] == (double)0) error->all(FLERR, "wall temperature not set correctly");
+            if (this->twall[i] == (double)0)
+                error->all(FLERR, "wall temperature not set correctly");
         }
 
         // clearing no longer needed data
@@ -521,14 +476,12 @@ void FixFea::end_of_step() {
 
     int me = comm->me;
     // int nprocs = comm->nprocs;
-    int dimension = domain->dimension;
 
     // access source compute or fix
     // set new temperature via Stefan-Boltzmann eq for nown surfs I own
     // use Twall if surf is not in surf group or eng flux is too small
     // compute/fix output is just my nown surfs, indexed by M
     // store in tvector_me = all nlocal surfs, indexed by I
-
     Surf::Line *lines = surf->lines;
     Surf::Tri *tris = surf->tris;
 
@@ -536,47 +489,13 @@ void FixFea::end_of_step() {
     if (this->last_nlocal != nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
-    // if (qwindex == 0) {
-    //     double *vector;
-    //     if (source == COMPUTE) {
-    //         cqw->post_process_surf();
-    //         vector = cqw->vector_surf;
-    //     } else vector = fqw->vector_surf;
 
-    //     m = 0;
-    //     for (i = me; i < nlocal; i += nprocs) {
-    //         if (dimension == 3) mask = tris[i].mask;
-    //         else mask = lines[i].mask;
-    //         if (!(mask & groupbit)) tvector_me[i] = twall[i];
-    //         else {
-    //             qw = vector[m];
-    //             if (qw > threshold) tvector_me[i] = pow(prefactor*qw,0.25);
-    //             else tvector_me[i] = twall[i];
-    //         }
-    //         m++;
-    //     }
-    // } else {
     double **array;
-    //if (source == COMPUTE) {
+
     cqw->post_process_surf();
     array = cqw->array_surf;
-    //} else array = fqw->array_surf;
 
     int icol = qwindex-1;
-
-    // m = 0;
-    // for (i = me; i < nlocal; i += nprocs) {
-    //     if (dimension == 3) mask = tris[i].mask;
-    //     else mask = lines[i].mask;
-
-    //     if (!(mask & groupbit)) tvector_me[i] = twall[i];
-    //     else {
-    //         qw = array[m][icol];
-    //         if (qw > threshold) tvector_me[i] = pow(prefactor*qw,0.25);
-    //         else tvector_me[i] = twall[i];
-    //     }
-    //     m++;
-    // }
 
     m = 0;
     for (i = me; i < nlocal; i += nprocs) {

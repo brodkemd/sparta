@@ -139,7 +139,6 @@ namespace SPARTA_NS {
             class toml::Elmer* elmer;
 
             // Structure which would store the metadata
-            struct stat sb;
             std::string exe_path;
             std::string sif_path;
             std::string command;
@@ -149,6 +148,7 @@ namespace SPARTA_NS {
 
             int run_every;
             int last_nlocal;
+            int dimension;
 
             // surface temperature vars
             bool file_handler;
