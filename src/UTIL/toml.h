@@ -1,0 +1,188 @@
+#ifndef TOML_H
+#define TOML_H
+
+#include <string>
+#include <vector>
+#include <iomanip>
+
+#include "elmer.h"
+#include "python_config.h"
+
+
+namespace toml {
+    void error(std::string _msg) { throw _msg; }
+
+    int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+        const int _size = _vec.size();
+        _arr = new char*[_size];
+        for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
+        return _size;
+    }
+
+    class handler {
+        public:
+            handler(std::string _file) {
+                Py_Initialize();
+
+                PyRun_SimpleString(PYTHON_STRING); this->_err();
+
+                PyObject* u_name    = PyUnicode_FromString("__main__");
+                PyObject* m         = PyImport_GetModule(u_name);
+                PyObject* Main_func = PyObject_GetAttrString(m, "Main");
+
+                this->pArgs = PyTuple_New(1);
+
+                if (Main_func && PyCallable_Check(Main_func)) {
+                    pValue = PyUnicode_FromString(_file.c_str());
+
+                    PyTuple_SetItem(pArgs, 0, pValue);
+                    PyObject_CallObject(Main_func, pArgs);
+                    this->_err();
+
+                    this->get_at = PyObject_GetAttrString(m, "get_at_path");
+                    this->_err();
+
+                    if (!(this->get_at && PyCallable_Check(this->get_at))) {  
+                        error("get_at_path function does not exists or is not callable");
+                    }
+
+                    this->get_dict = PyObject_GetAttrString(m, "get_section_as_dict");
+                    this->_err();
+
+                    if (!(this->get_dict && PyCallable_Check(this->get_dict))) {  
+                        error("get_section_as_dict function does not exists or is not callable");
+                    }
+                }
+            }
+
+            ~handler() {
+                Py_Finalize();
+                Py_DECREF(pValue);
+            }
+
+            template<typename T>
+            void get_at_path(T& _var, std::string _path) {
+                this->pArgs = PyTuple_New(1);
+                PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
+                PyObject* out = PyObject_CallObject(this->get_at, pArgs);
+                this->_err();
+                this->_handle_var(_var, out, _path);
+                Py_DECREF(out);
+            }
+
+            void get_section_as_dict(elmer::dict_t<std::string, std::string>& _var, std::string _path, std::string _list_sep = " ") {
+
+                this->pArgs = PyTuple_New(1);
+                PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
+
+                PyObject* out = PyObject_CallObject(this->get_dict, pArgs);
+                this->_err();
+                
+                if (!(PyDict_Check(out)))
+                    error(_path + " is not the correct type, must be float");
+
+                PyObject *key, *value, *_temp_key, *_temp_value;
+                Py_ssize_t pos = 0;
+
+                std::string _temp, _key_str;
+
+                while (PyDict_Next(out, &pos, &key, &value)) {
+                    _temp_key = PyObject_Repr(key);
+                    this->_err();
+
+                    _key_str = _PyUnicode_AsString(_temp_key);
+
+                    if (PyList_Check(value)) {
+                        _temp.clear();
+                        for (int i = 0; i < PyList_GET_SIZE(value) - 1; i++) {
+                            _temp_value = PyObject_Repr(PyList_GetItem(value, i));
+                            this->_err();
+
+                            _temp += (_PyUnicode_AsString(_temp_value) + _list_sep);
+                            this->_err();
+                        }
+                        _temp_value = PyObject_Repr(PyList_GetItem(value, PyList_GET_SIZE(value) - 1));
+                        this->_err();
+
+                        _temp += _PyUnicode_AsString(_temp_value);
+                        this->_err();
+
+                        _var[_key_str] = _temp;
+
+                    } else {
+                        _temp_value = PyObject_Repr(value);
+                        this->_err();
+
+                        _temp = _PyUnicode_AsString(_temp_value);
+                        _var[_key_str] = _temp;
+                    }                   
+                }
+
+                Py_DECREF(key);
+                Py_DECREF(value);
+                Py_DECREF(_temp_key);
+                Py_DECREF(_temp_value);
+            }
+
+        private:
+            PyObject *get_at, *get_dict, *pValue, *pArgs, *type, *value, *traceback;
+
+            void _err() {
+                if (PyErr_Occurred()) {
+                    PyErr_Fetch(&this->type, &this->value, &this->traceback);
+                    std::string _value = _PyUnicode_AsString(PyObject_Repr(this->value));
+                    error(_value);
+                }
+            }
+
+            void _handle_var(double& _var, PyObject *_src, std::string _path) {
+                if (!(PyFloat_Check(_src)))
+                    error(_path + " is not the correct type, must be float");
+                _var = PyFloat_AsDouble(_src);
+            }
+
+            void _handle_var(std::string& _var, PyObject *_src, std::string _path) {
+                if (!(PyUnicode_Check(_src)))
+                    error(_path + " is not the correct type, must be string");
+                _var = _PyUnicode_AsString(_src);
+            }
+
+            void _handle_var(int& _var, PyObject *_src, std::string _path) {
+                if (!(PyLong_Check(_src)))
+                    error(_path + " is not the correct type, must be int");
+                _var = PyLong_AsLong(_src);
+            }
+
+            template<typename T>
+            void _list(std::vector<T>& _var, PyObject *_src, std::string _path) {
+                _var.clear();
+                T _temp;
+                for (int i = 0; i < PyList_Size(_src); i++) {
+                    _handle_var(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
+                    _var.push_back(_temp);
+                }
+            }
+
+            void _handle_var(std::vector<std::string>& _var, PyObject *_src, std::string _path) {
+                if (!(PyList_Check(_src)))
+                    error(_path + " is not the correct type, must be array of strings");
+
+                _list(_var, _src, _path);
+            }
+
+            void _handle_var(std::vector<double>& _var, PyObject *_src, std::string _path) {
+                if (!(PyList_Check(_src)))
+                    error(_path + " is not the correct type, must be array of floats");
+                
+                _list(_var, _src, _path);
+            }
+
+            void _handle_var(std::vector<int>& _var, PyObject *_src, std::string _path) {
+                if (!(PyList_Check(_src)))
+                    error(_path + " is not the correct type, must be array of ints");
+                _list(_var, _src, _path);
+            }
+    };
+}
+
+#endif
