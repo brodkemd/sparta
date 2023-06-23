@@ -35,8 +35,10 @@
 #include "update.h"
 #include "particle.h"
 #include "mixture.h"
+#include "update.h"
 
-#include "UTIL/toml.h"
+// #include "UTIL/toml.h"
+#include "UTIL/elmer.h"
 
 #include <cmath>
 #include <fstream>
@@ -116,24 +118,18 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         s.get_at_path(this->elmer->exe,        "elmer.exe");
         s.get_at_path(this->elmer->sif,        "elmer.sif");
         s.get_at_path(this->elmer->meshDBstem, "both.meshDBstem");
+        s.get_at_path(this->elmer->base_temp,  "elmer.base_temp");
 
         s.get_at_path(compute_args,      "sparta.compute");
         s.get_at_path(surf_collide_args, "sparta.surf_collide");
         s.get_at_path(surf_modify_args,  "sparta.surf_modify");
 
-        // s.get_section_as_dict(this->elmer->header,     "elmer.header");
-        // s.get_section_as_dict(this->elmer->constants,  "elmer.constants");
-        // s.get_section_as_dict(this->elmer->simulation, "elmer.simulation");
-
-
-        // to_elmer_section(this->elmer->header.contents,     false, "elmer", "header");
-        // to_elmer_section(this->elmer->simulation.contents, true,  "elmer", "simulation");
-        // to_elmer_section(this->elmer->constants.contents,  true,  "elmer", "constants");
-        // to_elmer_section_with_id(this->elmer->bodys,       true,  "elmer", "body");
-        // to_elmer_section_with_id(this->elmer->materials,   true,  "elmer", "material");
-        // to_elmer_section_with_id(this->elmer->solvers,     true,  "elmer", "solver");
-        // to_elmer_section_with_id(this->elmer->equations,   true,  "elmer", "equation");
-
+        elmer->header.set(s);
+        elmer->simulation.set(s);
+        elmer->constants.set(s);
+        elmer->equation.set(s);
+        elmer->material.set(s);
+        elmer->solver.set(s);
     
     } catch (std::string _msg) {
         error->all(FLERR, _msg.c_str()); 
@@ -159,7 +155,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, run_every <= 0");
 
     this->print("run_every = " + std::to_string(this->run_every));
-
 
     if (this->nevery <= 0)
         error->all(FLERR,"Illegal fix fea command, nevery <= 0");
@@ -197,10 +192,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->print("exe = " + this->elmer->exe);
 
 
-    if (!(stat(this->elmer->sif.c_str(),  &sb) == 0))
-        error->all(FLERR, "Illegal fix fea command, sif path does not exist");
+    // if (!(stat(this->elmer->sif.c_str(),  &sb) == 0))
+    //     error->all(FLERR, "Illegal fix fea command, sif path does not exist");
     
-    this->print("sif = " + this->elmer->sif);
+    // this->print("sif = " + this->elmer->sif);
     
 
     std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
@@ -267,6 +262,22 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
    
     // temporary
     delete [] arr;
+
+    // try {
+    //     std::string _temp;
+    //     this->elmer->join(_temp);
+
+    //     elmer::writeFile("test.out", _temp);
+    // } catch (std::string _msg) {
+    //     error->all(FLERR, _msg.c_str());
+    // }
+
+    this->elmer->simulation.Timestep_intervals = {this->run_every};
+    this->elmer->simulation.Output_Intervals = {this->run_every};
+    this->elmer->simulation.Output_File = this->temperature_data_file;
+
+    firstflag = 1;
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -284,7 +295,11 @@ FixFea::~FixFea() {
 /**
  * sets the mask to make the class run at the start and end of each timestep 
  */
-int FixFea::setmask() { return 0 | END_OF_STEP; }// | START_OF_STEP; }
+int FixFea::setmask() {
+    int mask = 0;
+    mask |= END_OF_STEP;
+    return mask;
+ }// | START_OF_STEP; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -303,7 +318,7 @@ void FixFea::load_temperatures() {
         }
 
         if (nlocal != this->boundary_data.size())
-            error->all(FLERR, "boundary data does not match required size");
+            error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(nlocal) + ", size " + std::to_string(this->boundary_data.size())).c_str());
 
         // used later
         double avg;
@@ -329,15 +344,23 @@ void FixFea::load_temperatures() {
                 error->all(FLERR, "wall temperature not set correctly");
         }
 
-        // sending to other processes
-        for (int i = 1; i < nprocs; i++) {
-            MPI_Send(&twall, nlocal, MPI_DOUBLE, i, 1, world);
-        }
-    } else {
-        // master process is 0, blocks until data is received
-        MPI_Recv(&twall, nlocal, MPI_DOUBLE, 0, 1, world, MPI_STATUS_IGNORE);
+        this->elmer->node_temperature_data = data;
+        // elmer::eraseFile(this->temperature_data_file);
+
+        // // sending to other processes
+        // for (int i = 1; i < nprocs; i++) {
+        //     MPI_Send(&twall, nlocal, MPI_DOUBLE, i, 1, world);
+        // }
+        
     }
+    // } else {
+    //     // master process is 0, blocks until data is received
+    //     MPI_Recv(&twall, nlocal, MPI_DOUBLE, 0, 1, world, MPI_STATUS_IGNORE);
+    // }
+    double *tvector = surf->edvec[surf->ewhich[tindex]];
     MPI_Barrier(world);
+    MPI_Allreduce(this->twall, tvector, nlocal, MPI_DOUBLE, MPI_SUM, world);
+    MPI_Allreduce(this->twall, this->twall, nlocal, MPI_DOUBLE, MPI_SUM, world);
 }
 
 
@@ -354,8 +377,27 @@ void FixFea::load_boundary() {
     }
 }
 
+
+
+void FixFea::setup_data_file() {
+    int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
+
+    std::ostringstream double_converter;
+    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10) << this->elmer->base_temp;
+
+    std::string base_temp_str = double_converter.str();
+
+    std::ofstream output(this->temperature_data_file);
+
+    for (int i = 0; i < count; i++) 
+        output << base_temp_str << "\n";
+
+    output.close();
+}
+
 void FixFea::init() {
-    this->print("fix fea init");
+    if (!firstflag) return;
+    firstflag = 0;
 
     double *tvector = surf->edvec[surf->ewhich[tindex]];
     int nlocal = surf->nlocal;
@@ -372,11 +414,14 @@ void FixFea::init() {
     memset(tvector_me, 0, nlocal*sizeof(double));
 
     // loading the boundary data
+    this->setup_data_file();
     this->load_boundary();
+    this->elmer->load_elements();
     this->load_temperatures();
 
     // this->start_of_step(true);
     for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
+    this->print("done initing");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -394,6 +439,7 @@ bool FixFea::run_condition() {
  */
 void FixFea::end_of_step() {
     int i,m,mask;
+    bool go = false;
     double qw;
 
     // access source compute or fix
@@ -409,7 +455,6 @@ void FixFea::end_of_step() {
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
     double **array;
-
     cqw->post_process_surf();
     array = cqw->array_surf;
 
@@ -428,11 +473,56 @@ void FixFea::end_of_step() {
     }
 
     if (this->run_condition()) {
-        if (comm->me == 0) {
-            this->elmer->boundary_conditions.clear();
-        }
-
+        
+        this->print("running");
         MPI_Allreduce(this->qw_avg, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
+
+        if (comm->me == 0) {
+            
+            int i;
+            for (i = 0; i < nlocal; i++) {
+                if (qw_avg[i] != (double)0.0) break;
+            }
+            go = (i == (nlocal - 1));
+            if (go) {
+
+                this->print("in if");
+                this->elmer->simulation.Timestep_Sizes = {update->dt};
+
+                this->elmer->bodys.clear();
+                this->elmer->initial_conditions.clear();
+                this->elmer->boundary_conditions.clear();
+
+                this->print("after clear");
+
+                for (int i = 0; i < nlocal; i++) {
+                    elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
+                    bc->Heat_Flux = this->qw_avg[i];
+                    this->elmer->boundary_conditions.push_back(bc);
+                }
+                this->print("after for");
+                
+
+                try {
+                    this->elmer->createInitCondsFromData();
+                    this->elmer->makeSif();
+                    this->print("done in if");
+                    this->elmer->run();
+                } catch (std::string& _msg ){
+                    error->all(FLERR, _msg.c_str());
+                } catch (std::exception& e) {
+                    error->all(FLERR, e.what());
+                }
+
+            // error->all(FLERR, "done");
+            } else {
+                this->print("Skipping elmer, no flux detected");
+            }
+
+        }
+        MPI_Barrier(world);
+        // error->all(FLERR, "generated everything");
+
 
 
         // // m = 0;
@@ -491,7 +581,7 @@ void FixFea::end_of_step() {
             
         // }
         memset(this->qw_avg, 0, nlocal*sizeof(double));
-        this->load_temperatures();
+        if (go) this->load_temperatures();
         MPI_Barrier(world);
     }
 }
@@ -514,7 +604,7 @@ void FixFea::print(std::string str, int num_indent, std::string end) {
 }
 
 
-void FixFea::get_elmer(std::string& _buffer) { this->elmer->join(_buffer); }
+// void FixFea::get_elmer(std::string& _buffer) { this->elmer->join(_buffer); }
 
 /*-----------------------------------------------------------
 
@@ -524,95 +614,85 @@ elmer namespace definitions
 
 ------------------------------------------------------------*/
 
-void elmer::Base::join(std::string& _buffer) {
-    // for good measure
-    if (id == INT_MIN)
-        _buffer = name + "\n";
-    else
-        _buffer = name + " "  + std::to_string(this->id) + "\n";
+// void elmer::Base::join(std::string& _buffer) {
+//     // for good measure
+//     if (id == INT_MIN)
+//         _buffer = name + "\n";
+//     else
+//         _buffer = name + " "  + std::to_string(this->id) + "\n";
 
-    for (auto it : *this) {
-        if (it.second.has_value())
-            _buffer+=(this->_tab + it.first + this->sep + it.second.value() + "\n");
-    }
+//     // for (auto it : *this) {
+//     //     if (it.second.has_value())
+//     //         _buffer+=(this->_tab + it.first + this->sep + it.second.value() + "\n");
+//     // }
 
-    _buffer+=this->_end;
-}
-
-
-elmer::Header::Header()                         { this->name = "Header";             sep = " ";   }
-elmer::Constants::Constants()                   { this->name = "Constants";          sep = " = "; }
-elmer::Simulation::Simulation()                 { this->name = "Simulation";         sep = " = "; }
-elmer::Solver::Solver()                         { this->name = "Solver";             sep = " = "; }
-elmer::Equation::Equation()                     { this->name = "Equation";           sep = " = "; }
-elmer::Material::Material()                     { this->name = "Material";           sep = " = "; }
-elmer::Body::Body()                             { this->name = "Body";               sep = " = "; }
-elmer::Initial_Condition::Initial_Condition()   { this->name = "Initial Condition";  sep = " = "; }
-elmer::Boundary_Condition::Boundary_Condition() { this->name = "Boundary Condition"; sep = " = "; }
+//     _buffer+=this->_end;
+// }
 
 
-elmer::Elmer::Elmer() {
-    this->header     = Header();
-    this->simulation = Simulation();
-    this->constants  = Constants();
-}
+// elmer::Header::Header()                         { this->name = "Header";             sep = " ";   }
+// elmer::Constants::Constants()                   { this->name = "Constants";          sep = " = "; }
+// elmer::Simulation::Simulation()                 { this->name = "Simulation";         sep = " = "; }
+// elmer::Solver::Solver()                         { this->name = "Solver";             sep = " = "; }
+// elmer::Equation::Equation()                     { this->name = "Equation";           sep = " = "; }
+// elmer::Material::Material()                     { this->name = "Material";           sep = " = "; }
+// elmer::Body::Body()                             { this->name = "Body";               sep = " = "; }
+// elmer::Initial_Condition::Initial_Condition()   { this->name = "Initial Condition";  sep = " = "; }
+// elmer::Boundary_Condition::Boundary_Condition() { this->name = "Boundary Condition"; sep = " = "; }
 
 
-void elmer::Elmer::join(std::string& _buffer) {
-    _buffer.clear();
+// elmer::Elmer::Elmer() {
+//     this->header     = Header();
+//     this->simulation = Simulation();
+//     this->constants  = Constants();
+// }
 
-    std::string _temp;
+
+// void elmer::Elmer::join(std::string& _buffer) {
+//     _buffer.clear();
+
+//     std::string _temp;
     
-    this->header.join(_temp);
-    _buffer += (_temp + this->sep);
+//     this->header.join(_temp);
+//     _buffer += (_temp + this->sep);
     
-    this->simulation.join(_temp);
-    _buffer += (_temp + this->sep);
+//     this->simulation.join(_temp);
+//     _buffer += (_temp + this->sep);
     
-    this->constants.join(_temp);
-    _buffer += (_temp + this->sep);
+//     this->constants.join(_temp);
+//     _buffer += (_temp + this->sep);
     
-    for (int i = 0; i < this->solvers.size(); i++) {
-        solvers[i].join(_temp);
-        _buffer += (_temp + this->sep);
-    }
+//     for (int i = 0; i < this->solvers.size(); i++) {
+//         solvers[i].join(_temp);
+//         _buffer += (_temp + this->sep);
+//     }
 
-    for (int i = 0; i < this->equations.size(); i++) {
-        equations[i].join(_temp);
-        _buffer += (_temp + this->sep);
-    }
+//     for (int i = 0; i < this->equations.size(); i++) {
+//         equations[i].join(_temp);
+//         _buffer += (_temp + this->sep);
+//     }
 
-    for (int i = 0; i < this->materials.size(); i++) {
-        materials[i].join(_temp);
-        _buffer += (_temp + this->sep);
-    }
+//     for (int i = 0; i < this->materials.size(); i++) {
+//         materials[i].join(_temp);
+//         _buffer += (_temp + this->sep);
+//     }
 
-    for (int i = 0; i < this->bodys.size(); i++) {
-        bodys[i].join(_temp);
-        _buffer += (_temp + this->sep);
-    }
+//     for (int i = 0; i < this->bodys.size(); i++) {
+//         bodys[i].join(_temp);
+//         _buffer += (_temp + this->sep);
+//     }
 
-    for (int i = 0; i < this->initial_conditions.size(); i++) {
-        initial_conditions[i].join(_temp);
-        _buffer += (_temp + this->sep);
-    }
+//     for (int i = 0; i < this->initial_conditions.size(); i++) {
+//         initial_conditions[i].join(_temp);
+//         _buffer += (_temp + this->sep);
+//     }
 
-    for (int i = 0; i < this->boundary_conditions.size(); i++) {
-        boundary_conditions[i].join(_temp);
-        _buffer += (_temp);
-    }
-}
+//     for (int i = 0; i < this->boundary_conditions.size(); i++) {
+//         boundary_conditions[i].join(_temp);
+//         _buffer += (_temp);
+//     }
+// }
 
-
-void elmer::Elmer::run() {
-    // running the command
-    // must have " 2>&1" at end to pipe stderr to stdout
-    CommandResult command_result = EXEC(exe+" "+std::string(this->sif)+" 2>&1");
-    
-    // if the command did not succeed
-    if (command_result.exitstatus)
-        error(command_result.output);
-}
 
 
 // /**

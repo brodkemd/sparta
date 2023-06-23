@@ -297,7 +297,6 @@ void Update::run(int nsteps)
     if (dynamic) dynamic_update();
 
     // start of step fixes
-
     if (n_start_of_step) {
       modify->start_of_step();
       timer->stamp(TIME_MODIFY);
@@ -326,7 +325,6 @@ void Update::run(int nsteps)
     if (collide_react) collide_react_update();
 
     // diagnostic fixes
-
     if (n_end_of_step) {
       modify->end_of_step();
       timer->stamp(TIME_MODIFY);

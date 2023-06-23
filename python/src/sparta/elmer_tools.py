@@ -2,7 +2,7 @@ from collections import OrderedDict
 from ._src import error
 import numpy as np
 import os, shutil
-
+from sys import float_info
 
 def read_file(_file_path:str) -> list[list[str]]:
     with open(_file_path, 'r') as f:
@@ -55,6 +55,7 @@ class Elmer_Grid_to_Sparta_Surf:
         tris = OrderedDict()
         boundary_element_ids = OrderedDict()
         boundary_element_start = 5
+
         for i in range(len(self.boundary_data)):
             tris[self.boundary_data[i][0]] = self.boundary_data[i][boundary_element_start:]
 
@@ -77,17 +78,17 @@ class Elmer_Grid_to_Sparta_Surf:
         if out_file is None:
             out_file = f"{self.file_stem}.surf"
 
-        if os.path.exists(out_file):
-            error("Output file already exists, " + out_file)
+        # if os.path.exists(out_file):
+        #     error("Output file already exists, " + out_file)
                 
         with open(out_file, 'w') as f:
             # print(out_file)
             f.write(
-                f"# Surface element file written by SPARTA\n\n{len(boundary_element_ids)} points\n{len(tris)} triangles\n\nPoints\n\n"
+                f"# Surface element file written by SPARTA\n\n{len(self.node_data)} points\n{len(tris)} triangles\n\nPoints\n\n"
             )
 
             for item in self.node_data:
-                f.write(f"{item} " + " ".join([str(val) for val in self.node_data[item][1:]]) + "\n")
+                f.write(f"{item} " + " ".join([f"{{:.{float_info.dig}f}}".format(float(val)) for val in self.node_data[item][1:]]) + "\n")
                 # print(item, self.node_data[item])
                 # exit()
 

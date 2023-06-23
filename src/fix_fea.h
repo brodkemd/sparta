@@ -68,6 +68,7 @@ namespace SPARTA_NS {
             void get_elmer(std::string& _buffer);
             void load_temperatures();
             void load_boundary();
+            void setup_data_file();
             // void load_data();
             // void load_sif(std::string sif_file);
             void print(std::string str, int num_indent = 1, std::string end = "\n");
@@ -81,7 +82,7 @@ namespace SPARTA_NS {
 
             std::vector<std::array<int, elmer::boundary_size>> boundary_data;
 
-            int groupbit, ngroup, nprocs, tindex, qwindex, nevery, run_every, last_nlocal, dimension;
+            int groupbit, ngroup, nprocs, tindex, qwindex, run_every, last_nlocal, dimension, firstflag;
             
             double emi, prefactor, threshold, *tvector_me, *twall, *qw_avg;
 

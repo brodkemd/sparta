@@ -5,7 +5,6 @@
 #include <vector>
 #include <iomanip>
 
-#include "elmer.h"
 #include "python_config.h"
 
 
@@ -70,59 +69,58 @@ namespace toml {
                 Py_DECREF(out);
             }
 
-            void get_section_as_dict(elmer::dict_t<std::string, std::string>& _var, std::string _path, std::string _list_sep = " ") {
+            // void get_section_as_dict(PyObject*& _var, std::string _path) {
+            //     this->pArgs = PyTuple_New(1);
+            //     PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
 
-                this->pArgs = PyTuple_New(1);
-                PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-
-                PyObject* out = PyObject_CallObject(this->get_dict, pArgs);
-                this->_err();
+            //     _var = PyObject_CallObject(this->get_dict, pArgs);
+            //     this->_err();
                 
-                if (!(PyDict_Check(out)))
-                    error(_path + " is not the correct type, must be float");
+            //     if (!(PyDict_Check(_var)))
+            //         error(_path + " is not the correct type, must be float");
 
-                PyObject *key, *value, *_temp_key, *_temp_value;
-                Py_ssize_t pos = 0;
+            //     // PyObject *key, *value, *_temp_key, *_temp_value;
+            //     // Py_ssize_t pos = 0;
 
-                std::string _temp, _key_str;
+            //     // std::string _temp, _key_str;
 
-                while (PyDict_Next(out, &pos, &key, &value)) {
-                    _temp_key = PyObject_Repr(key);
-                    this->_err();
+            //     // while (PyDict_Next(out, &pos, &key, &value)) {
+            //     //     _temp_key = PyObject_Repr(key);
+            //     //     this->_err();
 
-                    _key_str = _PyUnicode_AsString(_temp_key);
+            //     //     _key_str = _PyUnicode_AsString(_temp_key);
 
-                    if (PyList_Check(value)) {
-                        _temp.clear();
-                        for (int i = 0; i < PyList_GET_SIZE(value) - 1; i++) {
-                            _temp_value = PyObject_Repr(PyList_GetItem(value, i));
-                            this->_err();
+            //     //     if (PyList_Check(value)) {
+            //     //         _temp.clear();
+            //     //         for (int i = 0; i < PyList_GET_SIZE(value) - 1; i++) {
+            //     //             _temp_value = PyObject_Repr(PyList_GetItem(value, i));
+            //     //             this->_err();
 
-                            _temp += (_PyUnicode_AsString(_temp_value) + _list_sep);
-                            this->_err();
-                        }
-                        _temp_value = PyObject_Repr(PyList_GetItem(value, PyList_GET_SIZE(value) - 1));
-                        this->_err();
+            //     //             _temp += (_PyUnicode_AsString(_temp_value) + _list_sep);
+            //     //             this->_err();
+            //     //         }
+            //     //         _temp_value = PyObject_Repr(PyList_GetItem(value, PyList_GET_SIZE(value) - 1));
+            //     //         this->_err();
 
-                        _temp += _PyUnicode_AsString(_temp_value);
-                        this->_err();
+            //     //         _temp += _PyUnicode_AsString(_temp_value);
+            //     //         this->_err();
 
-                        _var[_key_str] = _temp;
+            //     //         _var[_key_str] = _temp;
 
-                    } else {
-                        _temp_value = PyObject_Repr(value);
-                        this->_err();
+            //     //     } else {
+            //     //         _temp_value = PyObject_Repr(value);
+            //     //         this->_err();
 
-                        _temp = _PyUnicode_AsString(_temp_value);
-                        _var[_key_str] = _temp;
-                    }                   
-                }
+            //     //         _temp = _PyUnicode_AsString(_temp_value);
+            //     //         _var[_key_str] = _temp;
+            //     //     }                   
+            //     // }
 
-                Py_DECREF(key);
-                Py_DECREF(value);
-                Py_DECREF(_temp_key);
-                Py_DECREF(_temp_value);
-            }
+            //     // Py_DECREF(key);
+            //     // Py_DECREF(value);
+            //     // Py_DECREF(_temp_key);
+            //     // Py_DECREF(_temp_value);
+            // }
 
         private:
             PyObject *get_at, *get_dict, *pValue, *pArgs, *type, *value, *traceback;
@@ -151,6 +149,16 @@ namespace toml {
                 if (!(PyLong_Check(_src)))
                     error(_path + " is not the correct type, must be int");
                 _var = PyLong_AsLong(_src);
+            }
+
+            void _handle_var(bool& _var, PyObject *_src, std::string _path) {
+                if (!(PyBool_Check(_src)))
+                    error(_path + " is not the correct type, must be int");
+                
+                if (PyObject_IsTrue(_src))
+                    _var = true;
+                else
+                    _var = false;
             }
 
             template<typename T>
@@ -182,6 +190,13 @@ namespace toml {
                     error(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
             }
+
+            void _handle_var(std::vector<bool>& _var, PyObject *_src, std::string _path) {
+                if (!(PyList_Check(_src)))
+                    error(_path + " is not the correct type, must be array of ints");
+                _list(_var, _src, _path);
+            }
+            
     };
 }
 
