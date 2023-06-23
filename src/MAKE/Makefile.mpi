@@ -7,12 +7,12 @@ SHELL = /bin/sh
 # specify flags and libraries needed for your compiler
 
 CC =		mpic++
-CCFLAGS =	-O3
+CCFLAGS =	-O3 $(shell python3.10-config --cflags --embed)
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		mpic++
-LINKFLAGS =	-O
+LINKFLAGS =	-O $(shell python3.10-config --embed --ldflags)
 LIB =           
 SIZE =		size
 
@@ -79,7 +79,7 @@ vpath %.h ..
 # Link target
 
 $(EXE):	$(OBJ)
-	$(LINK) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(EXTRA_LIB) $(LIB) -o $(EXE)
+	$(LINK) $(EXTRA_PATH) $(OBJ) $(EXTRA_LIB) $(LIB) $(LINKFLAGS) -o $(EXE)
 	$(SIZE) $(EXE)
 
 # Library targets

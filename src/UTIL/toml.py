@@ -73,14 +73,6 @@ def get_at_path(_path):
     global data
     return get_from(data, _path)
 
-def get_section_as_dict(_path):
-    global data
-    _section = get_from(data, _path)
-    if not isinstance(_section, dict): error(f"{_path} is not a dictionary")
-    for item in _section:   
-        if isinstance(_section[item], dict): error("Can not handle nested section")
-    return _section
-
 def Main(_file):
     global data
     data = get_from_file(_file)

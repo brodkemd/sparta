@@ -1,18 +1,17 @@
 #ifndef ELMER_H
 #define ELMER_H
 
-#include <vector>
-#include <optional>
-#include <limits>
 #include <fstream>
-#include <iostream>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include "toml.h"
-#include "elmer_definitions.h"
-
+#include "toml.hpp"
 
 namespace elmer {
+    const unsigned int boundary_size = 4; // number of elements in a boundary element including id
+    const std::string indicator      = "Perm:"; // indicator for start of new timestep data section in data file
+
+    // error command
+    // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
     void error(std::string _msg) { throw _msg; }
 
     // used in the EXEC function below, represents data returned from a system command
@@ -46,28 +45,35 @@ namespace elmer {
             }
         } catch (...) {
             pclose(pipe);
-            throw;
+            error("unhandled exception occured");
         }
         exitcode = WEXITSTATUS(pclose(pipe));
         return CommandResult{result, exitcode};
     }
 
+    /**
+     * erases the file at the path inputted
+    */ 
     void eraseFile(std::string filename) {
         std::ofstream ofs;
         ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
+        if (!(ofs.is_open())) error(filename + " did not open");
         ofs.close();
     }
 
+    /**
+     * writes the inputted string to file at the path inputted
+    */ 
     void writeFile(std::string filename, std::string& lines) {
         std::ofstream out(filename);
-        if (!(out.is_open()))
-            error(filename + " did not open");
-        
+        if (!(out.is_open())) error(filename + " did not open");
         out << lines;
         out.close();
     }
 
-
+    /**
+     * counts the number of lines in the file at the path inputted
+    */ 
     int count_lines_in_file(std::string _file) {
         int number_of_lines = 0;
         std::string line;
@@ -78,15 +84,18 @@ namespace elmer {
         return number_of_lines;
     }
 
-
-    void readFile(std::string filename, std::vector<std::string>& lines) {
+    /**
+     * reads the contents of the file at the path inputted into the inputted
+     * vector, this function is designed to read the data file
+    */ 
+    void readDataFile(std::string filename, std::vector<std::string>& lines) {
         std::ifstream myfile(filename);
-        if (!(myfile.is_open()))
-            error(filename + " did not open");
+        if (!(myfile.is_open())) error(filename + " did not open");
 
         std::string line;
         while (std::getline(myfile, line)) {
             if (line.length() >= indicator.length()) {
+                // resets the vector if it detects a new indicator, this allows it to get only the new data
                 if (line.substr(0, indicator.length()) == indicator){
                     lines.clear();
                     continue;
@@ -97,8 +106,11 @@ namespace elmer {
         myfile.close();
     }
 
-
-    void readFileNoCheck(std::string fileName, std::vector<std::string>& lines) {
+    /**
+     * reads the contents of the file at the path inputted into the inputted
+     * vector
+    */ 
+    void readFile(std::string fileName, std::vector<std::string>& lines) {
         std::ifstream myfile(fileName);
         std::string line;
         while (std::getline(myfile, line)) {
@@ -107,29 +119,36 @@ namespace elmer {
         myfile.close();
     }
 
-
+    /**
+     * Gets the latest data for each node from the inputted file
+    */
     void getLatestNodeData(std::string filename, std::vector<double>& data) {
         std::vector<std::string> lines;
 
         data.clear();
 
-        readFile(filename, lines);
+        // reads the data file
+        readDataFile(filename, lines);
 
         for (std::string it : lines) {
             boost::algorithm::trim(it);
+            // if the line only has one thing in it
             if (it.find(" ") == std::string::npos) {
+                // convert to double and add to list
                 data.push_back(std::stod(it));
             }
         }
     }
 
-
+    /**
+     * Loads the boundary data from the inputted file into the vector
+    */
     void getBoundaryData(std::string filename, std::vector<std::array<int, boundary_size>>& data) {
         std::vector<std::string> lines, split;
         std::array<int, boundary_size> arr;
         data.clear();
 
-        readFileNoCheck(filename, lines);
+        readFile(filename, lines);
 
         int count = 1;
         for (std::string it : lines) {
@@ -159,65 +178,31 @@ namespace elmer {
         }
     }
 
-
-    // template<typename T, typename S>
-    // class dict_t {
-    //     public:
-    //         dict_t() {};
-
-    //         typedef typename std::pair<T, std::optional<S>> item_type;
-    //         typedef typename std::vector<std::pair<T, std::optional<S>>> vec_type;
-    //         typedef typename vec_type::iterator iterator;
-    //         typedef typename vec_type::const_iterator const_iterator;
-
-    //         std::optional<S>& operator[](T _key) {
-    //             size_t _ind = this->_find(_key);
-    //             if (_ind == std::string::npos) {
-    //                 this->_src.push_back(std::make_pair(_key, std::optional<S>{}));
-    //                 return this->_src.back().second;
-    //             } 
-    //             return this->_src[_ind].second;
-    //         }
-
-    //         std::size_t length() { return this->_src.size(); }
-
-
-    //         inline iterator begin() noexcept { return _src.begin(); }
-    //         inline const_iterator cbegin() const noexcept { return _src.cbegin(); }
-    //         inline iterator end() noexcept { return _src.end(); }
-    //         inline const_iterator cend() const noexcept { return _src.cend(); }
-
-    //     private:
-    //         size_t _find(T _key) {
-    //             for (size_t i = 0; i < this->_src.size(); i++) {
-    //                 if (_src[i].first == _key) {
-    //                     return i;
-    //                 }
-    //             }
-    //             return std::string::npos;
-    //         }
-
-    //         vec_type _src;
-
-
-
-    // };
-
-
+    /**
+     * Base class that all elmer sections inherit from
+    */
     class Base {
         protected:
             std::string name, sep;
+
+            // tab in the file
             std::string _tab = "  ";
+
+            // ends the section
             std::string _end = "End";
             int id;
 
             std::ostringstream double_converter;
 
             Base() {
+                // setting up the double converter
                 double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
             }
-        
+
         private:
+            /**
+             * these functions convert the inputted var into a string
+            */
             void _varToString(std::string& _buf, std::string _var) {
                  _buf = "\""+_var+"\"";
             }
@@ -240,8 +225,13 @@ namespace elmer {
             }
 
         public:
-            void set(toml::handler& _h) { return; }
+            // set function, this is overriden
+            virtual void set(toml::handler& _h) { return; }
 
+            /**
+             * these functions are outward facing and they build elmer file
+             * lines from the inputs
+            */ 
             void varToString(std::string& _buf, std::string _name, std::string _var) {
                 _buf = (_tab + _name + sep + "\""+_var+"\"" + "\n");
             }
@@ -263,45 +253,9 @@ namespace elmer {
                     _buf = (_tab + _name + sep + "False" + "\n");
             }
 
-            void varToString(std::string& _buf, std::string _name, std::vector<std::string> _var, bool include_count = true) {
-
-                if (_var.size() == 0) return;
-
-                std::string _temp;
-                if (include_count)
-                    _buf = (_tab + _name + "(" + std::to_string(_var.size()) + ")" + sep);
-                else 
-                    _buf = (_tab + _name + sep);
-
-
-                for (int i = 0; i < (_var.size() - 1); i++){
-                    _varToString(_temp, _var[i]);
-                    _buf+=(_temp + " ");
-                }
-                _varToString(_temp, _var[_var.size() - 1]);
-                _buf += (_temp + "\n");
-            }
-
-            void varToString(std::string& _buf, std::string _name, std::vector<int> _var, bool include_count = true) {
-
-                if (_var.size() == 0) return;
-
-                std::string _temp;
-                if (include_count)
-                    _buf = (_tab + _name + "(" + std::to_string(_var.size()) + ")" + sep);
-                else 
-                    _buf = (_tab + _name + sep);
-
-
-                for (int i = 0; i < (_var.size() - 1); i++){
-                    _varToString(_temp, _var[i]);
-                    _buf+=(_temp + " ");
-                }
-                _varToString(_temp, _var[_var.size() - 1]);
-                _buf += (_temp + "\n");
-            }
-
-            void varToString(std::string& _buf, std::string _name, std::vector<double> _var, bool include_count = true) {
+            // for vectors
+            template<typename T>
+            void varToString(std::string& _buf, std::string _name, std::vector<T> _var, bool include_count = true) {
 
                 if (_var.size() == 0) return;
 
@@ -321,7 +275,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer header section
+    */
     class Header : public Base {
         public:
             Header() : Base() {
@@ -330,8 +286,7 @@ namespace elmer {
             }
 
             std::vector<std::string> Mesh_DB;
-            std::string Include_Path;
-            std::string Results_Directory;
+            std::string Include_Path, Results_Directory;
 
             void set(toml::handler& _h) {
                 _h.get_at_path(Mesh_DB, "elmer.header.Mesh_DB");
@@ -348,7 +303,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer constants section
+    */
     class Constants : public Base {
         public:
             Constants() : Base() {
@@ -357,11 +314,7 @@ namespace elmer {
             }
 
             std::vector<double> Gravity;
-            double Stefan_Boltzmann;
-            double Permittivity_of_Vacuum;
-            double Permeability_of_Vacuum;
-            double Boltzmann_Constant;
-            double Unit_Charge;
+            double Stefan_Boltzmann, Permittivity_of_Vacuum, Permeability_of_Vacuum, Boltzmann_Constant, Unit_Charge;
 
             void set(toml::handler& _h) {
                 _h.get_at_path(Gravity, "elmer.constants.Gravity");
@@ -384,7 +337,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer simulation section
+    */
     class Simulation : public Base {
         public:
             Simulation() : Base() {
@@ -392,19 +347,11 @@ namespace elmer {
                 sep = " = ";
             }
 
-            int Max_Output_Level;
-            std::string Coordinate_System;
-            std::vector<int> Coordinate_Mapping;
-            std::string Simulation_Type;
-            int Steady_State_Max_Iterations;
-            std::vector<int> Output_Intervals;
-            std::vector<int> Timestep_intervals;
+            int Max_Output_Level, Steady_State_Max_Iterations, BDF_Order;
+            std::string Coordinate_System, Simulation_Type, Timestepping_Method, Solver_Input_File, Output_File,Post_File;
+            std::vector<int> Coordinate_Mapping, Output_Intervals, Timestep_intervals;
             std::vector<double> Timestep_Sizes;
-            std::string Timestepping_Method;
-            int BDF_Order;
-            std::string Solver_Input_File;
-            std::string Output_File;
-            std::string Post_File;
+            
 
             void set(toml::handler& _h) {
                 _h.get_at_path(Max_Output_Level, "elmer.simulation.Max_Output_Level");
@@ -441,7 +388,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer solver section
+    */
     class Solver : public Base {
         public:
             Solver() : Base() {
@@ -451,27 +400,11 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            std::string Equation;
             std::vector<std::string> Procedure;
-            std::string Variable;
-            std::string Exec_Solver;
-            bool Stabilize;
-            bool Optimize_Bandwidth;
-            double Steady_State_Convergence_Tolerance;
-            double Nonlinear_System_Convergence_Tolerance;
-            int Nonlinear_System_Max_Iterations;
-            int Nonlinear_System_Newton_After_Iterations;
-            double Nonlinear_System_Newton_After_Tolerance;
-            int Nonlinear_System_Relaxation_Factor;
-            std::string Linear_System_Solver;
-            std::string Linear_System_Iterative_Method;
-            int Linear_System_Max_Iterations;
-            double Linear_System_Convergence_Tolerance;
-            int BiCGstabl_polynomial_degree;
-            std::string Linear_System_Preconditioning;
-            double Linear_System_ILUT_Tolerance;
-            bool Linear_System_Abort_Not_Converged;
-            int Linear_System_Residual_Output;
+            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
+            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor;
+            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged;
+            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
 
             void set(toml::handler& _h) {
                 _h.get_at_path(Equation, "elmer.solver.Equation");
@@ -524,7 +457,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer equation section
+    */
     class Equation : public Base {
         public:
             Equation() : Base() {
@@ -548,7 +483,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer material section
+    */
     class Material : public Base {
         public:
             Material() : Base() {
@@ -558,13 +495,7 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            double Poisson_ratio;
-            double Heat_Capacity;
-            double Density;
-            double Youngs_modulus;
-            double Heat_expansion_Coefficient;
-            double Sound_speed;
-            double Heat_Conductivity;
+            double Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
 
             void set(toml::handler& _h) {
                 _h.get_at_path(Poisson_ratio, "elmer.material.Poisson_ratio");
@@ -590,27 +521,19 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer body section
+    */
     class Body : public Base {
         public:
             Body(int _id) : Base() {
                 this->name = "Body " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
+                Equation = 1; Material = 1;
             }
             std::vector<int> Target_Bodies;
-
-            int Equation = 1;
-            int Material = 1;
-            int Initial_condition;
-
-            // void set(toml::handler& _h) {
-            //     _h.get_at_path(Target_Bodies, "elmer.body.Target_Bodies");
-            //     _h.get_at_path(Name, "elmer.body.Name");
-            //     _h.get_at_path(Equation, "elmer.body.Equation");
-            //     _h.get_at_path(Material, "elmer.body.Material");
-            //     _h.get_at_path(Initial_condition, "elmer.body.Initial_condition");
-            // }
+            int Initial_condition, Equation, Material;
 
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
@@ -623,7 +546,9 @@ namespace elmer {
             }
     };
 
-
+    /**
+     * handles elmer initial condition section
+    */
     class Initial_Condition : public Base {
         public:
             Initial_Condition(int _id) : Base() {
@@ -634,11 +559,6 @@ namespace elmer {
 
             double Temperature;
 
-            // void set(toml::handler& _h) {
-            //     _h.get_at_path(Name, "elmer.initial_condition.Name");
-            //     _h.get_at_path(Temperature, "elmer.initial_condition.Temperature");
-            // }
-
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
                 varToString(_temp, "Name", this->name); _buf+=_temp;
@@ -648,7 +568,9 @@ namespace elmer {
 
     };
 
-
+    /**
+     * handles elmer boundary condition section
+    */
     class Boundary_Condition : public Base {
         public:
             Boundary_Condition(int _id) : Base() {
@@ -658,7 +580,6 @@ namespace elmer {
             }
 
             std::vector<int> Target_Boundaries;
-
             bool Heat_Flux_BC = true;
             double Heat_Flux;
 
@@ -673,7 +594,9 @@ namespace elmer {
 
     };
 
-
+    /**
+     * the main elmer class, this handles almost everything to do with elmer
+    */
     class Elmer {
         private:
             const std::string sep = "\n\n";
@@ -716,25 +639,17 @@ namespace elmer {
             void join_conditions(std::string& _buf) {
                 std::string _temp; _buf.clear();
 
-                std::cout << "joining bodies\n";
                 for (int i = 0; i < this->bodys.size(); i++){
-                    // for (auto it : this->bodys[i]->Target_Bodies)
-                    //     std::cout << it << "\n";
                     this->bodys[i]->join(_temp); _buf+=_temp;
                 }
 
-
-                std::cout << "joining init\n";
                 for (int i = 0; i < this->initial_conditions.size(); i++){
                     this->initial_conditions[i]->join(_temp); _buf+=_temp;
                 }
 
-
-                std::cout << "joining boundaries\n";
                 for (int i = 0; i < this->boundary_conditions.size(); i++){
                     this->boundary_conditions[i]->join(_temp); _buf+=_temp;
                 }
-                std::cout << "done condition joining\n";
             }
 
             void join(std::string& _buf) {
@@ -742,6 +657,16 @@ namespace elmer {
                 small_join(_temp); _buf+=_temp;
                 join_conditions(_temp); _buf+=_temp;
 
+            }
+
+            void loadNodeTemperatureData() {
+                // get the temperatures per node from the file and putting them into the elmer variable, elmer needs to know this info
+                getLatestNodeData(this->temperature_data_file, this->node_temperature_data);
+            }
+
+            void loadBoundaryData() {
+                // loading the boundary data into the local variable
+                getBoundaryData(this->meshDBstem + ".boundary", this->boundary_data);
             }
 
             void createInitCondsFromData() {
@@ -778,20 +703,35 @@ namespace elmer {
                 }
             }
 
+            void setupTemperatureDataFile() {
+                // getting the number of nodes
+                int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
+
+                // setting up object to convert doubles
+                std::ostringstream double_converter;
+                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10) << this->base_temp;
+
+                // getting string version of elmer.base_temp
+                std::string base_temp_str = double_converter.str();
+
+                // writing base temperature to file for each node
+                std::ofstream output(this->temperature_data_file);
+                for (int i = 0; i < count; i++) output << base_temp_str << "\n";
+                output.close();
+            }
+
             void makeSif() {
-                std::cout << "making sif\n";
                 std::string _buf;
                 this->join(_buf);
                 elmer::writeFile(this->sif, _buf);
             }
 
-            void load_elements() {
-                std::vector<std::string> _temp_data;
-                std::vector<std::string> lines, split;
+            void loadElements() {
+                std::vector<std::string> _temp_data, lines, split;
                 std::vector<int> arr;
                 this->element_data.clear();
 
-                readFileNoCheck(this->meshDBstem + ".elements", _temp_data);
+                readFile(this->meshDBstem + ".elements", _temp_data);
 
                 this->element_data.resize(_temp_data.size());
 
@@ -816,9 +756,27 @@ namespace elmer {
                 }
             }
 
+            void set(toml::handler& _h) {
+                // setting needed variables
+                _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem");
+                _h.get_at_path(this->exe,                   "elmer.exe");
+                _h.get_at_path(this->sif,                   "elmer.sif");
+                _h.get_at_path(this->base_temp,             "elmer.base_temp");
+                _h.get_at_path(this->temperature_data_file, "elmer.temperature_data_file");
+
+                // each elmer section sets its own variables, so passing it the data structure
+                this->header.set(_h);
+                this->simulation.set(_h);
+                this->constants.set(_h);
+                this->equation.set(_h);
+                this->material.set(_h);
+                this->solver.set(_h);
+            }
+
             std::vector<std::vector<int>> element_data;
             std::vector<double> node_temperature_data;
-            std::string name, exe, sif, meshDBstem;
+            std::vector<std::array<int, elmer::boundary_size>> boundary_data;
+            std::string name, exe, sif, meshDBstem, temperature_data_file;
             double base_temp;
 
             Header     header;

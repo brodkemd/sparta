@@ -38,7 +38,7 @@
 #include "update.h"
 
 // #include "UTIL/toml.h"
-#include "UTIL/elmer.h"
+#include "UTIL/elmer.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -55,6 +55,9 @@ enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
 
 
+#define START_TRY try {
+#define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
+
 
 /* ----------------------------------------------------------------------
     
@@ -67,13 +70,12 @@ enum{COMPUTE,FIX};
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
 */
 FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
-    std::string groupID;
-    std::string mixID;
-    std::string customID;
-
-    std::vector<std::string> compute_args;
-    std::vector<std::string> surf_collide_args;
-    std::vector<std::string> surf_modify_args;
+    /** temporary Variables used during construction **/
+    char** arr;
+    int size;
+    struct stat sb;
+    std::string groupID, mixID, customID;
+    std::vector<std::string> compute_args, surf_collide_args, surf_modify_args;
 
     this->print("Setting up fix fea:", 0);
 
@@ -93,72 +95,64 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (surf->distributed)
         error->all(FLERR,"Cannot use fix fea with distributed surfs");
 
-    // Structure which would store the metadata
-    struct stat sb;
-
+    // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
     this->print("Loading config from: " + std::string(arg[2]));
 
+    // making new elmer class
     this->elmer = new elmer::Elmer();
 
-    try {
-        toml::handler s(arg[2]);
+    // wrapping in a try catch defined above
+    START_TRY
 
-        s.get_at_path(this->emi,               "both.emi");
-        s.get_at_path(this->temperature_data_file,        "both.temperature_data_file");
-        s.get_at_path(this->run_every,         "sparta.run_every");
-        s.get_at_path(this->nevery,            "sparta.nevery");
-        s.get_at_path(groupID,           "sparta.groupID");
-        s.get_at_path(mixID,             "sparta.mixID");
-        s.get_at_path(customID,          "sparta.customID");
-        s.get_at_path(this->qwindex,           "sparta.qwindex");
+    // parsing the file and generating a data structure
+    toml::handler s(arg[2]);
 
-        s.get_at_path(this->meshDBstem,        "both.meshDBstem");
-        s.get_at_path(this->elmer->exe,        "elmer.exe");
-        s.get_at_path(this->elmer->sif,        "elmer.sif");
-        s.get_at_path(this->elmer->meshDBstem, "both.meshDBstem");
-        s.get_at_path(this->elmer->base_temp,  "elmer.base_temp");
-
-        s.get_at_path(compute_args,      "sparta.compute");
-        s.get_at_path(surf_collide_args, "sparta.surf_collide");
-        s.get_at_path(surf_modify_args,  "sparta.surf_modify");
-
-        elmer->header.set(s);
-        elmer->simulation.set(s);
-        elmer->constants.set(s);
-        elmer->equation.set(s);
-        elmer->material.set(s);
-        elmer->solver.set(s);
+    // getting the val at the path (second input) and setting the variable (first input) to that variable
+    s.get_at_path(this->emi,         "sparta.emi");
+    s.get_at_path(this->run_every,   "sparta.run_every");
+    s.get_at_path(this->nevery,      "sparta.nevery");
+    s.get_at_path(this->qwindex,     "sparta.qwindex");
+    s.get_at_path(groupID,           "sparta.groupID");
+    s.get_at_path(mixID,             "sparta.mixID");
+    s.get_at_path(customID,          "sparta.customID");
+    s.get_at_path(compute_args,      "sparta.compute");
+    s.get_at_path(surf_collide_args, "sparta.surf_collide");
+    s.get_at_path(surf_modify_args,  "sparta.surf_modify");  
     
-    } catch (std::string _msg) {
-        error->all(FLERR, _msg.c_str()); 
-    } catch (std::exception& e) {
-        error->all(FLERR, e.what());
-    } catch (...) {
-        error->all(FLERR, "unidentified error occurred while setting variables");
-    }
+    // letting elmer handle its variable setting
+    this->elmer->set(s);
 
+    END_TRY
+
+    // making sure emi is valid
     if (emi <= 0.0 || emi > 1.0)
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
 
     this->print("emi = " + std::to_string(this->emi));
 
 
-    if (!(stat(this->temperature_data_file.c_str(),  &sb) == 0))
-        error->all(FLERR, "Illegal fix fea command, temperature_data_file path does not exist");
+    // making sure base temperature is valid
+    if (this->elmer->base_temp <= (double)0)
+        error->all(FLERR, "base temperature must be greater than 0");
+    this->print("base temperature = " + std::to_string(this->elmer->base_temp));
 
-    this->print("temperature_data_file = " + this->temperature_data_file);
+    // will make temperature data file, do not need to check if it exists
+    // if (!(stat(this->temperature_data_file.c_str(),  &sb) == 0))
+    //     error->all(FLERR, "Illegal fix fea command, temperature_data_file path does not exist");
 
+    this->print("temperature_data_file = " + this->elmer->temperature_data_file);
 
+    // checking run_every
     if (this->run_every <= 0)
         error->all(FLERR,"Illegal fix fea command, run_every <= 0");
 
     this->print("run_every = " + std::to_string(this->run_every));
 
+    // checking nevery
     if (this->nevery <= 0)
         error->all(FLERR,"Illegal fix fea command, nevery <= 0");
-    
     if (this->run_every % this->nevery != 0)
         error->all(FLERR, "Illegal fix fea command, run_every must be a multiple of nevery");
 
@@ -173,7 +167,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     groupbit = surf->bitmask[igroup];
     this->print("groupID = " + groupID);
 
-
+    // getting the mixture
     int imix = particle->find_mixture((char*)mixID.c_str());
     if (imix < 0)
         error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
@@ -181,11 +175,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     ngroup = particle->mixture[imix]->ngroup;
     this->print("mixID = " + mixID);
     
-
+    // creating the custom variable for the surface temperature
     this->tindex = surf->add_custom((char*)customID.c_str(), DOUBLE, 0);
     this->print("customID = " + customID);
 
-
+    // making sure the elmer exe 
     if (!(stat(this->elmer->exe.c_str(),  &sb) == 0))
         error->all(FLERR, "Illegal fix fea command, exe path does not exist");
     
@@ -198,20 +192,16 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // this->print("sif = " + this->elmer->sif);
     
 
+    // making sure the mesh database is complete
     std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
     for (int i = 0; i < 4; i++) {
         if (!(stat((this->elmer->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
             error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer->meshDBstem + "." + exts[i]) + " does not exist").c_str());
     }
-    this->print("meshDBstem = " + this->elmer->meshDBstem);
+    this->print("meshDBstem = " + this->elmer->meshDBstem);    
 
-
-    char** arr;
-    int size;
-    
+    // adding compute
     size = toml::vec_to_arr(compute_args, arr);
-
-    // adding the needed compute
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
@@ -249,34 +239,31 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
 
+    // adding surf collision model needed
+    // adding s_ to temperature variable, this is required
     surf_collide_args[2] = "s_" + surf_collide_args[2];
     size = toml::vec_to_arr(surf_collide_args, arr);
-
-    // adding surf collision model needed
     this->surf->add_collide(size, arr);
 
+    // adding collision by modifying surf
     size = toml::vec_to_arr(surf_modify_args, arr);
-
-    // modifying params
     this->surf->modify_params(size, arr);
    
-    // temporary
+    // deleting no longer needed var
     delete [] arr;
 
-    // try {
-    //     std::string _temp;
-    //     this->elmer->join(_temp);
-
-    //     elmer::writeFile("test.out", _temp);
-    // } catch (std::string _msg) {
-    //     error->all(FLERR, _msg.c_str());
-    // }
-
+    // modifying elmer variables to match sparta vairables
     this->elmer->simulation.Timestep_intervals = {this->run_every};
     this->elmer->simulation.Output_Intervals = {this->run_every};
-    this->elmer->simulation.Output_File = this->temperature_data_file;
+    this->elmer->simulation.Output_File = this->elmer->temperature_data_file;
 
+    // do not know what this does, but I think it is needed
     firstflag = 1;
+
+    // initing var
+    qw_avg_me = NULL;
+
+    this->print("done constructing");
 
 }
 
@@ -284,8 +271,9 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
 FixFea::~FixFea() {
     delete this->elmer;
-    memory->destroy(tvector_me);
-    memory->destroy(twall);
+    // memory->destroy(tvector_me);
+    // memory->destroy(twall);
+    memory->destroy(qw_avg_me);
     memory->destroy(qw_avg);
     surf->remove_custom(tindex);
 }
@@ -293,139 +281,133 @@ FixFea::~FixFea() {
 /* ---------------------------------------------------------------------- */
 
 /**
- * sets the mask to make the class run at the start and end of each timestep 
+ * sets the mask to make the class run at the end of each timestep 
  */
-int FixFea::setmask() {
-    int mask = 0;
-    mask |= END_OF_STEP;
-    return mask;
- }// | START_OF_STEP; }
+int FixFea::setmask() { return 0 | END_OF_STEP; }// | START_OF_STEP; }
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Loads temperature data from file and sets needed variables
+*/
 void FixFea::load_temperatures() {
+    // getting the number of surface elements
     int nlocal = surf->nlocal;
 
-    if (comm->me == 0) {
+    // reseting twall
+    // memset(this->twall, 0, nlocal*sizeof(double));
 
-        std::vector<double> data;
-        try {
-            elmer::getLatestNodeData(this->temperature_data_file, data);
-        } catch (std::string _msg) {
-            error->all(FLERR, _msg.c_str()); 
-        } catch (std::exception& e) {
-            error->all(FLERR, e.what());
+    // if the current process is the main process
+    // if (comm->me == 0) {
+    this->print("loading temperatures");
+
+    START_TRY
+    this->elmer->loadNodeTemperatureData();
+    
+    END_TRY
+
+    // the wall temperature variable
+    double *tvector = surf->edvec[surf->ewhich[tindex]];
+
+    // making sure everything is consistent
+    if (nlocal != this->elmer->boundary_data.size())
+        error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(nlocal) + ", size " + std::to_string(this->elmer->boundary_data.size())).c_str());
+
+    // used later
+    double avg;
+    
+    // averages values for the nodes of a surface element and sets this average to the 
+    // temperature of the surface element
+    for (int i = 0; i < this->elmer->boundary_data.size(); i++) {
+        // computes the average temperature of the nodes that make up the surface element
+        // this value is used to set the surface element temperature
+        avg = 0;
+        for (int j = 1; j < elmer::boundary_size; j++) {
+            // gets the data point corresponding to node id and adds it to the rolling sum
+            avg += this->elmer->node_temperature_data[this->elmer->boundary_data[i][j]-1];
         }
-
-        if (nlocal != this->boundary_data.size())
-            error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(nlocal) + ", size " + std::to_string(this->boundary_data.size())).c_str());
-
-        // used later
-        double avg;
-        
-        // averages values for the nodes of a surface element and sets this average to the 
-        // temperature of the surface element
-        for (int i = 0; i < this->boundary_data.size(); i++) {
-            // computes the average temperature of the nodes that make up the surface element
-            // this value is used to set the surface element temperature
-            avg = 0;
-            for (int j = 1; j < elmer::boundary_size; j++) {
-                // gets the data point corresponding to node id and adds it to the rolling sum
-                avg += data[this->boundary_data[i][j]-1];
-            }
-            // computing the average by dividing the sum by the number of points and setting the
-            // surface element
-            this->twall[this->boundary_data[i][0]-1] = avg/(elmer::boundary_size - 1);
-        }
-
-        // checking to make sure all values where set
-        for (int i = 0; i < nlocal; i++) {
-            if (this->twall[i] == (double)0)
-                error->all(FLERR, "wall temperature not set correctly");
-        }
-
-        this->elmer->node_temperature_data = data;
-        // elmer::eraseFile(this->temperature_data_file);
-
-        // // sending to other processes
-        // for (int i = 1; i < nprocs; i++) {
-        //     MPI_Send(&twall, nlocal, MPI_DOUBLE, i, 1, world);
-        // }
-        
+        // computing the average by dividing the sum by the number of points and setting the surface element
+        tvector[this->elmer->boundary_data[i][0]-1] = avg/(elmer::boundary_size - 1);
     }
+
+    // checking to make sure all values where set to something non zero
+    for (int i = 0; i < nlocal; i++) {
+        if (tvector[i] == (double)0)
+            error->all(FLERR, "wall temperature not set correctly");
+    }
+
+    // // sending to other processes
+    // for (int i = 1; i < nprocs; i++) {
+    //     MPI_Send(&twall, nlocal, MPI_DOUBLE, i, 1, world);
+    // }
+    // referencing the surface temperature vector
+    
+    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
+    //}
     // } else {
     //     // master process is 0, blocks until data is received
     //     MPI_Recv(&twall, nlocal, MPI_DOUBLE, 0, 1, world, MPI_STATUS_IGNORE);
     // }
-    double *tvector = surf->edvec[surf->ewhich[tindex]];
-    MPI_Barrier(world);
-    MPI_Allreduce(this->twall, tvector, nlocal, MPI_DOUBLE, MPI_SUM, world);
-    MPI_Allreduce(this->twall, this->twall, nlocal, MPI_DOUBLE, MPI_SUM, world);
-}
+    
+    // waiting for all of the processes to get here
+    // MPI_Barrier(world);
 
+    // MPI_Allreduce(&this->twall, &tvector, nlocal, MPI_DOUBLE, MPI_SUM, world);
 
-void FixFea::load_boundary() {
-    if (comm->me == 0) {
-        this->print("Loading boundary data");
-        try {
-            elmer::getBoundaryData(this->meshDBstem + ".boundary", this->boundary_data);
-        } catch (std::string _msg) {
-            error->all(FLERR, _msg.c_str()); 
-        } catch (std::exception& e) {
-            error->all(FLERR, e.what());
-        }
-    }
-}
+    // // sychronizing across twall variable across threads
+    // // MPI_Allreduce(this->twall, this->twall, nlocal, MPI_DOUBLE, MPI_SUM, world);
 
+    // // setting tvector to twall
+    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
 
-
-void FixFea::setup_data_file() {
-    int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
-
-    std::ostringstream double_converter;
-    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10) << this->elmer->base_temp;
-
-    std::string base_temp_str = double_converter.str();
-
-    std::ofstream output(this->temperature_data_file);
-
-    for (int i = 0; i < count; i++) 
-        output << base_temp_str << "\n";
-
-    output.close();
+    // waiting for all threads to get here
+    // MPI_Barrier(world);
 }
 
 void FixFea::init() {
     if (!firstflag) return;
     firstflag = 0;
 
-    double *tvector = surf->edvec[surf->ewhich[tindex]];
+    // double *tvector = surf->edvec[surf->ewhich[tindex]];
     int nlocal = surf->nlocal;
     this->last_nlocal = nlocal;
 
-    memory->create(twall, nlocal,"fea:twall");
-    memset(this->twall, 0, nlocal*sizeof(double));
+    // memory->create(twall, nlocal,"fea:twall");
+    // memset(this->twall, 0, nlocal*sizeof(double));
 
     memory->create(this->qw_avg, nlocal, "fea:qw_avg");
     memset(this->qw_avg, 0, nlocal*sizeof(double));
 
+    memory->create(this->qw_avg_me, nlocal, "fea:qw_avg_me");
+    memset(this->qw_avg_me, 0, nlocal*sizeof(double));
+
     // allocate per-surf vector for explicit all surfs
-    memory->create(tvector_me,nlocal,"fea:tvector_me");
-    memset(tvector_me, 0, nlocal*sizeof(double));
+    // memory->create(tvector_me,nlocal,"fea:tvector_me");
+    // memset(tvector_me, 0, nlocal*sizeof(double));
 
     // loading the boundary data
-    this->setup_data_file();
-    this->load_boundary();
-    this->elmer->load_elements();
-    this->load_temperatures();
+    if (comm->me == 0) {
+        START_TRY
+        this->elmer->setupTemperatureDataFile();
+        this->elmer->loadBoundaryData();
+        this->elmer->loadElements();
+        this->load_temperatures();
+        END_TRY
+    }
+
+    // waits for all processes to get here
+    MPI_Barrier(world);
 
     // this->start_of_step(true);
-    for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
-    this->print("done initing");
+    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
+    // this->print("done initing");
 }
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Condition to run elmer on
+*/
 bool FixFea::run_condition() {
     return update->ntimestep % this->run_every == 0;
 }
@@ -439,7 +421,6 @@ bool FixFea::run_condition() {
  */
 void FixFea::end_of_step() {
     int i,m,mask;
-    bool go = false;
     double qw;
 
     // access source compute or fix
@@ -461,21 +442,21 @@ void FixFea::end_of_step() {
     int icol = qwindex-1;
 
     m = 0;
+    // this->print("averaging");
     for (i = comm->me; i < nlocal; i += nprocs) {
         if (dimension == 3) mask = tris[i].mask;
         else mask = lines[i].mask;
 
         if (mask & groupbit) {
             qw = array[m][icol];
-            if (qw > threshold) this->qw_avg[i] += qw/this->run_every;
+            if (qw > threshold) this->qw_avg_me[i] += qw;
         }
         m++;
     }
 
     if (this->run_condition()) {
-        
         this->print("running");
-        MPI_Allreduce(this->qw_avg, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->qw_avg_me, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
 
         if (comm->me == 0) {
             
@@ -483,46 +464,104 @@ void FixFea::end_of_step() {
             for (i = 0; i < nlocal; i++) {
                 if (qw_avg[i] != (double)0.0) break;
             }
-            go = (i == (nlocal - 1));
-            if (go) {
-
-                this->print("in if");
+            if (i == (nlocal - 1)) {
+                this->print("Setting up Elmer");
                 this->elmer->simulation.Timestep_Sizes = {update->dt};
 
                 this->elmer->bodys.clear();
                 this->elmer->initial_conditions.clear();
                 this->elmer->boundary_conditions.clear();
 
-                this->print("after clear");
+                START_TRY
 
                 for (int i = 0; i < nlocal; i++) {
                     elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
-                    bc->Heat_Flux = this->qw_avg[i];
+                    bc->Heat_Flux = this->qw_avg[i]/this->run_every;
                     this->elmer->boundary_conditions.push_back(bc);
                 }
-                this->print("after for");
+
+                this->elmer->createInitCondsFromData();
+                this->elmer->makeSif();
+                this->elmer->run();
+
+                // done running so reloading temperatures
+                this->load_temperatures();
                 
+                END_TRY
 
-                try {
-                    this->elmer->createInitCondsFromData();
-                    this->elmer->makeSif();
-                    this->print("done in if");
-                    this->elmer->run();
-                } catch (std::string& _msg ){
-                    error->all(FLERR, _msg.c_str());
-                } catch (std::exception& e) {
-                    error->all(FLERR, e.what());
-                }
-
-            // error->all(FLERR, "done");
             } else {
                 this->print("Skipping elmer, no flux detected");
             }
 
         }
-        MPI_Barrier(world);
         // error->all(FLERR, "generated everything");
+        for (int i = 0; i < nlocal; i++) this->qw_avg_me[i] = (double)0;
+        MPI_Barrier(world);
+    }
+}
 
+/* ---------------------------------------------------------------------- */
+
+
+/**
+ * custom printing for this class
+*/
+void FixFea::print(std::string str, int num_indent, std::string end) {
+    if (comm->me == 0) {
+        std::string space = "";
+        for (int i = 0; i < num_indent; i++)
+            space += "  ";
+
+        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+    }
+}
+
+
+// void FixFea::get_elmer(std::string& _buffer) { this->elmer->join(_buffer); }
+
+// template<typename T, typename S>
+    // class dict_t {
+    //     public:
+    //         dict_t() {};
+
+    //         typedef typename std::pair<T, std::optional<S>> item_type;
+    //         typedef typename std::vector<std::pair<T, std::optional<S>>> vec_type;
+    //         typedef typename vec_type::iterator iterator;
+    //         typedef typename vec_type::const_iterator const_iterator;
+
+    //         std::optional<S>& operator[](T _key) {
+    //             size_t _ind = this->_find(_key);
+    //             if (_ind == std::string::npos) {
+    //                 this->_src.push_back(std::make_pair(_key, std::optional<S>{}));
+    //                 return this->_src.back().second;
+    //             } 
+    //             return this->_src[_ind].second;
+    //         }
+
+    //         std::size_t length() { return this->_src.size(); }
+
+
+    //         inline iterator begin() noexcept { return _src.begin(); }
+    //         inline const_iterator cbegin() const noexcept { return _src.cbegin(); }
+    //         inline iterator end() noexcept { return _src.end(); }
+    //         inline const_iterator cend() const noexcept { return _src.cend(); }
+
+    //     private:
+    //         size_t _find(T _key) {
+    //             for (size_t i = 0; i < this->_src.size(); i++) {
+    //                 if (_src[i].first == _key) {
+    //                     return i;
+    //                 }
+    //             }
+    //             return std::string::npos;
+    //         }
+
+    //         vec_type _src;
+
+
+
+    // };
 
 
         // // m = 0;
@@ -580,31 +619,7 @@ void FixFea::end_of_step() {
         //     // }
             
         // }
-        memset(this->qw_avg, 0, nlocal*sizeof(double));
-        if (go) this->load_temperatures();
-        MPI_Barrier(world);
-    }
-}
 
-/* ---------------------------------------------------------------------- */
-
-
-/**
- * custom printing for this class
- */
-void FixFea::print(std::string str, int num_indent, std::string end) {
-    std::string space = "";
-    for (int i = 0; i < num_indent; i++)
-        space += "  ";
-
-    if (comm->me == 0) {
-        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
-        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
-    }
-}
-
-
-// void FixFea::get_elmer(std::string& _buffer) { this->elmer->join(_buffer); }
 
 /*-----------------------------------------------------------
 

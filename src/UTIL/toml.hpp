@@ -44,13 +44,6 @@ namespace toml {
                     if (!(this->get_at && PyCallable_Check(this->get_at))) {  
                         error("get_at_path function does not exists or is not callable");
                     }
-
-                    this->get_dict = PyObject_GetAttrString(m, "get_section_as_dict");
-                    this->_err();
-
-                    if (!(this->get_dict && PyCallable_Check(this->get_dict))) {  
-                        error("get_section_as_dict function does not exists or is not callable");
-                    }
                 }
             }
 
@@ -69,61 +62,9 @@ namespace toml {
                 Py_DECREF(out);
             }
 
-            // void get_section_as_dict(PyObject*& _var, std::string _path) {
-            //     this->pArgs = PyTuple_New(1);
-            //     PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-
-            //     _var = PyObject_CallObject(this->get_dict, pArgs);
-            //     this->_err();
-                
-            //     if (!(PyDict_Check(_var)))
-            //         error(_path + " is not the correct type, must be float");
-
-            //     // PyObject *key, *value, *_temp_key, *_temp_value;
-            //     // Py_ssize_t pos = 0;
-
-            //     // std::string _temp, _key_str;
-
-            //     // while (PyDict_Next(out, &pos, &key, &value)) {
-            //     //     _temp_key = PyObject_Repr(key);
-            //     //     this->_err();
-
-            //     //     _key_str = _PyUnicode_AsString(_temp_key);
-
-            //     //     if (PyList_Check(value)) {
-            //     //         _temp.clear();
-            //     //         for (int i = 0; i < PyList_GET_SIZE(value) - 1; i++) {
-            //     //             _temp_value = PyObject_Repr(PyList_GetItem(value, i));
-            //     //             this->_err();
-
-            //     //             _temp += (_PyUnicode_AsString(_temp_value) + _list_sep);
-            //     //             this->_err();
-            //     //         }
-            //     //         _temp_value = PyObject_Repr(PyList_GetItem(value, PyList_GET_SIZE(value) - 1));
-            //     //         this->_err();
-
-            //     //         _temp += _PyUnicode_AsString(_temp_value);
-            //     //         this->_err();
-
-            //     //         _var[_key_str] = _temp;
-
-            //     //     } else {
-            //     //         _temp_value = PyObject_Repr(value);
-            //     //         this->_err();
-
-            //     //         _temp = _PyUnicode_AsString(_temp_value);
-            //     //         _var[_key_str] = _temp;
-            //     //     }                   
-            //     // }
-
-            //     // Py_DECREF(key);
-            //     // Py_DECREF(value);
-            //     // Py_DECREF(_temp_key);
-            //     // Py_DECREF(_temp_value);
-            // }
 
         private:
-            PyObject *get_at, *get_dict, *pValue, *pArgs, *type, *value, *traceback;
+            PyObject *get_at, *pValue, *pArgs, *type, *value, *traceback;
 
             void _err() {
                 if (PyErr_Occurred()) {
