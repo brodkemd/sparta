@@ -636,6 +636,7 @@ namespace elmer {
     class Elmer {
         private:
             const std::string sep = "\n\n";
+            std::ostringstream double_converter;
 
         public:
             Elmer() {
@@ -645,6 +646,9 @@ namespace elmer {
                 this->equation   = Equation();
                 this->material   = Material();
                 this->solver     = Solver();
+
+                // setting up the double converter
+                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
             }
 
 
@@ -810,6 +814,7 @@ namespace elmer {
                 _h.get_at_path(this->sif,                   "elmer.sif");
                 _h.get_at_path(this->base_temp,             "elmer.base_temp");
                 _h.get_at_path(this->temperature_data_file, "elmer.temperature_data_file");
+                _h.get_at_path(this->dump_directory,         "elmer.dump_directory");
 
                 // each elmer section sets its own variables, so passing it the data structure
                 this->header.set(_h);
@@ -821,10 +826,27 @@ namespace elmer {
             }
 
 
+            void dumpNodeTemperatures(long _timestep) {
+                if (this->dump_directory.back() != '/')
+                    this->dump_directory+='/';
+
+                std::string filename = this->dump_directory + std::to_string(_timestep) + ".node_temperatures";
+                std::ofstream out(filename);
+                if (!(out.is_open())) error(filename + " did not open");
+
+                for (double it : this->node_temperature_data) {
+                    this->double_converter.str("");
+                    this->double_converter << it;
+                    out << this->double_converter.str() << "\n";
+                }
+                out.close();
+            }
+
+
             std::vector<std::vector<int>> element_data;
             std::vector<double> node_temperature_data;
             std::vector<std::array<int, elmer::boundary_size>> boundary_data;
-            std::string name, exe, sif, meshDBstem, temperature_data_file;
+            std::string name, exe, sif, meshDBstem, temperature_data_file, dump_directory;
             double base_temp;
 
             Header     header;

@@ -441,13 +441,13 @@ void FixFea::end_of_step() {
 
         if (mask & groupbit) {
             qw = array[m][icol];
+            //qw = 10;
             if (qw > threshold) this->qw_avg_me[i] += qw;
         }
         m++;
     }
 
     if (this->run_condition()) {
-        this->print("running");
         MPI_Allreduce(this->qw_avg_me, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
 
         if (comm->me == 0) {
@@ -456,7 +456,7 @@ void FixFea::end_of_step() {
             for (i = 0; i < nlocal; i++) {
                 if (qw_avg[i] != (double)0.0) break;
             }
-            if (i == (nlocal - 1)) {
+            if (i != (nlocal - 1)) {
                 this->print("Setting up Elmer");
                 this->elmer->simulation.Timestep_Sizes = {update->dt};
 
@@ -475,9 +475,11 @@ void FixFea::end_of_step() {
                 this->elmer->createInitCondsFromData();
                 this->elmer->makeSif();
                 this->elmer->run();
-
+                
                 // done running so reloading temperatures
                 this->load_temperatures();
+                this->print("dumping node temperatures");
+                this->elmer->dumpNodeTemperatures(update->ntimestep);
                 
                 END_TRY
 
