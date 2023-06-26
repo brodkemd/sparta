@@ -7,12 +7,12 @@ SHELL = /bin/sh
 # specify flags and libraries needed for your compiler
 
 CC =		mpic++
-CCFLAGS =	-O3 $(shell python3.10-config --cflags --embed)
+CCFLAGS =	-O3 $(shell python3.10-config --cflags)
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		mpic++
-LINKFLAGS =	-O $(shell python3.10-config --embed --ldflags)
+LINKFLAGS =	-O $(shell python3.10-config --ldflags --embed)
 LIB =           
 SIZE =		size
 
@@ -61,7 +61,7 @@ FFT_LIB =
 
 JPG_INC =       
 JPG_PATH = 	
-JPG_LIB =	
+JPG_LIB =
 
 # ---------------------------------------------------------------------
 # build rules and dependencies

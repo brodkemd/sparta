@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <array>
+#include <limits>
 #include "toml.hpp"
 
 namespace elmer {
@@ -46,7 +47,7 @@ namespace elmer {
             pclose(pipe);
             error("unhandled exception occured");
         }
-        exitcode = WEXITSTATUS(pclose(pipe));
+        exitcode = pclose(pipe);
         return CommandResult{result, exitcode};
     }
 
