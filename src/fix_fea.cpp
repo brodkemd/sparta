@@ -18,32 +18,24 @@
 ------------------------------------------------------------------------- */
 
 #include "fix_fea.h"
-#include "stdlib.h"
-#include "string.h"
+
 
 #include "error.h"
-#include "write_surf.h"
 #include "surf.h"
 #include "modify.h"
-#include "output.h"
 #include "dump.h"
 #include "compute.h"
 #include "comm.h"
 #include "memory.h"
 #include "domain.h"
-#include "input.h"
 #include "update.h"
 #include "particle.h"
 #include "mixture.h"
 #include "update.h"
 
-// #include "UTIL/toml.h"
 #include "UTIL/elmer.hpp"
 
 #include <cmath>
-#include <fstream>
-#include <boost/algorithm/string.hpp>
-#include <iostream>
 
 using namespace SPARTA_NS;
 

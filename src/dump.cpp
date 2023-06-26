@@ -26,8 +26,6 @@
 #include "memory.h"
 #include "error.h"
 
-#include <iostream>
-
 using namespace SPARTA_NS;
 
 #define BIG 1.0e20

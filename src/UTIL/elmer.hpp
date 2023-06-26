@@ -2,8 +2,6 @@
 #define ELMER_H
 
 #include <fstream>
-#include <boost/algorithm/string/trim.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include "toml.hpp"
 
 namespace elmer {
@@ -50,6 +48,37 @@ namespace elmer {
         exitcode = WEXITSTATUS(pclose(pipe));
         return CommandResult{result, exitcode};
     }
+
+
+    void ltrim(std::string& _s) {
+        int j = 0;
+        for (j; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
+        _s = _s.substr(j, _s.length() - j);
+    }
+
+
+    void rtrim(std::string& _s) {
+        int j = _s.length()-1;
+        for (j; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
+        _s = _s.substr(0,  j+1);
+    }
+
+
+    void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
+
+
+    void split(std::string& _s, std::vector<std::string>& _v) {
+        _v.clear();
+        int last = 0, j = 0;
+        for (j; j <= _s.length(); j++) {
+            if ((_s[j] == ' ' || j == _s.length())) {
+                if (j == last) { last++; continue; }
+                _v.push_back(_s.substr(last, j-last));
+                last = j+1;
+            }
+        }
+    }
+
 
     /**
      * erases the file at the path inputted
@@ -131,7 +160,7 @@ namespace elmer {
         readDataFile(filename, lines);
 
         for (std::string it : lines) {
-            boost::algorithm::trim(it);
+            trim(it);
             // if the line only has one thing in it
             if (it.find(" ") == std::string::npos) {
                 // convert to double and add to list
@@ -144,7 +173,7 @@ namespace elmer {
      * Loads the boundary data from the inputted file into the vector
     */
     void getBoundaryData(std::string filename, std::vector<std::array<int, boundary_size>>& data) {
-        std::vector<std::string> lines, split;
+        std::vector<std::string> lines, _split;
         std::array<int, boundary_size> arr;
         data.clear();
 
@@ -152,25 +181,25 @@ namespace elmer {
 
         int count = 1;
         for (std::string it : lines) {
-            boost::algorithm::trim(it);
+            trim(it);
             if (it.length() == 0) continue;
 
             // splitting the line at spaces
-            boost::split(split, it, boost::is_any_of(" "));
+            split(it, _split);
 
-            if (split[4] != (std::string)"303") 
+            if (_split[4] != (std::string)"303") 
                 error("element is not a triangle in boundary file at line: " + std::to_string(count));
 
             // getting rid of stuff I do not need
-            split.erase(split.begin()+1, split.begin() + 5);
+            _split.erase(_split.begin()+1, _split.begin() + 5);
 
             // catching errors
-            if (split.size() != boundary_size)
+            if (_split.size() != boundary_size)
                 error("too many boundary elements to assign at line: " + std::to_string(count));
 
             // adding the data
             for (int i = 0; i < boundary_size; i++)
-                arr[i] = std::stoi(split[i]);
+                arr[i] = std::stoi(_split[i]);
 
             // adding the data to the class vector
             data.push_back(arr);
@@ -742,7 +771,7 @@ namespace elmer {
 
 
             void loadElements() {
-                std::vector<std::string> _temp_data, lines, split;
+                std::vector<std::string> _temp_data, lines, _split;
                 std::vector<int> arr;
                 this->element_data.clear();
 
@@ -753,21 +782,21 @@ namespace elmer {
                 for (std::string it : _temp_data) {
                     arr.clear();
 
-                    boost::algorithm::trim(it);
+                    trim(it);
                     if (it.length() == 0) continue;
 
                     // splitting the line at spaces
-                    boost::split(split, it, boost::is_any_of(" "));
+                    split(it, _split);
 
                     // getting rid of stuff I do not need
-                    split.erase(split.begin() + 1, split.begin() + 3);
+                    _split.erase(_split.begin() + 1, _split.begin() + 3);
 
                     // adding the data
-                    for (int i = 1; i < split.size(); i++)
-                        arr.push_back(std::stoi(split[i]));
+                    for (int i = 1; i < _split.size(); i++)
+                        arr.push_back(std::stoi(_split[i]));
 
                     // adding the data to the class vector
-                    this->element_data[std::stoi(split[0]) - 1] = arr;
+                    this->element_data[std::stoi(_split[0]) - 1] = arr;
                 }
             }
 
