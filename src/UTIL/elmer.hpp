@@ -2,6 +2,7 @@
 #define ELMER_H
 
 #include <fstream>
+#include <array>
 #include "toml.hpp"
 
 namespace elmer {
