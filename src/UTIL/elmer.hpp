@@ -316,6 +316,7 @@ namespace elmer {
             std::vector<double> Gravity;
             double Stefan_Boltzmann, Permittivity_of_Vacuum, Permeability_of_Vacuum, Boltzmann_Constant, Unit_Charge;
 
+
             void set(toml::handler& _h) {
                 _h.get_at_path(Gravity, "elmer.constants.Gravity");
                 _h.get_at_path(Stefan_Boltzmann, "elmer.constants.Stefan_Boltzmann");
@@ -324,6 +325,7 @@ namespace elmer {
                 _h.get_at_path(Boltzmann_Constant, "elmer.constants.Boltzmann_Constant");
                 _h.get_at_path(Unit_Charge, "elmer.constants.Unit_Charge");
             }
+
 
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
@@ -369,6 +371,7 @@ namespace elmer {
                 _h.get_at_path(Post_File, "elmer.simulation.Post_File");
             }
 
+
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
                 varToString(_temp, "Max Output Level", Max_Output_Level); _buf+=_temp;
@@ -406,6 +409,7 @@ namespace elmer {
             bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged;
             double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
 
+
             void set(toml::handler& _h) {
                 _h.get_at_path(Equation, "elmer.solver.Equation");
                 _h.get_at_path(Procedure, "elmer.solver.Procedure");
@@ -429,6 +433,7 @@ namespace elmer {
                 _h.get_at_path(Linear_System_Abort_Not_Converged, "elmer.solver.Linear_System_Abort_Not_Converged");
                 _h.get_at_path(Linear_System_Residual_Output, "elmer.solver.Linear_System_Residual_Output");
             }
+
 
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
@@ -611,6 +616,7 @@ namespace elmer {
                 this->solver     = Solver();
             }
 
+
             void run() {
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
@@ -626,6 +632,7 @@ namespace elmer {
                 
             }
 
+
             void small_join(std::string& _buf) {
                 std::string _temp; _buf.clear();
                 header.join(_temp); _buf+=_temp;
@@ -635,6 +642,7 @@ namespace elmer {
                 equation.join(_temp); _buf+=_temp;
                 material.join(_temp); _buf+=_temp;
             }
+
 
             void join_conditions(std::string& _buf) {
                 std::string _temp; _buf.clear();
@@ -652,6 +660,7 @@ namespace elmer {
                 }
             }
 
+
             void join(std::string& _buf) {
                 std::string _temp; _buf.clear();
                 small_join(_temp); _buf+=_temp;
@@ -659,15 +668,18 @@ namespace elmer {
 
             }
 
+
             void loadNodeTemperatureData() {
                 // get the temperatures per node from the file and putting them into the elmer variable, elmer needs to know this info
                 getLatestNodeData(this->temperature_data_file, this->node_temperature_data);
             }
 
+
             void loadBoundaryData() {
                 // loading the boundary data into the local variable
                 getBoundaryData(this->meshDBstem + ".boundary", this->boundary_data);
             }
+
 
             void createInitCondsFromData() {
                 // used later
@@ -703,6 +715,7 @@ namespace elmer {
                 }
             }
 
+
             void setupTemperatureDataFile() {
                 // getting the number of nodes
                 int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
@@ -720,11 +733,13 @@ namespace elmer {
                 output.close();
             }
 
+
             void makeSif() {
                 std::string _buf;
                 this->join(_buf);
                 elmer::writeFile(this->sif, _buf);
             }
+
 
             void loadElements() {
                 std::vector<std::string> _temp_data, lines, split;
@@ -756,6 +771,7 @@ namespace elmer {
                 }
             }
 
+
             void set(toml::handler& _h) {
                 // setting needed variables
                 _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem");
@@ -772,6 +788,7 @@ namespace elmer {
                 this->material.set(_h);
                 this->solver.set(_h);
             }
+
 
             std::vector<std::vector<int>> element_data;
             std::vector<double> node_temperature_data;
