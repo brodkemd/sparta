@@ -35,12 +35,9 @@
 
 #include "UTIL/elmer.hpp"
 
-#include <cmath>
+// #include <cmath>
 
 using namespace SPARTA_NS;
-
-#define SB_SI  5.670374419e-8
-#define SB_CGS 5.670374419e-5
 
 
 enum{INT,DOUBLE};                      // several files
@@ -278,6 +275,7 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }// | START_OF_STEP; }
 
 /**
  * Loads temperature data from file and sets needed variables
+ * Must only run on process 0 
 */
 void FixFea::load_temperatures() {
     // getting the number of surface elements

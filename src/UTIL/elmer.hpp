@@ -51,21 +51,21 @@ namespace elmer {
         return CommandResult{result, exitcode};
     }
 
-
+    // left trims a string
     void ltrim(std::string& _s) {
         int j = 0;
         for (j; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(j, _s.length() - j);
     }
 
-
+    // right trims a string
     void rtrim(std::string& _s) {
         int j = _s.length()-1;
         for (j; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(0,  j+1);
     }
 
-
+    // trims a string from right and left
     void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
 
 
@@ -469,7 +469,7 @@ namespace elmer {
             void join(std::string& _buf) {
                 std::string _temp; _buf = (name + "\n");
                 varToString(_temp, "Equation", Equation); _buf+=_temp;
-                varToString(_temp, "Procedure", Procedure); _buf+=_temp;
+                varToString(_temp, "Procedure", Procedure, false); _buf+=_temp;
                 varToString(_temp, "Variable", Variable); _buf+=_temp;
                 varToString(_temp, "Exec Solver", Exec_Solver); _buf+=_temp;
                 varToString(_temp, "Stabilize", Stabilize); _buf+=_temp;

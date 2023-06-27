@@ -1,4 +1,5 @@
 from tomli import load
+import os
 
 def get_from_file(_file) -> dict:
     with open(_file, 'rb') as f: return load(f)
@@ -6,6 +7,10 @@ def get_from_file(_file) -> dict:
 data = {}
 recurse_num = 0
 max_recurse = 10
+keys = {
+    "HOME" : os.path.expanduser('~'),
+    "PWD"  : os.getcwd()
+}
 
 def error(_msg:str): raise Exception(_msg)
 
@@ -21,8 +26,13 @@ def get_arr(_data, _name:str):
     return _data, _name
 
 def get_from(_data:dict, _path:str, _orig_path:str=None):
+    
     if _orig_path is None: _orig_path = _path
     sep = "."
+    
+    if _path in keys:
+        return keys[_path]
+    
     if sep in _path:
         _name = _path[:_path.find(sep)]
         _data, _name = get_arr(_data, _name)
@@ -43,10 +53,12 @@ def resolve_name(_name:str):
     global data, recurse_num, max_recurse
     if recurse_num > max_recurse:
         error(f"reached max allowed recursion resolving {_name} (there is probably a circular definition somewhere)")
-    indicator = "$"
-    if _name.startswith(indicator):
+    start = "$("
+    end   = ")"
+    while _name.count(start):
         recurse_num+=1
-        _name = get_from(data, _name[len(indicator):])
+        key = _name[_name.find(start)+len(start):_name.find(end, _name.find(start)+len(start))]
+        _name = _name[:_name.find(start)] + str(get_from(data, key)) + _name[_name.find(end, _name.find(start)+len(start)) + len(end):]
     return _name
 
 def iter(_data):
