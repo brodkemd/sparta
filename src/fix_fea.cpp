@@ -224,6 +224,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
+    this->print(("Number of procs: " + std::to_string(nprocs)).c_str());
 
     // adding surf collision model needed
     // adding s_ to temperature variable, this is required
