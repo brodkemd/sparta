@@ -21,7 +21,10 @@ def get_arr(_data, _name:str):
         _data = _data[_name[:_name.find(start_char)]]
         for i in range(_name.count(start_char)):
             index = int(_name[_name.find(start_char)+len(start_char): _name.find(end_char)].strip())
-            _data = _data[index]
+            if not isinstance(_data, list):
+                error("can not index list: " + _name)
+            try: _data = _data[index]
+            except IndexError as e: error(str(e))
             _name = _name[_name.find(end_char)+len(end_char):]
     return _data, _name
 
