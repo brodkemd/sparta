@@ -6,7 +6,7 @@ Must create an environment for anaconda called ```sparta```. The command below c
 conda create -n sparta python=3
 ```
 ### Directions
-1. Allocate a job:
+1. Allocate a job, to compile the code:
     ```shell
     srun --nodes 1 --exclusive --time 010:00:00 --pty bash
     ```
@@ -47,10 +47,11 @@ conda create -n sparta python=3
     ```
 
 ## Elmer
-1. Allocating resources:
+1. Allocating resources to compile the code:
     ```shell
     srun --nodes 1 --exclusive --time 010:00:00 --pty bash
     ```
+
 2. Load modules:
     ```shell
     module purge; module load gnu/8.3.0 openmpi/4.1.4 cmake; module list
@@ -72,7 +73,6 @@ conda create -n sparta python=3
     - ```shell
       make install -j 30
       ```
-    
 
 4. Relinquish resources and go back to the top directory:
     ```shell
@@ -80,3 +80,25 @@ conda create -n sparta python=3
     ```
 
 # Running
+Here is a slurm batch script. It runs on 5 nodes with 20 tasks each nodes each task has 1 core, totalling in 100 tasks, for 36 hours. Replace `SPARTA_COMMAND` with the command to run sparta.
+```shell
+#!/bin/bash
+#SBATCH --nodes=5
+#SBATCH --ntasks=100
+#SBATCH --tasks-per-node=20
+#SBATCH --cpus-per-task=1
+#SBATCH --exclusive
+#SBATCH --time=36:00:00
+
+# Clear the environment from any previously loaded modules
+module purge > /dev/null 2>&1
+
+# Load the module environment suitable for the job
+module load gnu/8.3.0 openmpi/4.1.4 anaconda/3.0
+
+# adds path to environment vairable to load the python shared library
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.conda/envs/sparta/lib/
+
+# runs with mpi, '--mca mpi_warn_on_fork 0' allows system calls
+mpirun --mca mpi_warn_on_fork 0 SPARTA_COMMAND
+```

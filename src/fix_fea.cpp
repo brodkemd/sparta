@@ -19,7 +19,6 @@
 
 #include "fix_fea.h"
 
-
 #include "error.h"
 #include "surf.h"
 #include "modify.h"
@@ -34,8 +33,6 @@
 #include "update.h"
 
 #include "UTIL/elmer.hpp"
-
-// #include <cmath>
 
 using namespace SPARTA_NS;
 
@@ -282,16 +279,11 @@ void FixFea::load_temperatures() {
     // getting the number of surface elements
     int nlocal = surf->nlocal;
 
-    // reseting twall
-    // memset(this->twall, 0, nlocal*sizeof(double));
-
-    // if the current process is the main process
-    // if (comm->me == 0) {
     this->print("loading temperatures");
 
     START_TRY
-    this->elmer->loadNodeTemperatureData();
-    
+    // loading per node temperature data
+    this->elmer->loadNodeTemperatureData();    
     END_TRY
 
     // the wall temperature variable
@@ -323,55 +315,19 @@ void FixFea::load_temperatures() {
         if (tvector[i] == (double)0)
             error->all(FLERR, "wall temperature not set correctly");
     }
-
-    // // sending to other processes
-    // for (int i = 1; i < nprocs; i++) {
-    //     MPI_Send(&twall, nlocal, MPI_DOUBLE, i, 1, world);
-    // }
-    // referencing the surface temperature vector
-    
-    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
-    //}
-    // } else {
-    //     // master process is 0, blocks until data is received
-    //     MPI_Recv(&twall, nlocal, MPI_DOUBLE, 0, 1, world, MPI_STATUS_IGNORE);
-    // }
-    
-    // waiting for all of the processes to get here
-    // MPI_Barrier(world);
-
-    // MPI_Allreduce(&this->twall, &tvector, nlocal, MPI_DOUBLE, MPI_SUM, world);
-
-    // // sychronizing across twall variable across threads
-    // // MPI_Allreduce(this->twall, this->twall, nlocal, MPI_DOUBLE, MPI_SUM, world);
-
-    // // setting tvector to twall
-    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
-
-    // waiting for all threads to get here
-    // MPI_Barrier(world);
 }
 
 void FixFea::init() {
-    // if (!firstflag) return;
-    // firstflag = 0;
-
-    // double *tvector = surf->edvec[surf->ewhich[tindex]];
+    // number of surface elements
     int nlocal = surf->nlocal;
     this->last_nlocal = nlocal;
 
-    // memory->create(twall, nlocal,"fea:twall");
-    // memset(this->twall, 0, nlocal*sizeof(double));
 
     memory->create(this->qw_avg, nlocal, "fea:qw_avg");
     memset(this->qw_avg, 0, nlocal*sizeof(double));
 
     memory->create(this->qw_avg_me, nlocal, "fea:qw_avg_me");
     memset(this->qw_avg_me, 0, nlocal*sizeof(double));
-
-    // allocate per-surf vector for explicit all surfs
-    // memory->create(tvector_me,nlocal,"fea:tvector_me");
-    // memset(tvector_me, 0, nlocal*sizeof(double));
 
     // loading the boundary data
     if (comm->me == 0) {
