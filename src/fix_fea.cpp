@@ -90,7 +90,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
-    this->print("Loading config from: " + std::string(arg[2]));
+    this->print(("Loading config from: " + std::string(arg[2])).c_str());
 
     // making new elmer class
     this->elmer = new elmer::Elmer();
@@ -122,25 +122,25 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (emi <= 0.0 || emi > 1.0)
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
 
-    this->print("emi = " + std::to_string(this->emi));
+    this->print(("emi = " + std::to_string(this->emi)).c_str());
 
 
     // making sure base temperature is valid
     if (this->elmer->base_temp <= (double)0)
         error->all(FLERR, "base temperature must be greater than 0");
-    this->print("base temperature = " + std::to_string(this->elmer->base_temp));
+    this->print(("base temperature = " + std::to_string(this->elmer->base_temp)).c_str());
 
     // will make temperature data file, do not need to check if it exists
     // if (!(stat(this->temperature_data_file.c_str(),  &sb) == 0))
     //     error->all(FLERR, "Illegal fix fea command, temperature_data_file path does not exist");
 
-    this->print("temperature_data_file = " + this->elmer->temperature_data_file);
+    this->print(("temperature_data_file = " + this->elmer->temperature_data_file).c_str());
 
     // checking run_every
     if (this->run_every <= 0)
         error->all(FLERR,"Illegal fix fea command, run_every <= 0");
 
-    this->print("run_every = " + std::to_string(this->run_every));
+    this->print(("run_every = " + std::to_string(this->run_every)).c_str());
 
     // checking nevery
     if (this->nevery <= 0)
@@ -148,7 +148,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (this->run_every % this->nevery != 0)
         error->all(FLERR, "Illegal fix fea command, run_every must be a multiple of nevery");
 
-    this->print("nevery = " + std::to_string(this->nevery));
+    this->print(("nevery = " + std::to_string(this->nevery)).c_str());
 
 
     // get the surface group
@@ -157,25 +157,25 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Fix fea group ID does not exist");
     
     groupbit = surf->bitmask[igroup];
-    this->print("groupID = " + groupID);
+    this->print(("groupID = " + groupID).c_str());
 
     // getting the mixture
     int imix = particle->find_mixture((char*)mixID.c_str());
     if (imix < 0)
         error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
 
-    ngroup = particle->mixture[imix]->ngroup;
-    this->print("mixID = " + mixID);
+    // ngroup = particle->mixture[imix]->ngroup;
+    this->print(("mixID = " + mixID).c_str());
     
     // creating the custom variable for the surface temperature
     this->tindex = surf->add_custom((char*)customID.c_str(), DOUBLE, 0);
-    this->print("customID = " + customID);
+    this->print(("customID = " + customID).c_str());
 
     // making sure the elmer exe 
     if (!(stat(this->elmer->exe.c_str(),  &sb) == 0))
         error->all(FLERR, "Illegal fix fea command, exe path does not exist");
     
-    this->print("exe = " + this->elmer->exe);
+    this->print(("exe = " + this->elmer->exe).c_str());
 
 
     // if (!(stat(this->elmer->sif.c_str(),  &sb) == 0))
@@ -190,7 +190,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         if (!(stat((this->elmer->meshDBstem + "." + exts[i]).c_str(),  &sb) == 0))
             error->all(FLERR, ("Illegal fix fea command, mesh database incomplete, " + (this->elmer->meshDBstem + "." + exts[i]) + " does not exist").c_str());
     }
-    this->print("meshDBstem = " + this->elmer->meshDBstem);    
+    this->print(("meshDBstem = " + this->elmer->meshDBstem).c_str());    
 
     // adding compute
     size = toml::vec_to_arr(compute_args, arr);
@@ -212,7 +212,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
         error->all(FLERR,"Fix fea compute array is accessed out-of-range");
 
-    this->print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
+    this->print(("added surf compute with id: " + std::string(modify->compute[icompute]->id)).c_str());
 
     // prefactor and threshold in Stefan/Boltzmann equation
     // units of prefactor (SI) is K^4 / (watt - m^2)
@@ -220,13 +220,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->dimension = domain->dimension;
 
     // setting variables based on unit system
-    if (strcmp(update->unit_style, "si") == 0) {
-        prefactor = 1.0 / (emi * SB_SI);
+    if (strcmp(update->unit_style, "si") == 0) 
         threshold = 1.0e-6;
-    } else if (strcmp(update->unit_style, "cgs") == 0) {
-        prefactor = 1.0 / (emi * SB_CGS);
+    else if (strcmp(update->unit_style, "cgs") == 0) 
         threshold = 1.0e-3;
-    }
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
@@ -250,12 +247,12 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->elmer->simulation.Output_File = this->elmer->temperature_data_file;
 
     // do not know what this does, but I think it is needed
-    firstflag = 1;
+    /// firstflag = 1;
 
     // initing var
     qw_avg_me = NULL;
 
-    this->print("done constructing");
+    // this->print("done constructing");
 
 }
 
@@ -357,8 +354,8 @@ void FixFea::load_temperatures() {
 }
 
 void FixFea::init() {
-    if (!firstflag) return;
-    firstflag = 0;
+    // if (!firstflag) return;
+    // firstflag = 0;
 
     // double *tvector = surf->edvec[surf->ewhich[tindex]];
     int nlocal = surf->nlocal;
@@ -441,7 +438,6 @@ void FixFea::end_of_step() {
 
         if (mask & groupbit) {
             qw = array[m][icol];
-            //qw = 10;
             if (qw > threshold) this->qw_avg_me[i] += qw;
         }
         m++;
@@ -500,14 +496,14 @@ void FixFea::end_of_step() {
 /**
  * custom printing for this class
 */
-void FixFea::print(std::string str, int num_indent, std::string end) {
+void FixFea::print(const char* str, int num_indent, const char* end) {
     if (comm->me == 0) {
         std::string space = "";
         for (int i = 0; i < num_indent; i++)
             space += "  ";
 
-        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
-        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str, end);
+        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str, end);
     }
 }
 

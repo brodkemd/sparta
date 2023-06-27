@@ -23,8 +23,6 @@ FixStyle(fea,FixFea)
 
 #include "fix.h"
 
-#include <string>
-
 namespace elmer {
     class Elmer;
 }
@@ -41,32 +39,16 @@ namespace SPARTA_NS {
             int setmask();
             virtual void init();
             virtual void end_of_step();
-            // virtual void start_of_step();
 
         private:
-            // void get_elmer(std::string& _buffer);
             void load_temperatures();
-            // void load_boundary();
-            // void setup_data_file();
-            // void load_data();
-            // void load_sif(std::string sif_file);
-            void print(std::string str, int num_indent = 1, std::string end = "\n");
+            void print(const char* str, int num_indent = 1, const char* end = "\n");
             bool run_condition();
 
-            // under elmer
-            class elmer::Elmer* elmer;
-
-            // Structure which would store the metadata
-            // std::string meshDBstem, temperature_data_file;
-
-            // std::vector<std::array<int, elmer::boundary_size>> boundary_data;
-
-            int groupbit, ngroup, nprocs, tindex, qwindex, run_every, last_nlocal, dimension, firstflag;
-            
-            double emi, prefactor, threshold, *qw_avg_me, *qw_avg;
-
             class Compute *cqw;
-            // class Fix *fqw;
+            class elmer::Elmer* elmer;
+            int groupbit, nprocs, tindex, qwindex, run_every, last_nlocal, dimension;
+            double emi, threshold, *qw_avg_me, *qw_avg;            
     };
 }
 
