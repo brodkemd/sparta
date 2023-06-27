@@ -7,13 +7,12 @@ SHELL = /bin/bash
 # specify flags and libraries needed for your compiler
 
 CC =		g++
-CCFLAGS =	-O3 $(shell python3.10-config --cflags --embed) -gdwarf-4 -gstrict-dwarf
-
+CCFLAGS =	-O3 $(shell python3.10-config --cflags)
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		g++
-LINKFLAGS =	-O $(shell python3.10-config --embed --ldflags) -gdwarf-4 -gstrict-dwarf
+LINKFLAGS =	-O $(shell python3.10-config --embed --ldflags)
 LIB =  
 SIZE =		size
 
