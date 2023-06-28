@@ -36,6 +36,7 @@
 
 using namespace SPARTA_NS;
 
+#define INVOKED_PER_SURF 32
 
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
@@ -255,15 +256,14 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     qw_avg_me = NULL;
 
     // this->print("done constructing");
-
+    // telling the compute surf etot to run
+    modify->addstep_compute_all(1);
 }
 
 /* ---------------------------------------------------------------------- */
 
 FixFea::~FixFea() {
     delete this->elmer;
-    // memory->destroy(tvector_me);
-    // memory->destroy(twall);
     memory->destroy(qw_avg_me);
     memory->destroy(qw_avg);
     surf->remove_custom(tindex);
@@ -373,35 +373,33 @@ bool FixFea::run_condition() {
 void FixFea::end_of_step() {
     int i,m,mask;
     double qw;
-    modify->addstep_compute(update->ntimestep);
+    
     // access source compute or fix
     // set new temperature via Stefan-Boltzmann eq for nown surfs I own
     // use Twall if surf is not in surf group or eng flux is too small
     // compute/fix output is just my nown surfs, indexed by M
     // store in tvector_me = all nlocal surfs, indexed by I
-    //Surf::Line *lines = surf->lines;
-    //Surf::Tri *tris = surf->tris;
 
     int nlocal = surf->nlocal;
     if (this->last_nlocal != nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
-    double **array;
+    modify->clearstep_compute();
+    if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
+        cqw->compute_per_surf();
+        cqw->invoked_flag |= INVOKED_PER_SURF;
+    }
+
     cqw->post_process_surf();
-    array = cqw->array_surf;
+    double **array = cqw->array_surf;
 
     int icol = qwindex-1;
-
-    // this->print(std::to_string(particle->nlocal).c_str());
 
     m = 0;
     for (i = comm->me; i < nlocal; i += nprocs) {
         if (dimension == 3) mask = surf->tris[i].mask;
         else mask = surf->lines[i].mask;
-
-        if (mask & groupbit) {
-            this->qw_avg_me[i] = this->qw_avg_me[i] + array[m][icol];
-        }
+        if (mask & groupbit) this->qw_avg_me[i]+=array[m][icol];
         m++;
     }
 
@@ -411,10 +409,13 @@ void FixFea::end_of_step() {
         if (comm->me == 0) {
             int i;
             double sum = 0;
-            for (i = 0; i < nlocal; i++) sum=sum+std::abs(qw_avg[i]);
+            for (i = 0; i < nlocal; i++) sum+=std::abs(qw_avg[i]);
 
             if (sum > this->threshold) {
-                this->print(("Got index, " + std::to_string(i) + ", with value " + std::to_string(qw_avg[i])).c_str());
+                std::ostringstream double_converter;
+                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
+                double_converter << sum;
+                this->print(("Got sum, " + double_converter.str()).c_str());
                 this->print("Setting up Elmer");
                 this->elmer->simulation.Timestep_Sizes = {update->dt};
 
@@ -423,15 +424,18 @@ void FixFea::end_of_step() {
                 this->elmer->boundary_conditions.clear();
 
                 START_TRY
-
+                this->print("creating boundary conditions");
                 for (int i = 0; i < nlocal; i++) {
                     elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
                     bc->Heat_Flux = this->qw_avg[i]/this->run_every;
                     this->elmer->boundary_conditions.push_back(bc);
                 }
 
+                this->print("creating initial conditions");
                 this->elmer->createInitCondsFromData();
+                this->print("making sif");
                 this->elmer->makeSif();
+                this->print("running sif");
                 this->elmer->run();
                 
                 // done running so reloading temperatures
@@ -449,10 +453,10 @@ void FixFea::end_of_step() {
             END_TRY
 
         }
-        // error->all(FLERR, "generated everything");
         for (int i = 0; i < nlocal; i++) this->qw_avg_me[i] = (double)0;
         MPI_Barrier(world);
     }
+    modify->addstep_compute(update->ntimestep+1);
 }
 
 /* ---------------------------------------------------------------------- */

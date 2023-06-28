@@ -468,7 +468,7 @@ void ComputeSurf::surf_tally(int isurf, int icell, int reaction,
         vec[k++] -= weight * (ievib + jevib - iorig->evib) * fluxscale;
       break;
     case ETOT:
-      error->message(FLERR, "computing etot");
+      // error->message(FLERR, "computing etot");
       vsqpre = origmass * MathExtra::lensq3(vorig);
       otherpre = iorig->erot + iorig->evib;
       if (ip) {
@@ -528,7 +528,6 @@ void ComputeSurf::post_process_surf()
       array_surf[i][j] = 0.0;
 
   // collate entire array of results
-  error->message(FLERR, "post processing");
   surf->collate_array(ntally,ntotal,tally2surf,array_surf_tally,array_surf);
 
   /*

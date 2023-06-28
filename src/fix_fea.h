@@ -48,7 +48,8 @@ namespace SPARTA_NS {
             class Compute *cqw;
             class elmer::Elmer* elmer;
             int groupbit, nprocs, tindex, qwindex, run_every, last_nlocal, dimension;
-            double emi, threshold, *qw_avg_me, *qw_avg;            
+            double emi, threshold, *qw_avg_me, *qw_avg;
+                   
     };
 }
 

@@ -269,13 +269,16 @@ void Output::write(bigint ntimestep)
   if (next_dump_any == ntimestep) {
     for (int idump = 0; idump < ndump; idump++) {
       if (next_dump[idump] == ntimestep) {
-        if (dump[idump]->clearstep || every_dump[idump] == 0)
+        if (dump[idump]->clearstep || every_dump[idump] == 0) {
           modify->clearstep_compute();
+        }
         if (last_dump[idump] != ntimestep) {
           dump[idump]->write();
           last_dump[idump] = ntimestep;
         }
-        if (every_dump[idump]) next_dump[idump] += every_dump[idump];
+        if (every_dump[idump]) {
+          next_dump[idump] += every_dump[idump];
+        }
         else {
           bigint nextdump = static_cast<bigint>
             (input->variable->compute_equal(ivar_dump[idump]));
@@ -283,8 +286,9 @@ void Output::write(bigint ntimestep)
             error->all(FLERR,"Dump every variable returned a bad timestep");
           next_dump[idump] = nextdump;
         }
-        if (dump[idump]->clearstep || every_dump[idump] == 0)
+        if (dump[idump]->clearstep || every_dump[idump] == 0) {
           modify->addstep_compute(next_dump[idump]);
+        }
       }
       if (idump) next_dump_any = MIN(next_dump_any,next_dump[idump]);
       else next_dump_any = next_dump[0];

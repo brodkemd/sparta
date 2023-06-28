@@ -227,7 +227,7 @@ namespace elmer {
 
             Base() {
                 // setting up the double converter
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
             }
 
         private:
@@ -648,7 +648,7 @@ namespace elmer {
                 this->solver     = Solver();
 
                 // setting up the double converter
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10);
+                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
             }
 
 
@@ -748,11 +748,11 @@ namespace elmer {
                 int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
 
                 // setting up object to convert doubles
-                std::ostringstream double_converter;
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10) << this->base_temp;
+                this->double_converter.str("");
+                this->double_converter << this->base_temp;
 
                 // getting string version of elmer.base_temp
-                std::string base_temp_str = double_converter.str();
+                std::string base_temp_str = this->double_converter.str();
 
                 // writing base temperature to file for each node
                 std::ofstream output(this->temperature_data_file);
