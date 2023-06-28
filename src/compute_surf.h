@@ -41,10 +41,11 @@ class ComputeSurf : public Compute {
   virtual void post_process_surf();
   void reallocate();
   bigint memory_usage();
+  int combined;
 
  protected:
   int groupbit,imix,nvalue,ngroup,ntotal;
-  int maxsurf,combined;
+  int maxsurf;
   int normarea;            // 1 for value/area/time, 0 for value/time
   double nfactor_inverse;
   int *which;

@@ -914,10 +914,13 @@ template < int DIM, int SURF, int OPT > void Update::move()
                 pstop++;
               }
 
-              if (nsurf_tally)
+              
+              if (nsurf_tally) {
+                error->message(FLERR, "in if");
                 for (m = 0; m < nsurf_tally; m++)
                   slist_active[m]->surf_tally(minsurf,icell,reaction,
                                               &iorig,ipart,jpart);
+              }
 
               // stuck_iterate = consecutive iterations particle is immobile
 
