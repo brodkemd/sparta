@@ -37,7 +37,6 @@ enum{NUM,NUMWT,NFLUX,MFLUX,FX,FY,FZ,PRESS,XPRESS,YPRESS,ZPRESS,
 ComputeSurf::ComputeSurf(SPARTA *sparta, int narg, char **arg) :
   Compute(sparta, narg, arg)
 {
-  error->message(FLERR, "setting up compute surf");
   if (narg < 5) error->all(FLERR,"Illegal compute surf command");
 
   int igroup = surf->find_group(arg[2]);
@@ -73,10 +72,7 @@ ComputeSurf::ComputeSurf(SPARTA *sparta, int narg, char **arg) :
     else if (strcmp(arg[iarg],"ke") == 0) which[nvalue++] = KE;
     else if (strcmp(arg[iarg],"erot") == 0) which[nvalue++] = EROT;
     else if (strcmp(arg[iarg],"evib") == 0) which[nvalue++] = EVIB;
-    else if (strcmp(arg[iarg],"etot") == 0) {
-      which[nvalue++] = ETOT;
-      error->message(FLERR, "compute etot");
-    }
+    else if (strcmp(arg[iarg],"etot") == 0) which[nvalue++] = ETOT;
     else break;
     iarg++;
   }
@@ -468,7 +464,6 @@ void ComputeSurf::surf_tally(int isurf, int icell, int reaction,
         vec[k++] -= weight * (ievib + jevib - iorig->evib) * fluxscale;
       break;
     case ETOT:
-      // error->message(FLERR, "computing etot");
       vsqpre = origmass * MathExtra::lensq3(vorig);
       otherpre = iorig->erot + iorig->evib;
       if (ip) {
