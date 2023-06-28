@@ -325,12 +325,12 @@ namespace elmer {
                 _h.get_at_path(Results_Directory, "elmer.header.Results_Directory");
             }
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Mesh DB", Mesh_DB, false); _buf+=_temp;
-                varToString(_temp, "Include Path", Include_Path); _buf+=_temp;
-                varToString(_temp, "Results Directory", Results_Directory); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Mesh DB", Mesh_DB, false); _buf<<_temp;
+                varToString(_temp, "Include Path", Include_Path); _buf<<_temp;
+                varToString(_temp, "Results Directory", Results_Directory); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -358,15 +358,15 @@ namespace elmer {
             }
 
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Gravity", Gravity); _buf+=_temp;
-                varToString(_temp, "Stefan Boltzmann", Stefan_Boltzmann); _buf+=_temp;
-                varToString(_temp, "Permittivity of Vacuum", Permittivity_of_Vacuum); _buf+=_temp;
-                varToString(_temp, "Permeability of Vacuum", Permeability_of_Vacuum); _buf+=_temp;
-                varToString(_temp, "Boltzmann Constant", Boltzmann_Constant); _buf+=_temp;
-                varToString(_temp, "Unit Charge", Unit_Charge); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Gravity", Gravity); _buf<<_temp;
+                varToString(_temp, "Stefan Boltzmann", Stefan_Boltzmann); _buf<<_temp;
+                varToString(_temp, "Permittivity of Vacuum", Permittivity_of_Vacuum); _buf<<_temp;
+                varToString(_temp, "Permeability of Vacuum", Permeability_of_Vacuum); _buf<<_temp;
+                varToString(_temp, "Boltzmann Constant", Boltzmann_Constant); _buf<<_temp;
+                varToString(_temp, "Unit Charge", Unit_Charge); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -403,22 +403,22 @@ namespace elmer {
             }
 
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Max Output Level", Max_Output_Level); _buf+=_temp;
-                varToString(_temp, "Coordinate System", Coordinate_System); _buf+=_temp;
-                varToString(_temp, "Coordinate Mapping", Coordinate_Mapping); _buf+=_temp;
-                varToString(_temp, "Simulation Type", Simulation_Type); _buf+=_temp;
-                varToString(_temp, "Steady State Max Iterations", Steady_State_Max_Iterations); _buf+=_temp;
-                varToString(_temp, "Output Intervals", Output_Intervals); _buf+=_temp;
-                varToString(_temp, "Timestep intervals", Timestep_intervals); _buf+=_temp;
-                varToString(_temp, "Timestep Sizes", Timestep_Sizes); _buf+=_temp;
-                varToString(_temp, "Timestepping Method", Timestepping_Method); _buf+=_temp;
-                varToString(_temp, "BDF Order", BDF_Order); _buf+=_temp;
-                varToString(_temp, "Solver Input File", Solver_Input_File); _buf+=_temp;
-                varToString(_temp, "Output File", Output_File); _buf+=_temp;
-                varToString(_temp, "Post File", Post_File); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Max Output Level", Max_Output_Level); _buf<<_temp;
+                varToString(_temp, "Coordinate System", Coordinate_System); _buf<<_temp;
+                varToString(_temp, "Coordinate Mapping", Coordinate_Mapping); _buf<<_temp;
+                varToString(_temp, "Simulation Type", Simulation_Type); _buf<<_temp;
+                varToString(_temp, "Steady State Max Iterations", Steady_State_Max_Iterations); _buf<<_temp;
+                varToString(_temp, "Output Intervals", Output_Intervals); _buf<<_temp;
+                varToString(_temp, "Timestep intervals", Timestep_intervals); _buf<<_temp;
+                varToString(_temp, "Timestep Sizes", Timestep_Sizes); _buf<<_temp;
+                varToString(_temp, "Timestepping Method", Timestepping_Method); _buf<<_temp;
+                varToString(_temp, "BDF Order", BDF_Order); _buf<<_temp;
+                varToString(_temp, "Solver Input File", Solver_Input_File); _buf<<_temp;
+                varToString(_temp, "Output File", Output_File); _buf<<_temp;
+                varToString(_temp, "Post File", Post_File); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -466,30 +466,30 @@ namespace elmer {
             }
 
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Equation", Equation); _buf+=_temp;
-                varToString(_temp, "Procedure", Procedure, false); _buf+=_temp;
-                varToString(_temp, "Variable", Variable); _buf+=_temp;
-                varToString(_temp, "Exec Solver", Exec_Solver); _buf+=_temp;
-                varToString(_temp, "Stabilize", Stabilize); _buf+=_temp;
-                varToString(_temp, "Optimize Bandwidth", Optimize_Bandwidth); _buf+=_temp;
-                varToString(_temp, "Steady State Convergence Tolerance", Steady_State_Convergence_Tolerance); _buf+=_temp;
-                varToString(_temp, "Nonlinear System Convergence Tolerance", Nonlinear_System_Convergence_Tolerance); _buf+=_temp;
-                varToString(_temp, "Nonlinear System Max Iterations", Nonlinear_System_Max_Iterations); _buf+=_temp;
-                varToString(_temp, "Nonlinear System Newton After Iterations", Nonlinear_System_Newton_After_Iterations); _buf+=_temp;
-                varToString(_temp, "Nonlinear System Newton After Tolerance", Nonlinear_System_Newton_After_Tolerance); _buf+=_temp;
-                varToString(_temp, "Nonlinear System Relaxation Factor", Nonlinear_System_Relaxation_Factor); _buf+=_temp;
-                varToString(_temp, "Linear System Solver", Linear_System_Solver); _buf+=_temp;
-                varToString(_temp, "Linear System Iterative Method", Linear_System_Iterative_Method); _buf+=_temp;
-                varToString(_temp, "Linear System Max Iterations", Linear_System_Max_Iterations); _buf+=_temp;
-                varToString(_temp, "Linear System Convergence Tolerance", Linear_System_Convergence_Tolerance); _buf+=_temp;
-                varToString(_temp, "BiCGstabl polynomial degree", BiCGstabl_polynomial_degree); _buf+=_temp;
-                varToString(_temp, "Linear System Preconditioning", Linear_System_Preconditioning); _buf+=_temp;
-                varToString(_temp, "Linear System ILUT Tolerance", Linear_System_ILUT_Tolerance); _buf+=_temp;
-                varToString(_temp, "Linear System Abort Not Converged", Linear_System_Abort_Not_Converged); _buf+=_temp;
-                varToString(_temp, "Linear System Residual Output", Linear_System_Residual_Output); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Equation", Equation); _buf<<_temp;
+                varToString(_temp, "Procedure", Procedure, false); _buf<<_temp;
+                varToString(_temp, "Variable", Variable); _buf<<_temp;
+                varToString(_temp, "Exec Solver", Exec_Solver); _buf<<_temp;
+                varToString(_temp, "Stabilize", Stabilize); _buf<<_temp;
+                varToString(_temp, "Optimize Bandwidth", Optimize_Bandwidth); _buf<<_temp;
+                varToString(_temp, "Steady State Convergence Tolerance", Steady_State_Convergence_Tolerance); _buf<<_temp;
+                varToString(_temp, "Nonlinear System Convergence Tolerance", Nonlinear_System_Convergence_Tolerance); _buf<<_temp;
+                varToString(_temp, "Nonlinear System Max Iterations", Nonlinear_System_Max_Iterations); _buf<<_temp;
+                varToString(_temp, "Nonlinear System Newton After Iterations", Nonlinear_System_Newton_After_Iterations); _buf<<_temp;
+                varToString(_temp, "Nonlinear System Newton After Tolerance", Nonlinear_System_Newton_After_Tolerance); _buf<<_temp;
+                varToString(_temp, "Nonlinear System Relaxation Factor", Nonlinear_System_Relaxation_Factor); _buf<<_temp;
+                varToString(_temp, "Linear System Solver", Linear_System_Solver); _buf<<_temp;
+                varToString(_temp, "Linear System Iterative Method", Linear_System_Iterative_Method); _buf<<_temp;
+                varToString(_temp, "Linear System Max Iterations", Linear_System_Max_Iterations); _buf<<_temp;
+                varToString(_temp, "Linear System Convergence Tolerance", Linear_System_Convergence_Tolerance); _buf<<_temp;
+                varToString(_temp, "BiCGstabl polynomial degree", BiCGstabl_polynomial_degree); _buf<<_temp;
+                varToString(_temp, "Linear System Preconditioning", Linear_System_Preconditioning); _buf<<_temp;
+                varToString(_temp, "Linear System ILUT Tolerance", Linear_System_ILUT_Tolerance); _buf<<_temp;
+                varToString(_temp, "Linear System Abort Not Converged", Linear_System_Abort_Not_Converged); _buf<<_temp;
+                varToString(_temp, "Linear System Residual Output", Linear_System_Residual_Output); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -511,11 +511,11 @@ namespace elmer {
                 _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers");
             }
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Name", this->name); _buf+=_temp;
-                varToString(_temp, "Active Solvers", Active_Solvers); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Name", this->name); _buf<<_temp;
+                varToString(_temp, "Active Solvers", Active_Solvers); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -543,17 +543,17 @@ namespace elmer {
                 _h.get_at_path(Heat_Conductivity, "elmer.material.Heat_Conductivity");
             }
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Name", this->name); _buf+=_temp;
-                varToString(_temp, "Poisson ratio", Poisson_ratio); _buf+=_temp;
-                varToString(_temp, "Heat Capacity", Heat_Capacity); _buf+=_temp;
-                varToString(_temp, "Density", Density); _buf+=_temp;
-                varToString(_temp, "Youngs modulus", Youngs_modulus); _buf+=_temp;
-                varToString(_temp, "Heat expansion Coefficient", Heat_expansion_Coefficient); _buf+=_temp;
-                varToString(_temp, "Sound speed", Sound_speed); _buf+=_temp;
-                varToString(_temp, "Heat Conductivity", Heat_Conductivity); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Name", this->name); _buf<<_temp;
+                varToString(_temp, "Poisson ratio", Poisson_ratio); _buf<<_temp;
+                varToString(_temp, "Heat Capacity", Heat_Capacity); _buf<<_temp;
+                varToString(_temp, "Density", Density); _buf<<_temp;
+                varToString(_temp, "Youngs modulus", Youngs_modulus); _buf<<_temp;
+                varToString(_temp, "Heat expansion Coefficient", Heat_expansion_Coefficient); _buf<<_temp;
+                varToString(_temp, "Sound speed", Sound_speed); _buf<<_temp;
+                varToString(_temp, "Heat Conductivity", Heat_Conductivity); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -571,14 +571,14 @@ namespace elmer {
             std::vector<int> Target_Bodies;
             int Initial_condition, Equation, Material;
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Target Bodies", this->Target_Bodies, true); _buf+=_temp;
-                varToString(_temp, "Name", this->name); _buf+=_temp;
-                varToString(_temp, "Equation", Equation); _buf+=_temp;
-                varToString(_temp, "Material", Material); _buf+=_temp;
-                varToString(_temp, "Initial condition", Initial_condition); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Target Bodies", this->Target_Bodies, true); _buf<<_temp;
+                varToString(_temp, "Name", this->name); _buf<<_temp;
+                varToString(_temp, "Equation", Equation); _buf<<_temp;
+                varToString(_temp, "Material", Material); _buf<<_temp;
+                varToString(_temp, "Initial condition", Initial_condition); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
     };
 
@@ -595,11 +595,11 @@ namespace elmer {
 
             double Temperature;
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Name", this->name); _buf+=_temp;
-                varToString(_temp, "Temperature", Temperature); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Name", this->name); _buf<<_temp;
+                varToString(_temp, "Temperature", Temperature); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
 
     };
@@ -619,13 +619,13 @@ namespace elmer {
             bool Heat_Flux_BC = true;
             double Heat_Flux;
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf = (name + "\n");
-                varToString(_temp, "Target Boundaries", Target_Boundaries); _buf+=_temp;
-                varToString(_temp, "Name", this->name); _buf+=_temp;
-                varToString(_temp, "Heat Flux BC", Heat_Flux_BC); _buf+=_temp;
-                varToString(_temp, "Heat Flux", Heat_Flux); _buf+=_temp;
-                _buf+=(_end + "\n");
+            void join(std::ofstream& _buf) {
+                std::string _temp; _buf << (name + "\n");
+                varToString(_temp, "Target Boundaries", Target_Boundaries); _buf<<_temp;
+                varToString(_temp, "Name", this->name); _buf<<_temp;
+                varToString(_temp, "Heat Flux BC", Heat_Flux_BC); _buf<<_temp;
+                varToString(_temp, "Heat Flux", Heat_Flux); _buf<<_temp;
+                _buf<<(_end + "\n");
             }
 
     };
@@ -668,39 +668,31 @@ namespace elmer {
             }
 
 
-            void small_join(std::string& _buf) {
-                std::string _temp; _buf.clear();
-                header.join(_temp); _buf+=_temp;
-                simulation.join(_temp); _buf+=_temp;
-                constants.join(_temp); _buf+=_temp;
-                solver.join(_temp); _buf+=_temp;
-                equation.join(_temp); _buf+=_temp;
-                material.join(_temp); _buf+=_temp;
+            void small_join(std::ofstream& _buf) {
+                header.join(_buf);
+                simulation.join(_buf);
+                constants.join(_buf);
+                solver.join(_buf);
+                equation.join(_buf);
+                material.join(_buf);
             }
 
 
-            void join_conditions(std::string& _buf) {
-                std::string _temp; _buf.clear();
+            void join_conditions(std::ofstream& _buf) {
+                for (int i = 0; i < this->bodys.size(); i++)
+                    this->bodys[i]->join(_buf);
 
-                for (int i = 0; i < this->bodys.size(); i++){
-                    this->bodys[i]->join(_temp); _buf+=_temp;
-                }
+                for (int i = 0; i < this->initial_conditions.size(); i++)
+                    this->initial_conditions[i]->join(_buf);
 
-                for (int i = 0; i < this->initial_conditions.size(); i++){
-                    this->initial_conditions[i]->join(_temp); _buf+=_temp;
-                }
-
-                for (int i = 0; i < this->boundary_conditions.size(); i++){
-                    this->boundary_conditions[i]->join(_temp); _buf+=_temp;
-                }
+                for (int i = 0; i < this->boundary_conditions.size(); i++)
+                    this->boundary_conditions[i]->join(_buf);
             }
 
 
-            void join(std::string& _buf) {
-                std::string _temp; _buf.clear();
-                small_join(_temp); _buf+=_temp;
-                join_conditions(_temp); _buf+=_temp;
-
+            void join(std::ofstream& _buf) {
+                small_join(_buf);
+                join_conditions(_buf);
             }
 
 
@@ -770,9 +762,10 @@ namespace elmer {
 
 
             void makeSif() {
-                std::string _buf;
-                this->join(_buf);
-                elmer::writeFile(this->sif, _buf);
+                std::ofstream _buf(this->sif);
+                if (!(_buf.is_open())) error(this->sif + " did not open");
+                this->join(_buf);                
+                _buf.close();
             }
 
 

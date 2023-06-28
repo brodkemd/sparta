@@ -100,6 +100,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     s.get_at_path(this->run_every,   "sparta.run_every");
     s.get_at_path(this->nevery,      "sparta.nevery");
     s.get_at_path(this->qwindex,     "sparta.qwindex");
+    s.get_at_path(this->threshold,   "sparta.threshold");
     s.get_at_path(groupID,           "sparta.groupID");
     s.get_at_path(mixID,             "sparta.mixID");
     s.get_at_path(customID,          "sparta.customID");
@@ -117,6 +118,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
 
     this->print(("emi = " + std::to_string(this->emi)).c_str());
+
+    if (threshold < (double)0)
+        error->all(FLERR, "Fix fea threshold must be greater than 0.0");
+    this->print(("threshold = " + std::to_string(this->threshold)).c_str());
 
 
     // making sure base temperature is valid
@@ -214,10 +219,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->dimension = domain->dimension;
 
     // setting variables based on unit system
-    if (strcmp(update->unit_style, "si") == 0) 
-        threshold = 1.0e-6;
-    else if (strcmp(update->unit_style, "cgs") == 0) 
-        threshold = 1.0e-3;
+    // if (strcmp(update->unit_style, "si") == 0) 
+    //     threshold = 1.0e-6;
+    // else if (strcmp(update->unit_style, "cgs") == 0) 
+    //     threshold = 1.0e-3;
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
@@ -391,10 +396,9 @@ void FixFea::end_of_step() {
         if (dimension == 3) mask = tris[i].mask;
         else mask = lines[i].mask;
 
-        if (mask & groupbit) {
-            qw = array[m][icol];
-            if (qw > threshold) this->qw_avg_me[i] += qw;
-        }
+        if (mask & groupbit)
+            this->qw_avg_me[i] += array[m][icol];
+
         m++;
     }
 
@@ -405,9 +409,10 @@ void FixFea::end_of_step() {
             
             int i;
             for (i = 0; i < nlocal; i++) {
-                if (qw_avg[i] != (double)0.0) break;
+                if (std::abs(qw_avg[i]) > threshold) break;
             }
-            if (i != (nlocal - 1)) {
+            if (i == (nlocal - 1)) {
+                this->print(("Got index, " + std::to_string(i) + ", with value " + std::to_string(qw_avg[i])).c_str());
                 this->print("Setting up Elmer");
                 this->elmer->simulation.Timestep_Sizes = {update->dt};
 
@@ -429,14 +434,17 @@ void FixFea::end_of_step() {
                 
                 // done running so reloading temperatures
                 this->load_temperatures();
-                this->print("dumping node temperatures");
-                this->elmer->dumpNodeTemperatures(update->ntimestep);
                 
                 END_TRY
 
             } else {
                 this->print("Skipping elmer, no flux detected");
             }
+
+            START_TRY
+            this->print("dumping node temperatures");
+            this->elmer->dumpNodeTemperatures(update->ntimestep);
+            END_TRY
 
         }
         // error->all(FLERR, "generated everything");
