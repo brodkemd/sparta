@@ -36,15 +36,17 @@
 
 using namespace SPARTA_NS;
 
-#define INVOKED_PER_SURF 32
 
 enum{INT,DOUBLE};                      // several files
 enum{COMPUTE,FIX};
 
 
+#define INVOKED_PER_SURF 32
 #define START_TRY try {
 #define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
+
+static std::ostringstream double_converter;
 
 /* ----------------------------------------------------------------------
     
@@ -52,14 +54,13 @@ enum{COMPUTE,FIX};
 
  ---------------------------------------------------------------------- */
 
-
 /**
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
 */
 FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     /** temporary Variables used during construction **/
     char** arr;
-    int size;
+    int size, qwindex;
     struct stat sb;
     std::string groupID, mixID, customID;
     std::vector<std::string> compute_args, surf_collide_args, surf_modify_args;
@@ -100,8 +101,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     s.get_at_path(this->emi,         "sparta.emi");
     s.get_at_path(this->run_every,   "sparta.run_every");
     s.get_at_path(this->nevery,      "sparta.nevery");
-    s.get_at_path(this->qwindex,     "sparta.qwindex");
     s.get_at_path(this->threshold,   "sparta.threshold");
+    s.get_at_path(qwindex,           "sparta.qwindex");
     s.get_at_path(groupID,           "sparta.groupID");
     s.get_at_path(mixID,             "sparta.mixID");
     s.get_at_path(customID,          "sparta.customID");
@@ -117,29 +118,22 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // making sure emi is valid
     if (emi <= 0.0 || emi > 1.0)
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
-
     this->print(("emi = " + std::to_string(this->emi)).c_str());
 
     if (threshold < (double)0)
         error->all(FLERR, "Fix fea threshold must be greater than 0.0");
     this->print(("threshold = " + std::to_string(this->threshold)).c_str());
 
-
     // making sure base temperature is valid
     if (this->elmer->base_temp <= (double)0)
         error->all(FLERR, "base temperature must be greater than 0");
     this->print(("base temperature = " + std::to_string(this->elmer->base_temp)).c_str());
-
-    // will make temperature data file, do not need to check if it exists
-    // if (!(stat(this->temperature_data_file.c_str(),  &sb) == 0))
-    //     error->all(FLERR, "Illegal fix fea command, temperature_data_file path does not exist");
 
     this->print(("temperature_data_file = " + this->elmer->temperature_data_file).c_str());
 
     // checking run_every
     if (this->run_every <= 0)
         error->all(FLERR,"Illegal fix fea command, run_every <= 0");
-
     this->print(("run_every = " + std::to_string(this->run_every)).c_str());
 
     // checking nevery
@@ -147,9 +141,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, nevery <= 0");
     if (this->run_every % this->nevery != 0)
         error->all(FLERR, "Illegal fix fea command, run_every must be a multiple of nevery");
-
     this->print(("nevery = " + std::to_string(this->nevery)).c_str());
-
 
     // get the surface group
     int igroup = surf->find_group(groupID.c_str());
@@ -174,16 +166,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // making sure the elmer exe 
     if (!(stat(this->elmer->exe.c_str(),  &sb) == 0))
         error->all(FLERR, "Illegal fix fea command, exe path does not exist");
-    
     this->print(("exe = " + this->elmer->exe).c_str());
-
-
-    // if (!(stat(this->elmer->sif.c_str(),  &sb) == 0))
-    //     error->all(FLERR, "Illegal fix fea command, sif path does not exist");
     
-    // this->print("sif = " + this->elmer->sif);
-    
-
     // making sure the mesh database is complete
     std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
     for (int i = 0; i < 4; i++) {
@@ -192,6 +176,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     }
     this->print(("meshDBstem = " + this->elmer->meshDBstem).c_str());    
 
+    // adding surf collision model needed
+    // adding s_ to temperature variable, this is required
     surf_collide_args[2] = "s_" + surf_collide_args[2];
     size = toml::vec_to_arr(surf_collide_args, arr);
     this->surf->add_collide(size, arr);
@@ -201,7 +187,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
-    int icompute = modify->ncompute - 1;// modify->find_compute(id_qw);
+    int icompute = modify->ncompute - 1;
 
     // error checks
     cqw = modify->compute[icompute];
@@ -215,6 +201,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Fix fea compute does not compute per-surf array");
     if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
         error->all(FLERR,"Fix fea compute array is accessed out-of-range");
+    icol = qwindex-1;
 
     this->print(("added surf compute with id: " + std::string(modify->compute[icompute]->id)).c_str());
 
@@ -223,18 +210,9 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // same in 3d vs 2d, since SPARTA treats 2d cell volume as 1 m in z
     this->dimension = domain->dimension;
 
-    // setting variables based on unit system
-    // if (strcmp(update->unit_style, "si") == 0) 
-    //     threshold = 1.0e-6;
-    // else if (strcmp(update->unit_style, "cgs") == 0) 
-    //     threshold = 1.0e-3;
-
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
     this->print(("Number of procs: " + std::to_string(nprocs)).c_str());
-
-    // adding surf collision model needed
-    // adding s_ to temperature variable, this is required
     
 
     // adding collision by modifying surf
@@ -245,19 +223,18 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     delete [] arr;
 
     // modifying elmer variables to match sparta vairables
-    this->elmer->simulation.Timestep_intervals = {this->run_every};
-    this->elmer->simulation.Output_Intervals = {this->run_every};
-    this->elmer->simulation.Output_File = this->elmer->temperature_data_file;
-
-    // do not know what this does, but I think it is needed
-    /// firstflag = 1;
+    this->elmer->simulation.Timestep_intervals = { this->run_every };
+    this->elmer->simulation.Output_Intervals   = { this->run_every };
+    this->elmer->simulation.Output_File        =   this->elmer->temperature_data_file;
 
     // initing var
     qw_avg_me = NULL;
 
-    // this->print("done constructing");
     // telling the compute surf etot to run
     modify->addstep_compute_all(1);
+
+    // setting up the double converter
+    double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -274,7 +251,7 @@ FixFea::~FixFea() {
 /**
  * sets the mask to make the class run at the end of each timestep 
  */
-int FixFea::setmask() { return 0 | END_OF_STEP; }// | START_OF_STEP; }
+int FixFea::setmask() { return 0 | END_OF_STEP; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -286,11 +263,10 @@ void FixFea::load_temperatures() {
     // getting the number of surface elements
     int nlocal = surf->nlocal;
 
-    this->print("loading temperatures");
-
     START_TRY
     // loading per node temperature data
-    this->elmer->loadNodeTemperatureData();    
+    this->print("loading temperatures");
+    this->elmer->loadNodeTemperatureData();
     END_TRY
 
     // the wall temperature variable
@@ -324,11 +300,12 @@ void FixFea::load_temperatures() {
     }
 }
 
+/* ---------------------------------------------------------------------- */
+
 void FixFea::init() {
     // number of surface elements
     int nlocal = surf->nlocal;
     this->last_nlocal = nlocal;
-
 
     memory->create(this->qw_avg, nlocal, "fea:qw_avg");
     memset(this->qw_avg, 0, nlocal*sizeof(double));
@@ -348,10 +325,6 @@ void FixFea::init() {
 
     // waits for all processes to get here
     MPI_Barrier(world);
-
-    // this->start_of_step(true);
-    // for (int i = 0; i < nlocal; i++) tvector[i] = twall[i];
-    // this->print("done initing");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -359,10 +332,7 @@ void FixFea::init() {
 /**
  * Condition to run elmer on
 */
-bool FixFea::run_condition() {
-    return update->ntimestep % this->run_every == 0;
-}
-
+bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -374,27 +344,23 @@ void FixFea::end_of_step() {
     int i,m,mask;
     double qw;
     
-    // access source compute or fix
-    // set new temperature via Stefan-Boltzmann eq for nown surfs I own
-    // use Twall if surf is not in surf group or eng flux is too small
-    // compute/fix output is just my nown surfs, indexed by M
-    // store in tvector_me = all nlocal surfs, indexed by I
-
+    // number of surface elements
     int nlocal = surf->nlocal;
     if (this->last_nlocal != nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
+    // required to run the compute
     modify->clearstep_compute();
     if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
         cqw->compute_per_surf();
         cqw->invoked_flag |= INVOKED_PER_SURF;
     }
-
     cqw->post_process_surf();
+
+    // getting the data from the compute
     double **array = cqw->array_surf;
 
-    int icol = qwindex-1;
-
+    // adding the heat flux to the running average
     m = 0;
     for (i = comm->me; i < nlocal; i += nprocs) {
         if (dimension == 3) mask = surf->tris[i].mask;
@@ -403,38 +369,51 @@ void FixFea::end_of_step() {
         m++;
     }
 
+    // if should run elmer
     if (this->run_condition()) {
+        // summing all of the heat fluxes into one vector, namely qw_avg
         MPI_Allreduce(this->qw_avg_me, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
+        
+        // index often used
+        int i;
 
+        // only run on the main process
         if (comm->me == 0) {
-            int i;
+            // computing the total heat flux to test if it is less than the threshold
             double sum = 0;
             for (i = 0; i < nlocal; i++) sum+=std::abs(qw_avg[i]);
 
+            // if it less than the threshold, do not run elmer
             if (sum > this->threshold) {
-                std::ostringstream double_converter;
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
-                double_converter << sum;
+                // messages
+                double_converter.str(""); double_converter << sum;
                 this->print(("Got sum, " + double_converter.str()).c_str());
                 this->print("Setting up Elmer");
-                this->elmer->simulation.Timestep_Sizes = {update->dt};
+                
+                // setting the elmer timestep to the sparta timestep
+                this->elmer->simulation.Timestep_Sizes = { update->dt };
 
+                // clearing the vectors in elmer to make room for the new data
                 this->elmer->bodys.clear();
                 this->elmer->initial_conditions.clear();
                 this->elmer->boundary_conditions.clear();
 
+                // wrapping in try to catch if exception is,
+                // elmer throws exceptions if it encounters an error
                 START_TRY
                 this->print("creating boundary conditions");
                 for (int i = 0; i < nlocal; i++) {
                     elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
-                    bc->Heat_Flux = this->qw_avg[i]/this->run_every;
+                    bc->Heat_Flux = this->qw_avg[i]/this->run_every; // the average heat flux
                     this->elmer->boundary_conditions.push_back(bc);
                 }
 
                 this->print("creating initial conditions");
                 this->elmer->createInitCondsFromData();
+                
                 this->print("making sif");
                 this->elmer->makeSif();
+                
                 this->print("running sif");
                 this->elmer->run();
                 
@@ -443,9 +422,7 @@ void FixFea::end_of_step() {
                 
                 END_TRY
 
-            } else {
-                this->print("Skipping elmer, no flux detected");
-            }
+            } else this->print("Skipping elmer, no flux detected");
 
             START_TRY
             this->print("dumping node temperatures");
@@ -453,24 +430,24 @@ void FixFea::end_of_step() {
             END_TRY
 
         }
-        for (int i = 0; i < nlocal; i++) this->qw_avg_me[i] = (double)0;
+        // resetting the heat flux array
+        for (i = 0; i < nlocal; i++) this->qw_avg_me[i] = (double)0;
         MPI_Barrier(world);
     }
+    // telling the compute to run on the next timestep
     modify->addstep_compute(update->ntimestep+1);
 }
 
 /* ---------------------------------------------------------------------- */
 
-
 /**
  * custom printing for this class
 */
 void FixFea::print(const char* str, int num_indent, const char* end) {
+    // only prints on the main process
     if (comm->me == 0) {
         std::string space = "";
-        for (int i = 0; i < num_indent; i++)
-            space += "  ";
-
+        for (int i = 0; i < num_indent; i++) space += "  ";
         if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str, end);
         if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str, end);
     }
