@@ -23,8 +23,10 @@
 #include "surf.h"
 #include "modify.h"
 // #include "move_surf.h"
+
 #include "dump.h"
 #include "compute.h"
+#include "grid.h"
 #include "comm.h"
 #include "memory.h"
 #include "domain.h"
@@ -39,7 +41,7 @@ using namespace SPARTA_NS;
 
 
 enum{INT,DOUBLE};                      // several files
-enum{COMPUTE,FIX};
+enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 
 
 #define INVOKED_PER_SURF 32
@@ -317,7 +319,7 @@ void FixFea::load_temperatures() {
 void FixFea::init() {
     // number of surface elements
     int nlocal = surf->nlocal;
-    this->last_nlocal = nlocal;
+    this->nsurf = nlocal;
 
     memory->create(this->qw_avg, nlocal, "fea:qw_avg");
     memset(this->qw_avg, 0, nlocal*sizeof(double));
@@ -430,65 +432,12 @@ void FixFea::end_of_step() {
                 /**
                 * moving the surface
                 */
-                
-                
-
 
                 /* -------------------------------
                  loading new surface 
                    ------------------------------- */
+                this->move_surf();
                 
-                // // fraction = fraction of Nlarge represented by this timestep
-                // bigint nelapsed = update->ntimestep - ntimestep_original;
-                // double fraction = 1.0*nelapsed / nlarge;
-
-                // // sort particles
-
-                // if (particle->exist) particle->sort();
-
-                // // movesurf moves surface vertices
-
-                // if (dim == 2) movesurf->move_lines(fraction,origlines);
-                // else movesurf->move_tris(fraction,origtris);
-
-                // // assign split cell particles to parent split cell
-                // // assign surfs to grid cells
-
-                // grid->unset_neighbors();
-                // grid->remove_ghosts();
-
-                // if (grid->nsplitlocal) {
-                //     Grid::ChildCell *cells = grid->cells;
-                //     int nglocal = grid->nlocal;
-                //     for (int icell = 0; icell < nglocal; icell++)
-                //     if (cells[icell].nsplit > 1)
-                //         grid->combine_split_cell_particles(icell,1);
-                // }
-
-                // grid->clear_surf();
-
-                // grid->surf2grid(1,0);
-
-                // // re-setup owned and ghost cell info
-
-                // grid->setup_owned();
-                // grid->acquire_ghosts();
-                // grid->reset_neighbors();
-                // comm->reset_neighbors();
-
-                // // flag cells and corners as OUTSIDE or INSIDE
-
-                // grid->set_inout();
-                // grid->type_check(0);
-
-                // // remove particles as needed due to surface move
-                // // set ndeleted for scalar output
-
-                // if (particle->exist) ndeleted = movesurf->remove_particles();
-
-                // // notify all classes that store per-grid data that grid may have changed
-
-                // grid->notify_changed();
                 
                 END_TRY
 
@@ -514,18 +463,17 @@ void FixFea::move_surf() {
     int i;
     // sort particles
     if (particle->exist) particle->sort();
+    if (connectflag && groupbit != 1) this->connect_3d_pre();
 
-            
-    if (connectflag && groupbit != 1) connect_3d_pre();
-
-    for (i = 0; i < nsurf; i++) {
-        if (!(surf->tris[i].mask & groupbit)) continue;
-        p1 = surf->tris[i].p1;
-        p2 = surf->tris[i].p2;
-        p3 = surf->tris[i].p3;
-    }
+    // this part does the moving
+    // for (i = 0; i < nsurf; i++) {
+    //     if (!(surf->tris[i].mask & groupbit)) continue;
+    //     p1 = surf->tris[i].p1;
+    //     p2 = surf->tris[i].p2;
+    //     p3 = surf->tris[i].p3;
+    // }
     
-    if (connectflag && groupbit != 1) connect_3d_post();
+    if (connectflag && groupbit != 1) this->connect_3d_post();
 
     surf->compute_tri_normal(0);
 
@@ -534,7 +482,6 @@ void FixFea::move_surf() {
 
     // assign split cell particles to parent split cell
     // assign surfs to grid cells
-
     grid->unset_neighbors();
     grid->remove_ghosts();
 
@@ -547,41 +494,36 @@ void FixFea::move_surf() {
     }
 
     grid->clear_surf();
-
     grid->surf2grid(1,0);
 
     // re-setup owned and ghost cell info
-
     grid->setup_owned();
     grid->acquire_ghosts();
     grid->reset_neighbors();
     comm->reset_neighbors();
 
     // flag cells and corners as OUTSIDE or INSIDE
-
     grid->set_inout();
     grid->type_check(0);
 
     // remove particles as needed due to surface move
     // set ndeleted for scalar output
-
-    if (particle->exist) ndeleted = movesurf->remove_particles();
+    if (particle->exist) ndeleted = this->remove_particles();
 
     // notify all classes that store per-grid data that grid may have changed
-
     grid->notify_changed();
 }
+
+/* ---------------------------------------------------------------------- */
 
 void FixFea::connect_3d_pre() {
     // hash for corner points of moved triangles
     // key = corner point
     // value = global index (0 to 3*Ntri-1) of the point
     // NOTE: could prealloc hash to correct size here
-
     hash = new MyHash();
 
     // add moved points to hash
-
     double *p1,*p2,*p3;
     OnePoint3d key;
 
@@ -602,11 +544,12 @@ void FixFea::connect_3d_pre() {
     }
 }
 
+/* ---------------------------------------------------------------------- */
+
 void FixFea::connect_3d_post() {
     // check if non-moved points are in hash
     // if so, set their coords to matching point
     // set pselect for newly moved points so remove_particles() will work
-
     int m,value,j,jwhich;
     double *p[3],*q;
     OnePoint3d key;
@@ -615,28 +558,28 @@ void FixFea::connect_3d_post() {
     int nsurf = surf->nsurf;
 
     for (int i = 0; i < nsurf; i++) {
-    if (tris[i].mask & groupbit) continue;
-    p[0] = tris[i].p1;
-    p[1] = tris[i].p2;
-    p[2] = tris[i].p3;
+        if (tris[i].mask & groupbit) continue;
+        p[0] = tris[i].p1;
+        p[1] = tris[i].p2;
+        p[2] = tris[i].p3;
 
-    for (m = 0; m < 3; m++) {
-    key.pt[0] = p[m][0]; key.pt[1] = p[m][1]; key.pt[2] = p[m][2];
-    if (hash->find(key) != hash->end()) {
-    value = (*hash)[key];
-    j = value/3;
-    jwhich = value % 3;
-    if (jwhich == 0) q = tris[j].p1;
-    else if (jwhich == 1) q = tris[j].p2;
-    else q = tris[j].p3;
-    p[m][0] = q[0];
-    p[m][1] = q[1];
-    p[m][2] = q[2];
-    if (m == 0) pselect[3*i] = 1;
-    else if (m == 1) pselect[3*i+1] = 1;
-    else pselect[3*i+2] = 1;
-    }
-    }
+        for (m = 0; m < 3; m++) {
+            key.pt[0] = p[m][0]; key.pt[1] = p[m][1]; key.pt[2] = p[m][2];
+            if (hash->find(key) != hash->end()) {
+                value = (*hash)[key];
+                j = value/3;
+                jwhich = value % 3;
+                if (jwhich == 0) q = tris[j].p1;
+                else if (jwhich == 1) q = tris[j].p2;
+                else q = tris[j].p3;
+                p[m][0] = q[0];
+                p[m][1] = q[1];
+                p[m][2] = q[2];
+                if (m == 0) pselect[3*i] = 1;
+                else if (m == 1) pselect[3*i+1] = 1;
+                else pselect[3*i+2] = 1;
+            }
+        }
     }
 
     // free the hash
@@ -644,73 +587,65 @@ void FixFea::connect_3d_post() {
     delete hash;
 }
 
+/* ---------------------------------------------------------------------- */
 
 bigint FixFea::remove_particles() {
-  int isurf,nsurf;
-  surfint *csurfs;
+    int isurf,nsurf;
+    surfint *csurfs;
 
-  dim = domain->dimension;
-  Grid::ChildCell *cells = grid->cells;
-  Grid::ChildInfo *cinfo = grid->cinfo;
-  int nglocal = grid->nlocal;
-  int delflag = 0;
+    Grid::ChildCell *cells = grid->cells;
+    Grid::ChildInfo *cinfo = grid->cinfo;
+    int nglocal = grid->nlocal;
+    int delflag = 0;
 
-  for (int icell = 0; icell < nglocal; icell++) {
+    for (int icell = 0; icell < nglocal; icell++) {
+        // cell is inside surfs
+        // remove particles in case it wasn't before
+        if (cinfo[icell].type == INSIDE) {
+            if (cinfo[icell].count) delflag = 1;
+            particle->remove_all_from_cell(cinfo[icell].first);
+            cinfo[icell].count = 0;
+            cinfo[icell].first = -1;
+            continue;
+        }
 
-    // cell is inside surfs
-    // remove particles in case it wasn't before
+        // cell has surfs or is split
+        // if m < nsurf, loop over csurfs did not finish
+        // which means cell contains a moved surf, so delete all its particles
+        if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
+            nsurf = cells[icell].nsurf;
+            csurfs = cells[icell].csurfs;
 
-    if (cinfo[icell].type == INSIDE) {
-      if (cinfo[icell].count) delflag = 1;
-      particle->remove_all_from_cell(cinfo[icell].first);
-      cinfo[icell].count = 0;
-      cinfo[icell].first = -1;
-      continue;
+            int m;
+
+            for (m = 0; m < nsurf; m++) {
+                isurf = csurfs[m];
+                if (pselect[3*isurf]) break;
+                if (pselect[3*isurf+1]) break;
+                if (pselect[3*isurf+2]) break;
+            }
+
+            if (m < nsurf) {
+                if (cinfo[icell].count) delflag = 1;
+                particle->remove_all_from_cell(cinfo[icell].first);
+                cinfo[icell].count = 0;
+                cinfo[icell].first = -1;
+            }
+        }
+
+        if (cells[icell].nsplit > 1)
+            grid->assign_split_cell_particles(icell);
     }
 
-    // cell has surfs or is split
-    // if m < nsurf, loop over csurfs did not finish
-    // which means cell contains a moved surf, so delete all its particles
-
-    if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
-      nsurf = cells[icell].nsurf;
-      csurfs = cells[icell].csurfs;
-
-      int m;
-      if (dim == 2) {
-        for (m = 0; m < nsurf; m++) {
-          isurf = csurfs[m];
-          if (pselect[2*isurf]) break;
-          if (pselect[2*isurf+1]) break;
-        }
-      } else {
-        for (m = 0; m < nsurf; m++) {
-          isurf = csurfs[m];
-          if (pselect[3*isurf]) break;
-          if (pselect[3*isurf+1]) break;
-          if (pselect[3*isurf+2]) break;
-        }
-      }
-
-      if (m < nsurf) {
-        if (cinfo[icell].count) delflag = 1;
-        particle->remove_all_from_cell(cinfo[icell].first);
-        cinfo[icell].count = 0;
-        cinfo[icell].first = -1;
-      }
-    }
-
-    if (cells[icell].nsplit > 1)
-      grid->assign_split_cell_particles(icell);
-  }
-
-  int nlocal_old = particle->nlocal;
-  if (delflag) particle->compress_rebalance();
-  bigint delta = nlocal_old - particle->nlocal;
-  bigint ndeleted;
-  MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
-  return ndeleted;
+    int nlocal_old = particle->nlocal;
+    if (delflag) particle->compress_rebalance();
+    bigint delta = nlocal_old - particle->nlocal;
+    bigint ndeleted;
+    MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
+    return ndeleted;
 }
+
+/* ---------------------------------------------------------------------- */
 
 /**
  * custom printing for this class

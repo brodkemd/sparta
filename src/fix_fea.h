@@ -22,6 +22,10 @@ FixStyle(fea,FixFea)
 #define SPARTA_FIX_FEA_H
 
 #include "fix.h"
+#include "hash3.h"
+
+
+
 
 namespace elmer {
     class Elmer;
@@ -49,11 +53,22 @@ namespace SPARTA_NS {
             void print(const char* str, int num_indent = 1, const char* end = "\n");
             bool run_condition();
 
+#include "hashlittle.h"
+#include "hash_options.h"
+#ifdef SPARTA_MAP
+  typedef std::map<OnePoint3d,int> MyHash;
+#elif SPARTA_UNORDERED_MAP
+  typedef std::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
+#else
+  typedef std::tr1::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
+#endif
 
             class Compute *cqw;
+            MyHash *hash;
             class elmer::Elmer* elmer;
-            int groupbit, nprocs, icol, tindex, run_every, nsurf, dimension, connectflag;
+            int groupbit, nprocs, icol, tindex, run_every, nsurf, dimension, connectflag, *pselect;
             double emi, threshold, *qw_avg_me, *qw_avg;
+            bigint ndeleted;
                    
     };
 }
