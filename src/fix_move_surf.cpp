@@ -139,11 +139,9 @@ void FixMoveSurf::end_of_step()
   double fraction = 1.0*nelapsed / nlarge;
 
   // sort particles
-
   if (particle->exist) particle->sort();
 
   // movesurf moves surface vertices
-
   if (dim == 2) movesurf->move_lines(fraction,origlines);
   else movesurf->move_tris(fraction,origtris);
 

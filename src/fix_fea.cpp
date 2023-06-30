@@ -22,6 +22,7 @@
 #include "error.h"
 #include "surf.h"
 #include "modify.h"
+// #include "move_surf.h"
 #include "dump.h"
 #include "compute.h"
 #include "comm.h"
@@ -176,6 +177,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     }
     this->print(("meshDBstem = " + this->elmer->meshDBstem).c_str());    
 
+    this->dimension = domain->dimension;
+    if (this->dimension != 3)
+        error->all(FLERR, "Can not use fix fea with 2d simulation");
+
     // adding surf collision model needed
     // adding s_ to temperature variable, this is required
     surf_collide_args[2] = "s_" + surf_collide_args[2];
@@ -205,11 +210,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     this->print(("added surf compute with id: " + std::string(modify->compute[icompute]->id)).c_str());
 
-    // prefactor and threshold in Stefan/Boltzmann equation
-    // units of prefactor (SI) is K^4 / (watt - m^2)
-    // same in 3d vs 2d, since SPARTA treats 2d cell volume as 1 m in z
-    this->dimension = domain->dimension;
-
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
     this->print(("Number of procs: " + std::to_string(nprocs)).c_str());
@@ -235,6 +235,18 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // setting up the double converter
     double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
+
+
+    // setting moving surf
+
+    // connecting the surface is a good idea to keep it water tight
+    // so setting it to one
+    this->connectflag = 1;
+
+    // scalar_flag = 1;
+    // global_freq = 1;
+    // movesurf = new MoveSurf(sparta);
+    // movesurf->mode = 1;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -341,12 +353,12 @@ bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; 
  * writing the surface data to the file
  */
 void FixFea::end_of_step() {
-    int i,m,mask;
-    double qw;
+    int i,m;
+    double qw,*p1,*p2,*p3;
     
     // number of surface elements
     int nlocal = surf->nlocal;
-    if (this->last_nlocal != nlocal)
+    if (this->nsurf != nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
     // required to run the compute
@@ -362,26 +374,21 @@ void FixFea::end_of_step() {
 
     // adding the heat flux to the running average
     m = 0;
-    for (i = comm->me; i < nlocal; i += nprocs) {
-        if (dimension == 3) mask = surf->tris[i].mask;
-        else mask = surf->lines[i].mask;
-        if (mask & groupbit) this->qw_avg_me[i]+=array[m][icol];
+    for (i = comm->me; i < nsurf; i += nprocs) {
+        if (surf->tris[i].mask & groupbit) this->qw_avg_me[i]+=array[m][icol];
         m++;
     }
 
     // if should run elmer
     if (this->run_condition()) {
         // summing all of the heat fluxes into one vector, namely qw_avg
-        MPI_Allreduce(this->qw_avg_me, this->qw_avg, nlocal, MPI_DOUBLE, MPI_SUM, world);
-        
-        // index often used
-        int i;
+        MPI_Allreduce(this->qw_avg_me, this->qw_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
 
         // only run on the main process
         if (comm->me == 0) {
             // computing the total heat flux to test if it is less than the threshold
             double sum = 0;
-            for (i = 0; i < nlocal; i++) sum+=std::abs(qw_avg[i]);
+            for (i = 0; i < nsurf; i++) sum+=std::abs(qw_avg[i]);
 
             // if it less than the threshold, do not run elmer
             if (sum > this->threshold) {
@@ -402,7 +409,7 @@ void FixFea::end_of_step() {
                 // elmer throws exceptions if it encounters an error
                 START_TRY
                 this->print("creating boundary conditions");
-                for (int i = 0; i < nlocal; i++) {
+                for (i = 0; i < nsurf; i++) {
                     elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
                     bc->Heat_Flux = this->qw_avg[i]/this->run_every; // the average heat flux
                     this->elmer->boundary_conditions.push_back(bc);
@@ -419,6 +426,69 @@ void FixFea::end_of_step() {
                 
                 // done running so reloading temperatures
                 this->load_temperatures();
+
+                /**
+                * moving the surface
+                */
+                
+                
+
+
+                /* -------------------------------
+                 loading new surface 
+                   ------------------------------- */
+                
+                // // fraction = fraction of Nlarge represented by this timestep
+                // bigint nelapsed = update->ntimestep - ntimestep_original;
+                // double fraction = 1.0*nelapsed / nlarge;
+
+                // // sort particles
+
+                // if (particle->exist) particle->sort();
+
+                // // movesurf moves surface vertices
+
+                // if (dim == 2) movesurf->move_lines(fraction,origlines);
+                // else movesurf->move_tris(fraction,origtris);
+
+                // // assign split cell particles to parent split cell
+                // // assign surfs to grid cells
+
+                // grid->unset_neighbors();
+                // grid->remove_ghosts();
+
+                // if (grid->nsplitlocal) {
+                //     Grid::ChildCell *cells = grid->cells;
+                //     int nglocal = grid->nlocal;
+                //     for (int icell = 0; icell < nglocal; icell++)
+                //     if (cells[icell].nsplit > 1)
+                //         grid->combine_split_cell_particles(icell,1);
+                // }
+
+                // grid->clear_surf();
+
+                // grid->surf2grid(1,0);
+
+                // // re-setup owned and ghost cell info
+
+                // grid->setup_owned();
+                // grid->acquire_ghosts();
+                // grid->reset_neighbors();
+                // comm->reset_neighbors();
+
+                // // flag cells and corners as OUTSIDE or INSIDE
+
+                // grid->set_inout();
+                // grid->type_check(0);
+
+                // // remove particles as needed due to surface move
+                // // set ndeleted for scalar output
+
+                // if (particle->exist) ndeleted = movesurf->remove_particles();
+
+                // // notify all classes that store per-grid data that grid may have changed
+
+                // grid->notify_changed();
                 
                 END_TRY
 
@@ -431,7 +501,7 @@ void FixFea::end_of_step() {
 
         }
         // resetting the heat flux array
-        for (i = 0; i < nlocal; i++) this->qw_avg_me[i] = (double)0;
+        for (i = 0; i < nsurf; i++) this->qw_avg_me[i] = (double)0;
         MPI_Barrier(world);
     }
     // telling the compute to run on the next timestep
@@ -439,6 +509,208 @@ void FixFea::end_of_step() {
 }
 
 /* ---------------------------------------------------------------------- */
+
+void FixFea::move_surf() {
+    int i;
+    // sort particles
+    if (particle->exist) particle->sort();
+
+            
+    if (connectflag && groupbit != 1) connect_3d_pre();
+
+    for (i = 0; i < nsurf; i++) {
+        if (!(surf->tris[i].mask & groupbit)) continue;
+        p1 = surf->tris[i].p1;
+        p2 = surf->tris[i].p2;
+        p3 = surf->tris[i].p3;
+    }
+    
+    if (connectflag && groupbit != 1) connect_3d_post();
+
+    surf->compute_tri_normal(0);
+
+    // check that all points are still inside simulation box
+    surf->check_point_inside(0);
+
+    // assign split cell particles to parent split cell
+    // assign surfs to grid cells
+
+    grid->unset_neighbors();
+    grid->remove_ghosts();
+
+    if (grid->nsplitlocal) {
+        Grid::ChildCell *cells = grid->cells;
+        int nglocal = grid->nlocal;
+        for (int icell = 0; icell < nglocal; icell++)
+        if (cells[icell].nsplit > 1)
+            grid->combine_split_cell_particles(icell,1);
+    }
+
+    grid->clear_surf();
+
+    grid->surf2grid(1,0);
+
+    // re-setup owned and ghost cell info
+
+    grid->setup_owned();
+    grid->acquire_ghosts();
+    grid->reset_neighbors();
+    comm->reset_neighbors();
+
+    // flag cells and corners as OUTSIDE or INSIDE
+
+    grid->set_inout();
+    grid->type_check(0);
+
+    // remove particles as needed due to surface move
+    // set ndeleted for scalar output
+
+    if (particle->exist) ndeleted = movesurf->remove_particles();
+
+    // notify all classes that store per-grid data that grid may have changed
+
+    grid->notify_changed();
+}
+
+void FixFea::connect_3d_pre() {
+    // hash for corner points of moved triangles
+    // key = corner point
+    // value = global index (0 to 3*Ntri-1) of the point
+    // NOTE: could prealloc hash to correct size here
+
+    hash = new MyHash();
+
+    // add moved points to hash
+
+    double *p1,*p2,*p3;
+    OnePoint3d key;
+
+    Surf::Tri *tris = surf->tris;
+    int nsurf = surf->nsurf;
+
+    for (int i = 0; i < nsurf; i++) {
+        if (!(tris[i].mask & groupbit)) continue;
+        p1 = tris[i].p1;
+        p2 = tris[i].p2;
+        p3 = tris[i].p3;
+        key.pt[0] = p1[0]; key.pt[1] = p1[1]; key.pt[2] = p1[2];
+        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+0;
+        key.pt[0] = p2[0]; key.pt[1] = p2[1]; key.pt[2] = p2[2];
+        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+1;
+        key.pt[0] = p3[0]; key.pt[1] = p3[1]; key.pt[2] = p3[2];
+        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+2;
+    }
+}
+
+void FixFea::connect_3d_post() {
+    // check if non-moved points are in hash
+    // if so, set their coords to matching point
+    // set pselect for newly moved points so remove_particles() will work
+
+    int m,value,j,jwhich;
+    double *p[3],*q;
+    OnePoint3d key;
+
+    Surf::Tri *tris = surf->tris;
+    int nsurf = surf->nsurf;
+
+    for (int i = 0; i < nsurf; i++) {
+    if (tris[i].mask & groupbit) continue;
+    p[0] = tris[i].p1;
+    p[1] = tris[i].p2;
+    p[2] = tris[i].p3;
+
+    for (m = 0; m < 3; m++) {
+    key.pt[0] = p[m][0]; key.pt[1] = p[m][1]; key.pt[2] = p[m][2];
+    if (hash->find(key) != hash->end()) {
+    value = (*hash)[key];
+    j = value/3;
+    jwhich = value % 3;
+    if (jwhich == 0) q = tris[j].p1;
+    else if (jwhich == 1) q = tris[j].p2;
+    else q = tris[j].p3;
+    p[m][0] = q[0];
+    p[m][1] = q[1];
+    p[m][2] = q[2];
+    if (m == 0) pselect[3*i] = 1;
+    else if (m == 1) pselect[3*i+1] = 1;
+    else pselect[3*i+2] = 1;
+    }
+    }
+    }
+
+    // free the hash
+
+    delete hash;
+}
+
+
+bigint FixFea::remove_particles() {
+  int isurf,nsurf;
+  surfint *csurfs;
+
+  dim = domain->dimension;
+  Grid::ChildCell *cells = grid->cells;
+  Grid::ChildInfo *cinfo = grid->cinfo;
+  int nglocal = grid->nlocal;
+  int delflag = 0;
+
+  for (int icell = 0; icell < nglocal; icell++) {
+
+    // cell is inside surfs
+    // remove particles in case it wasn't before
+
+    if (cinfo[icell].type == INSIDE) {
+      if (cinfo[icell].count) delflag = 1;
+      particle->remove_all_from_cell(cinfo[icell].first);
+      cinfo[icell].count = 0;
+      cinfo[icell].first = -1;
+      continue;
+    }
+
+    // cell has surfs or is split
+    // if m < nsurf, loop over csurfs did not finish
+    // which means cell contains a moved surf, so delete all its particles
+
+    if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
+      nsurf = cells[icell].nsurf;
+      csurfs = cells[icell].csurfs;
+
+      int m;
+      if (dim == 2) {
+        for (m = 0; m < nsurf; m++) {
+          isurf = csurfs[m];
+          if (pselect[2*isurf]) break;
+          if (pselect[2*isurf+1]) break;
+        }
+      } else {
+        for (m = 0; m < nsurf; m++) {
+          isurf = csurfs[m];
+          if (pselect[3*isurf]) break;
+          if (pselect[3*isurf+1]) break;
+          if (pselect[3*isurf+2]) break;
+        }
+      }
+
+      if (m < nsurf) {
+        if (cinfo[icell].count) delflag = 1;
+        particle->remove_all_from_cell(cinfo[icell].first);
+        cinfo[icell].count = 0;
+        cinfo[icell].first = -1;
+      }
+    }
+
+    if (cells[icell].nsplit > 1)
+      grid->assign_split_cell_particles(icell);
+  }
+
+  int nlocal_old = particle->nlocal;
+  if (delflag) particle->compress_rebalance();
+  bigint delta = nlocal_old - particle->nlocal;
+  bigint ndeleted;
+  MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
+  return ndeleted;
+}
 
 /**
  * custom printing for this class

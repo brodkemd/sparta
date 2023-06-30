@@ -42,12 +42,17 @@ namespace SPARTA_NS {
 
         private:
             void load_temperatures();
+            void move_surf();
+            bigint remove_particles();
+            void connect_3d_pre();
+            void connect_3d_post();
             void print(const char* str, int num_indent = 1, const char* end = "\n");
             bool run_condition();
 
+
             class Compute *cqw;
             class elmer::Elmer* elmer;
-            int groupbit, nprocs, icol, tindex, run_every, last_nlocal, dimension;
+            int groupbit, nprocs, icol, tindex, run_every, nsurf, dimension, connectflag;
             double emi, threshold, *qw_avg_me, *qw_avg;
                    
     };
