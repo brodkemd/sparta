@@ -55,7 +55,6 @@
   };
 
 #else
-
   struct OnePoint2d {
     double pt[2];
 

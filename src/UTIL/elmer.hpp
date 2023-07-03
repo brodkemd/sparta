@@ -8,6 +8,7 @@
 
 namespace elmer {
     const unsigned int boundary_size = 4; // number of elements in a boundary element including id
+    const unsigned int dimension     = 3;
     const std::string indicator      = "Perm:"; // indicator for start of new timestep data section in data file
 
     // error command
@@ -793,6 +794,42 @@ namespace elmer {
             }
 
 
+            void loadNodeDataFromPostFile() {
+                std::vector<std::string> data, v;
+                std::array<double, dimension> arr;
+                std::string lines;
+                this->node_data.clear();
+    
+                std::ifstream f(this->simulation.Post_File);
+                
+                if (f.is_open()) {
+                    std::ostringstream ss;
+                    ss << f.rdbuf();
+                    lines = ss.str();
+                }
+
+                f.close();
+
+                int start = lines.find('\n', lines.find('#')+1)+1;
+                int end   = lines.find('#', lines.find('#')+1)-1;
+                lines = lines.substr(start,  end - start);
+
+                split(lines, data);
+
+                int i, j;
+                for (i = 0; i < data.size(); i++) {
+                    trim(data[i]); split(data[i], v);
+                    if (v.size() != dimension)
+                        error("node element is not correct size at element: " + std::to_string(v.size()));
+
+                    for (j = 0; j < dimension; j++)
+                        arr[j] = std::stod(v[j]);
+
+                    this->node_data.push_back(arr);
+                }
+            }
+
+
             void set(toml::handler& _h) {
                 // setting needed variables
                 _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem");
@@ -831,7 +868,8 @@ namespace elmer {
 
             std::vector<std::vector<int>> element_data;
             std::vector<double> node_temperature_data;
-            std::vector<std::array<int, elmer::boundary_size>> boundary_data;
+            std::vector<std::array<int,    elmer::boundary_size>> boundary_data;
+            std::vector<std::array<double, elmer::dimension>>     node_data;
             std::string name, exe, sif, meshDBstem, temperature_data_file, dump_directory;
             double base_temp;
 

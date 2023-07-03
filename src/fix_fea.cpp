@@ -105,6 +105,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     s.get_at_path(this->run_every,   "sparta.run_every");
     s.get_at_path(this->nevery,      "sparta.nevery");
     s.get_at_path(this->threshold,   "sparta.threshold");
+    s.get_at_path(this->connectflag, "sparta.connect");
     s.get_at_path(qwindex,           "sparta.qwindex");
     s.get_at_path(groupID,           "sparta.groupID");
     s.get_at_path(mixID,             "sparta.mixID");
@@ -182,7 +183,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->dimension = domain->dimension;
     if (this->dimension != 3)
         error->all(FLERR, "Can not use fix fea with 2d simulation");
-
+    
+    if (this->connectflag != 0 && this->connectflag != 1)
+        error->all(FLERR, "connect must be 0 or 1");
+    this->print(("Connect flag: " + std::to_string(this->connectflag)).c_str());
+    
     // adding surf collision model needed
     // adding s_ to temperature variable, this is required
     surf_collide_args[2] = "s_" + surf_collide_args[2];
@@ -221,13 +226,12 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     size = toml::vec_to_arr(surf_modify_args, arr);
     this->surf->modify_params(size, arr);
    
-    // deleting no longer needed var
-    delete [] arr;
 
     // modifying elmer variables to match sparta vairables
     this->elmer->simulation.Timestep_intervals = { this->run_every };
     this->elmer->simulation.Output_Intervals   = { this->run_every };
-    this->elmer->simulation.Output_File        =   this->elmer->temperature_data_file;
+    this->elmer->simulation.Output_File        = this->elmer->temperature_data_file;
+    this->elmer->simulation.Post_File          = this->elmer->temperature_data_file.substr(0, this->elmer->temperature_data_file.find('.')) + ".ep";
 
     // initing var
     qw_avg_me = NULL;
@@ -243,12 +247,15 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // connecting the surface is a good idea to keep it water tight
     // so setting it to one
-    this->connectflag = 1;
+    // this->connectflag = 1;
 
     // scalar_flag = 1;
     // global_freq = 1;
     // movesurf = new MoveSurf(sparta);
     // movesurf->mode = 1;
+
+    // deleting no longer needed var
+    delete [] arr;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -428,6 +435,7 @@ void FixFea::end_of_step() {
                 
                 // done running so reloading temperatures
                 this->load_temperatures();
+                this->elmer->loadNodeDataFromPostFile();
 
                 /**
                 * moving the surface
