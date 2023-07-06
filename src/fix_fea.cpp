@@ -101,18 +101,18 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     toml::handler s(arg[2]);
 
     // getting the val at the path (second input) and setting the variable (first input) to that variable
-    s.get_at_path(this->emi,         "sparta.emi");
-    s.get_at_path(this->run_every,   "sparta.run_every");
-    s.get_at_path(this->nevery,      "sparta.nevery");
-    s.get_at_path(this->threshold,   "sparta.threshold");
-    s.get_at_path(this->connectflag, "sparta.connect");
-    s.get_at_path(qwindex,           "sparta.qwindex");
-    s.get_at_path(groupID,           "sparta.groupID");
-    s.get_at_path(mixID,             "sparta.mixID");
-    s.get_at_path(customID,          "sparta.customID");
-    s.get_at_path(compute_args,      "sparta.compute");
-    s.get_at_path(surf_collide_args, "sparta.surf_collide");
-    s.get_at_path(surf_modify_args,  "sparta.surf_modify");  
+    s.get_at_path(this->emi,         "sparta.emi", true);
+    s.get_at_path(this->run_every,   "sparta.run_every", true);
+    s.get_at_path(this->nevery,      "sparta.nevery", true);
+    s.get_at_path(this->threshold,   "sparta.threshold", true);
+    s.get_at_path(this->connectflag, "sparta.connect", true);
+    s.get_at_path(qwindex,           "sparta.qwindex", true);
+    s.get_at_path(groupID,           "sparta.groupID", true);
+    s.get_at_path(mixID,             "sparta.mixID", true);
+    s.get_at_path(customID,          "sparta.customID", true);
+    s.get_at_path(compute_args,      "sparta.compute", true);
+    s.get_at_path(surf_collide_args, "sparta.surf_collide", true);
+    s.get_at_path(surf_modify_args,  "sparta.surf_modify", true);  
     
     // letting elmer handle its variable setting
     this->elmer->set(s);
@@ -120,11 +120,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     END_TRY
 
     // making sure emi is valid
-    if (emi <= 0.0 || emi > 1.0)
+    if (this->emi <= 0.0 || this->emi > 1.0)
         error->all(FLERR, "Fix fea emissivity must be > 0.0 and <= 1");
     this->print(("emi = " + std::to_string(this->emi)).c_str());
 
-    if (threshold < (double)0)
+    if (this->threshold < (double)0)
         error->all(FLERR, "Fix fea threshold must be greater than 0.0");
     this->print(("threshold = " + std::to_string(this->threshold)).c_str());
 
@@ -152,7 +152,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (igroup < 0)
         error->all(FLERR,"Fix fea group ID does not exist");
     
-    groupbit = surf->bitmask[igroup];
+    this->groupbit = surf->bitmask[igroup];
     this->print(("groupID = " + groupID).c_str());
 
     // getting the mixture
@@ -202,7 +202,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     int icompute = modify->ncompute - 1;
 
     // error checks
-    cqw = modify->compute[icompute];
+    this->cqw = modify->compute[icompute];
     if (icompute < 0)
         error->all(FLERR,"Could not find fix fea compute ID");
     if (cqw->per_surf_flag == 0)
@@ -213,7 +213,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Fix fea compute does not compute per-surf array");
     if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
         error->all(FLERR,"Fix fea compute array is accessed out-of-range");
-    icol = qwindex-1;
+    this->icol = qwindex-1;
 
     this->print(("added surf compute with id: " + std::string(modify->compute[icompute]->id)).c_str());
 
@@ -231,10 +231,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->elmer->simulation.Timestep_intervals = { this->run_every };
     this->elmer->simulation.Output_Intervals   = { this->run_every };
     this->elmer->simulation.Output_File        = this->elmer->temperature_data_file;
-    this->elmer->simulation.Post_File          = this->elmer->temperature_data_file.substr(0, this->elmer->temperature_data_file.find('.')) + ".ep";
+    // this->elmer->simulation.Post_File          = this->elmer->temperature_data_file.substr(0, this->elmer->temperature_data_file.find('.')) + ".ep";
 
     // initing var
-    qw_avg_me = NULL;
+    this->qw_avg_me = NULL;
 
     // telling the compute surf etot to run
     modify->addstep_compute_all(1);
@@ -242,17 +242,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // setting up the double converter
     double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
 
-
-    // setting moving surf
-
-    // connecting the surface is a good idea to keep it water tight
-    // so setting it to one
-    // this->connectflag = 1;
-
-    // scalar_flag = 1;
-    // global_freq = 1;
-    // movesurf = new MoveSurf(sparta);
-    // movesurf->mode = 1;
+    // initial output
+    this->ndeleted = 0;
 
     // deleting no longer needed var
     delete [] arr;
@@ -262,9 +253,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
 FixFea::~FixFea() {
     delete this->elmer;
-    memory->destroy(qw_avg_me);
-    memory->destroy(qw_avg);
-    surf->remove_custom(tindex);
+    memory->destroy(this->pselect);
+    memory->destroy(this->qw_avg_me);
+    memory->destroy(this->qw_avg);
+    surf->remove_custom(this->tindex);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -276,63 +268,19 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
 
 /* ---------------------------------------------------------------------- */
 
-/**
- * Loads temperature data from file and sets needed variables
- * Must only run on process 0 
-*/
-void FixFea::load_temperatures() {
-    // getting the number of surface elements
-    int nlocal = surf->nlocal;
-
-    START_TRY
-    // loading per node temperature data
-    this->print("loading temperatures");
-    this->elmer->loadNodeTemperatureData();
-    END_TRY
-
-    // the wall temperature variable
-    double *tvector = surf->edvec[surf->ewhich[tindex]];
-
-    // making sure everything is consistent
-    if (nlocal != this->elmer->boundary_data.size())
-        error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(nlocal) + ", size " + std::to_string(this->elmer->boundary_data.size())).c_str());
-
-    // used later
-    double avg;
-    
-    // averages values for the nodes of a surface element and sets this average to the 
-    // temperature of the surface element
-    for (int i = 0; i < this->elmer->boundary_data.size(); i++) {
-        // computes the average temperature of the nodes that make up the surface element
-        // this value is used to set the surface element temperature
-        avg = 0;
-        for (int j = 1; j < elmer::boundary_size; j++) {
-            // gets the data point corresponding to node id and adds it to the rolling sum
-            avg += this->elmer->node_temperature_data[this->elmer->boundary_data[i][j]-1];
-        }
-        // computing the average by dividing the sum by the number of points and setting the surface element
-        tvector[this->elmer->boundary_data[i][0]-1] = avg/(elmer::boundary_size - 1);
-    }
-
-    // checking to make sure all values where set to something non zero
-    for (int i = 0; i < nlocal; i++) {
-        if (tvector[i] == (double)0)
-            error->all(FLERR, "wall temperature not set correctly");
-    }
-}
-
-/* ---------------------------------------------------------------------- */
-
 void FixFea::init() {
     // number of surface elements
-    int nlocal = surf->nlocal;
-    this->nsurf = nlocal;
+    // int nlocal = surf->nlocal;
+    this->nsurf = surf->nlocal;
 
-    memory->create(this->qw_avg, nlocal, "fea:qw_avg");
-    memset(this->qw_avg, 0, nlocal*sizeof(double));
+    memory->create(this->qw_avg, this->nsurf, "fea:qw_avg");
+    memset(this->qw_avg, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->qw_avg_me, nlocal, "fea:qw_avg_me");
-    memset(this->qw_avg_me, 0, nlocal*sizeof(double));
+    memory->create(this->qw_avg_me, this->nsurf, "fea:qw_avg_me");
+    memset(this->qw_avg_me, 0, this->nsurf*sizeof(double));
+
+    memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
+    memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
     // loading the boundary data
     if (comm->me == 0) {
@@ -351,23 +299,14 @@ void FixFea::init() {
 /* ---------------------------------------------------------------------- */
 
 /**
- * Condition to run elmer on
-*/
-bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
-
-/* ---------------------------------------------------------------------- */
-
-/**
  * Runs at the end of each time step
  * writing the surface data to the file
  */
 void FixFea::end_of_step() {
     int i,m;
-    double qw,*p1,*p2,*p3;
     
     // number of surface elements
-    int nlocal = surf->nlocal;
-    if (this->nsurf != nlocal)
+    if (this->nsurf != surf->nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
     // required to run the compute
@@ -378,13 +317,10 @@ void FixFea::end_of_step() {
     }
     cqw->post_process_surf();
 
-    // getting the data from the compute
-    double **array = cqw->array_surf;
-
     // adding the heat flux to the running average
     m = 0;
     for (i = comm->me; i < nsurf; i += nprocs) {
-        if (surf->tris[i].mask & groupbit) this->qw_avg_me[i]+=array[m][icol];
+        if (surf->tris[i].mask & groupbit) this->qw_avg_me[i]+=cqw->array_surf[m][icol];
         m++;
     }
 
@@ -435,15 +371,12 @@ void FixFea::end_of_step() {
                 
                 // done running so reloading temperatures
                 this->load_temperatures();
-                this->elmer->loadNodeDataFromPostFile();
-
-                /**
-                * moving the surface
-                */
 
                 /* -------------------------------
                  loading new surface 
                    ------------------------------- */
+                this->print("moving surf");
+                this->elmer->loadNodeDataFromPostFile();
                 this->move_surf();
                 
                 
@@ -467,21 +400,92 @@ void FixFea::end_of_step() {
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Condition to run elmer on
+*/
+bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
+
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Loads temperature data from file and sets needed variables
+ * Must only run on process 0 
+*/
+void FixFea::load_temperatures() {
+
+    START_TRY
+    // loading per node temperature data
+    this->print("loading temperatures");
+    this->elmer->loadNodeTemperatureData();
+    END_TRY
+
+    // the wall temperature variable
+    double *tvector = surf->edvec[surf->ewhich[tindex]];
+
+    // making sure everything is consistent
+    if ((long unsigned int)this->nsurf != this->elmer->boundary_data.size())
+        error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(this->nsurf) + ", size " + std::to_string(this->elmer->boundary_data.size())).c_str());
+
+    // used later
+    double avg;
+    
+    // averages values for the nodes of a surface element and sets this average to the 
+    // temperature of the surface element
+    for (long unsigned int i = 0; i < this->elmer->boundary_data.size(); i++) {
+        // computes the average temperature of the nodes that make up the surface element
+        // this value is used to set the surface element temperature
+        avg = 0;
+        for (unsigned int j = 1; j < elmer::boundary_size; j++) {
+            // gets the data point corresponding to node id and adds it to the rolling sum
+            avg += this->elmer->node_temperature_data[this->elmer->boundary_data[i][j]-1];
+        }
+        // computing the average by dividing the sum by the number of points and setting the surface element
+        tvector[this->elmer->boundary_data[i][0]-1] = avg/(elmer::boundary_size - 1);
+    }
+
+    // checking to make sure all values where set to something non zero
+    for (int i = 0; i < this->nsurf; i++) {
+        if (tvector[i] == (double)0)
+            error->all(FLERR, "wall temperature not set correctly");
+    }
+}
+
+/* ---------------------------------------------------------------------- */
+
 void FixFea::move_surf() {
-    int i;
+
+    // if (this->elmer->node_data.size() != (long unsigned int)this->nsurf)
+    //     error->all(FLERR, "detected a surface change while moving the surface");
+
     // sort particles
     if (particle->exist) particle->sort();
-    if (connectflag && groupbit != 1) this->connect_3d_pre();
+    if (this->connectflag && this->groupbit != 1) this->connect_3d_pre();
 
-    // this part does the moving
-    // for (i = 0; i < nsurf; i++) {
-    //     if (!(surf->tris[i].mask & groupbit)) continue;
-    //     p1 = surf->tris[i].p1;
-    //     p2 = surf->tris[i].p2;
-    //     p3 = surf->tris[i].p3;
-    // }
+    /**** this part does the moving */
+    unsigned int i, j;
+
+    // resetting pselect
+    for (i = 0; i < (unsigned)3*this->nsurf; i++) this->pselect[i] = 0;
+
+    // moving points
+    for (i = 0; i < (unsigned)this->nsurf; i++) {
+        if (!(surf->tris[i].mask & this->groupbit)) continue;
+
+        for (j = 0; j < elmer::dimension; j++) {
+            surf->tris[i].p1[j] = this->elmer->node_data[this->elmer->boundary_data[i][1]-1][j];
+        }
+        this->pselect[3*i] = 1; // saying the first point of the triangle moved
+
+        for (j = 0; j < elmer::dimension; j++)
+            surf->tris[i].p2[j] = this->elmer->node_data[this->elmer->boundary_data[i][2]-1][j];
+        this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
+
+        for (j = 0; j < elmer::dimension; j++)
+            surf->tris[i].p3[j] = this->elmer->node_data[this->elmer->boundary_data[i][3]-1][j];
+        this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
+    }
     
-    if (connectflag && groupbit != 1) this->connect_3d_post();
+    if (this->connectflag && this->groupbit != 1) this->connect_3d_post();
 
     surf->compute_tri_normal(0);
 
@@ -496,13 +500,18 @@ void FixFea::move_surf() {
     if (grid->nsplitlocal) {
         Grid::ChildCell *cells = grid->cells;
         int nglocal = grid->nlocal;
-        for (int icell = 0; icell < nglocal; icell++)
-        if (cells[icell].nsplit > 1)
-            grid->combine_split_cell_particles(icell,1);
+        for (int icell = 0; icell < nglocal; icell++) {
+            if (cells[icell].nsplit > 1)
+                grid->combine_split_cell_particles(icell,1);
+        }
     }
 
     grid->clear_surf();
     grid->surf2grid(1,0);
+
+    // checks
+    surf->check_point_near_surf_3d();
+    surf->check_watertight_3d();
 
     // re-setup owned and ghost cell info
     grid->setup_owned();
@@ -516,11 +525,15 @@ void FixFea::move_surf() {
 
     // remove particles as needed due to surface move
     // set ndeleted for scalar output
-    if (particle->exist) ndeleted = this->remove_particles();
+    if (particle->exist) this->ndeleted = this->remove_particles();
 
     // notify all classes that store per-grid data that grid may have changed
     grid->notify_changed();
 }
+
+/* ---------------------------------------------------------------------- */
+
+double FixFea::compute_scalar() { return (double) this->ndeleted; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -529,26 +542,23 @@ void FixFea::connect_3d_pre() {
     // key = corner point
     // value = global index (0 to 3*Ntri-1) of the point
     // NOTE: could prealloc hash to correct size here
-    hash = new MyHash();
+    this->hash = new MyHash();
 
     // add moved points to hash
     double *p1,*p2,*p3;
     OnePoint3d key;
 
-    Surf::Tri *tris = surf->tris;
-    int nsurf = surf->nsurf;
-
-    for (int i = 0; i < nsurf; i++) {
-        if (!(tris[i].mask & groupbit)) continue;
-        p1 = tris[i].p1;
-        p2 = tris[i].p2;
-        p3 = tris[i].p3;
+    for (int i = 0; i < this->nsurf; i++) {
+        if (!(surf->tris[i].mask & this->groupbit)) continue;
+        p1 = surf->tris[i].p1;
+        p2 = surf->tris[i].p2;
+        p3 = surf->tris[i].p3;
         key.pt[0] = p1[0]; key.pt[1] = p1[1]; key.pt[2] = p1[2];
-        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+0;
+        if (this->hash->find(key) == this->hash->end()) (*this->hash)[key] = 3*i+0;
         key.pt[0] = p2[0]; key.pt[1] = p2[1]; key.pt[2] = p2[2];
-        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+1;
+        if (this->hash->find(key) == this->hash->end()) (*this->hash)[key] = 3*i+1;
         key.pt[0] = p3[0]; key.pt[1] = p3[1]; key.pt[2] = p3[2];
-        if (hash->find(key) == hash->end()) (*hash)[key] = 3*i+2;
+        if (this->hash->find(key) == this->hash->end()) (*this->hash)[key] = 3*i+2;
     }
 }
 
@@ -562,14 +572,13 @@ void FixFea::connect_3d_post() {
     double *p[3],*q;
     OnePoint3d key;
 
-    Surf::Tri *tris = surf->tris;
-    int nsurf = surf->nsurf;
+    // Surf::Tri *tris = surf->tris;
 
     for (int i = 0; i < nsurf; i++) {
-        if (tris[i].mask & groupbit) continue;
-        p[0] = tris[i].p1;
-        p[1] = tris[i].p2;
-        p[2] = tris[i].p3;
+        if (surf->tris[i].mask & groupbit) continue;
+        p[0] = surf->tris[i].p1;
+        p[1] = surf->tris[i].p2;
+        p[2] = surf->tris[i].p3;
 
         for (m = 0; m < 3; m++) {
             key.pt[0] = p[m][0]; key.pt[1] = p[m][1]; key.pt[2] = p[m][2];
@@ -577,9 +586,9 @@ void FixFea::connect_3d_post() {
                 value = (*hash)[key];
                 j = value/3;
                 jwhich = value % 3;
-                if (jwhich == 0) q = tris[j].p1;
-                else if (jwhich == 1) q = tris[j].p2;
-                else q = tris[j].p3;
+                if (jwhich == 0) q = surf->tris[j].p1;
+                else if (jwhich == 1) q = surf->tris[j].p2;
+                else q = surf->tris[j].p3;
                 p[m][0] = q[0];
                 p[m][1] = q[1];
                 p[m][2] = q[2];
@@ -591,14 +600,13 @@ void FixFea::connect_3d_post() {
     }
 
     // free the hash
-
     delete hash;
 }
 
 /* ---------------------------------------------------------------------- */
 
 bigint FixFea::remove_particles() {
-    int isurf,nsurf;
+    int isurf, cell_nsurf;
     surfint *csurfs;
 
     Grid::ChildCell *cells = grid->cells;
@@ -618,22 +626,22 @@ bigint FixFea::remove_particles() {
         }
 
         // cell has surfs or is split
-        // if m < nsurf, loop over csurfs did not finish
+        // if m < cell_nsurf, loop over csurfs did not finish
         // which means cell contains a moved surf, so delete all its particles
         if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
-            nsurf = cells[icell].nsurf;
+            cell_nsurf = cells[icell].nsurf;
             csurfs = cells[icell].csurfs;
 
             int m;
 
-            for (m = 0; m < nsurf; m++) {
+            for (m = 0; m < cell_nsurf; m++) {
                 isurf = csurfs[m];
                 if (pselect[3*isurf]) break;
                 if (pselect[3*isurf+1]) break;
                 if (pselect[3*isurf+2]) break;
             }
 
-            if (m < nsurf) {
+            if (m < cell_nsurf) {
                 if (cinfo[icell].count) delflag = 1;
                 particle->remove_all_from_cell(cinfo[icell].first);
                 cinfo[icell].count = 0;

@@ -7,12 +7,14 @@ def get_from_file(_file) -> dict:
 data = {}
 recurse_num = 0
 max_recurse = 10
+strict = True
 keys = {
     "HOME" : os.path.expanduser('~'),
     "PWD"  : os.getcwd()
 }
 
-def error(_msg:str): raise Exception(_msg)
+def error(_msg:str):
+    if strict: raise Exception(_msg)
 
 def get_arr(_data, _name:str):
     start_char = "["
@@ -84,9 +86,12 @@ def iter(_data):
                     for i, val in enumerate(_data[item]): _data[item][i] = str(val)
             elif isinstance(_data[item], str): _data[item] = resolve_name(_data[item])
 
-def get_at_path(_path):
-    global data
-    return get_from(data, _path)
+def get_at_path(_path, _strict):
+    global data, strict
+    strict = _strict
+    _to_return = get_from(data, _path)
+    strict = True
+    return _to_return
 
 def Main(_file):
     global data

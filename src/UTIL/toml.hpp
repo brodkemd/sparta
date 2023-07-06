@@ -4,12 +4,18 @@
 #include <string>
 #include <vector>
 #include <iomanip>
+#include <limits>
 
 #include "python_config.h"
 
 
 namespace toml {
     void error(std::string _msg) { throw _msg; }
+
+    const double noDouble   = std::numeric_limits<double>::max();
+    const int noInt         = std::numeric_limits<int>::max();
+    const char noString     = std::char_traits<char>::eof();
+    const bool noBool       = 2;
 
     int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
         const int _size = _vec.size();
@@ -53,9 +59,10 @@ namespace toml {
             }
 
             template<typename T>
-            void get_at_path(T& _var, std::string _path) {
-                this->pArgs = PyTuple_New(1);
+            void get_at_path(T& _var, std::string _path, bool _strict) {
+                this->pArgs = PyTuple_New(2);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
+                PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)_strict));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
                 this->_handle_var(_var, out, _path);
@@ -75,24 +82,36 @@ namespace toml {
             }
 
             void _handle_var(double& _var, PyObject *_src, std::string _path) {
+                if (Py_IsNone(_src))
+                    _var = noDouble;
+
                 if (!(PyFloat_Check(_src)))
                     error(_path + " is not the correct type, must be float");
                 _var = PyFloat_AsDouble(_src);
             }
 
             void _handle_var(std::string& _var, PyObject *_src, std::string _path) {
+                if (Py_IsNone(_src))
+                    _var = noString;
+
                 if (!(PyUnicode_Check(_src)))
                     error(_path + " is not the correct type, must be string");
                 _var = _PyUnicode_AsString(_src);
             }
 
             void _handle_var(int& _var, PyObject *_src, std::string _path) {
+                if (Py_IsNone(_src))
+                    _var = noInt;
+
                 if (!(PyLong_Check(_src)))
                     error(_path + " is not the correct type, must be int");
                 _var = PyLong_AsLong(_src);
             }
 
             void _handle_var(bool& _var, PyObject *_src, std::string _path) {
+                if (Py_IsNone(_src))
+                    _var = 2;
+
                 if (!(PyBool_Check(_src)))
                     error(_path + " is not the correct type, must be int");
                 

@@ -1,9 +1,10 @@
 #ifndef ELMER_H
 #define ELMER_H
 
+#include <iostream>
 #include <fstream>
 #include <array>
-#include <limits>
+
 #include "toml.hpp"
 
 namespace elmer {
@@ -51,15 +52,15 @@ namespace elmer {
 
     // left trims a string
     void ltrim(std::string& _s) {
-        int j = 0;
-        for (j; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
+        long unsigned int j;
+        for (j = 0; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(j, _s.length() - j);
     }
 
     // right trims a string
     void rtrim(std::string& _s) {
-        int j = _s.length()-1;
-        for (j; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
+        long unsigned int j;
+        for (j = _s.length()-1; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(0,  j+1);
     }
 
@@ -67,13 +68,16 @@ namespace elmer {
     void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
 
 
-    void split(std::string& _s, std::vector<std::string>& _v) {
+    void split(std::string& _s, std::vector<std::string>& _v, char sep) {
         _v.clear();
-        int last = 0, j = 0;
-        for (j; j <= _s.length(); j++) {
-            if ((_s[j] == ' ' || j == _s.length())) {
-                if (j == last) { last++; continue; }
+        long unsigned int last, j;
+        last = 0;
+        for (j = 0; j <= _s.length(); j++) {
+            if (j == _s.length()) {
                 _v.push_back(_s.substr(last, j-last));
+            } else if (_s[j] == sep) {
+                if (j != last)
+                    _v.push_back(_s.substr(last, j-last));
                 last = j+1;
             }
         }
@@ -184,7 +188,7 @@ namespace elmer {
             if (it.length() == 0) continue;
 
             // splitting the line at spaces
-            split(it, _split);
+            split(it, _split, ' ');
 
             if (_split[4] != (std::string)"303") 
                 error("element is not a triangle in boundary file at line: " + std::to_string(count));
@@ -197,7 +201,7 @@ namespace elmer {
                 error("too many boundary elements to assign at line: " + std::to_string(count));
 
             // adding the data
-            for (int i = 0; i < boundary_size; i++)
+            for (unsigned int i = 0; i < boundary_size; i++)
                 arr[i] = std::stoi(_split[i]);
 
             // adding the data to the class vector
@@ -290,7 +294,7 @@ namespace elmer {
                     _buf << (_tab + _name + sep);
 
 
-                for (int i = 0; i < (_var.size() - 1); i++){
+                for (long unsigned int i = 0; i < (_var.size() - 1); i++){
                     _varToString(_temp, _var[i]);
                     _buf<<(_temp + " ");
                 }
@@ -313,9 +317,9 @@ namespace elmer {
             std::string Include_Path, Results_Directory;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Mesh_DB,           "elmer.header.Mesh_DB");
-                _h.get_at_path(Include_Path,      "elmer.header.Include_Path");
-                _h.get_at_path(Results_Directory, "elmer.header.Results_Directory");
+                _h.get_at_path(Mesh_DB,           "elmer.header.Mesh_DB", true);
+                _h.get_at_path(Include_Path,      "elmer.header.Include_Path", true);
+                _h.get_at_path(Results_Directory, "elmer.header.Results_Directory", true);
             }
 
             void join(std::ofstream& _buf) {
@@ -343,12 +347,12 @@ namespace elmer {
 
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Gravity,                 "elmer.constants.Gravity");
-                _h.get_at_path(Stefan_Boltzmann,        "elmer.constants.Stefan_Boltzmann");
-                _h.get_at_path(Permittivity_of_Vacuum,  "elmer.constants.Permittivity_of_Vacuum");
-                _h.get_at_path(Permeability_of_Vacuum,  "elmer.constants.Permeability_of_Vacuum");
-                _h.get_at_path(Boltzmann_Constant,      "elmer.constants.Boltzmann_Constant");
-                _h.get_at_path(Unit_Charge,             "elmer.constants.Unit_Charge");
+                _h.get_at_path(Gravity,                 "elmer.constants.Gravity", true);
+                _h.get_at_path(Stefan_Boltzmann,        "elmer.constants.Stefan_Boltzmann", true);
+                _h.get_at_path(Permittivity_of_Vacuum,  "elmer.constants.Permittivity_of_Vacuum", true);
+                _h.get_at_path(Permeability_of_Vacuum,  "elmer.constants.Permeability_of_Vacuum", true);
+                _h.get_at_path(Boltzmann_Constant,      "elmer.constants.Boltzmann_Constant", true);
+                _h.get_at_path(Unit_Charge,             "elmer.constants.Unit_Charge", true);
             }
 
 
@@ -381,19 +385,19 @@ namespace elmer {
             
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Max_Output_Level,            "elmer.simulation.Max_Output_Level");
-                _h.get_at_path(Coordinate_System,           "elmer.simulation.Coordinate_System");
-                _h.get_at_path(Coordinate_Mapping,          "elmer.simulation.Coordinate_Mapping");
-                _h.get_at_path(Simulation_Type,             "elmer.simulation.Simulation_Type");
-                _h.get_at_path(Steady_State_Max_Iterations, "elmer.simulation.Steady_State_Max_Iterations");
-                _h.get_at_path(Output_Intervals,            "elmer.simulation.Output_Intervals");
-                _h.get_at_path(Timestep_intervals,          "elmer.simulation.Timestep_intervals");
-                _h.get_at_path(Timestep_Sizes,              "elmer.simulation.Timestep_Sizes");
-                _h.get_at_path(Timestepping_Method,         "elmer.simulation.Timestepping_Method");
-                _h.get_at_path(BDF_Order,                   "elmer.simulation.BDF_Order");
-                _h.get_at_path(Solver_Input_File,           "elmer.simulation.Solver_Input_File");
-                _h.get_at_path(Output_File,                 "elmer.simulation.Output_File");
-                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File");
+                _h.get_at_path(Max_Output_Level,            "elmer.simulation.Max_Output_Level", true);
+                _h.get_at_path(Coordinate_System,           "elmer.simulation.Coordinate_System", true);
+                _h.get_at_path(Coordinate_Mapping,          "elmer.simulation.Coordinate_Mapping", true);
+                _h.get_at_path(Simulation_Type,             "elmer.simulation.Simulation_Type", true);
+                _h.get_at_path(Steady_State_Max_Iterations, "elmer.simulation.Steady_State_Max_Iterations", true);
+                _h.get_at_path(Output_Intervals,            "elmer.simulation.Output_Intervals", true);
+                _h.get_at_path(Timestep_intervals,          "elmer.simulation.Timestep_intervals", true);
+                _h.get_at_path(Timestep_Sizes,              "elmer.simulation.Timestep_Sizes", true);
+                _h.get_at_path(Timestepping_Method,         "elmer.simulation.Timestepping_Method", true);
+                _h.get_at_path(BDF_Order,                   "elmer.simulation.BDF_Order", true);
+                _h.get_at_path(Solver_Input_File,           "elmer.simulation.Solver_Input_File", true);
+                _h.get_at_path(Output_File,                 "elmer.simulation.Output_File", true);
+                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File", true);
             }
 
 
@@ -417,12 +421,12 @@ namespace elmer {
     };
 
     /**
-     * handles elmer solver section
+     * handles elmer thermal_solver section
     */
-    class Solver : public Base {
+    class Thermal_Solver : public Base {
         public:
-            Solver() : Base() {
-                this->name = "Solver";
+            Thermal_Solver() : Base() {
+                this->name = "solver";
                 sep = " = ";
                 id = 1;
                 this->name += (" " + std::to_string(id));
@@ -430,33 +434,107 @@ namespace elmer {
 
             std::vector<std::string> Procedure;
             std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
-            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor;
-            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged;
+            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
+            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
             double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
 
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Equation,                                 "elmer.solver.Equation");
-                _h.get_at_path(Procedure,                                "elmer.solver.Procedure");
-                _h.get_at_path(Variable,                                 "elmer.solver.Variable");
-                _h.get_at_path(Exec_Solver,                              "elmer.solver.Exec_Solver");
-                _h.get_at_path(Stabilize,                                "elmer.solver.Stabilize");
-                _h.get_at_path(Optimize_Bandwidth,                       "elmer.solver.Optimize_Bandwidth");
-                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.solver.Steady_State_Convergence_Tolerance");
-                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.solver.Nonlinear_System_Convergence_Tolerance");
-                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.solver.Nonlinear_System_Max_Iterations");
-                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.solver.Nonlinear_System_Newton_After_Iterations");
-                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.solver.Nonlinear_System_Newton_After_Tolerance");
-                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.solver.Nonlinear_System_Relaxation_Factor");
-                _h.get_at_path(Linear_System_Solver,                     "elmer.solver.Linear_System_Solver");
-                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.solver.Linear_System_Iterative_Method");
-                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.solver.Linear_System_Max_Iterations");
-                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.solver.Linear_System_Convergence_Tolerance");
-                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.solver.BiCGstabl_polynomial_degree");
-                _h.get_at_path(Linear_System_Preconditioning,            "elmer.solver.Linear_System_Preconditioning");
-                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.solver.Linear_System_ILUT_Tolerance");
-                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.solver.Linear_System_Abort_Not_Converged");
-                _h.get_at_path(Linear_System_Residual_Output,            "elmer.solver.Linear_System_Residual_Output");
+                _h.get_at_path(Equation,                                 "elmer.thermal_solver.Equation", true);
+                _h.get_at_path(Procedure,                                "elmer.thermal_solver.Procedure", true);
+                _h.get_at_path(Variable,                                 "elmer.thermal_solver.Variable", true);
+                _h.get_at_path(Exec_Solver,                              "elmer.thermal_solver.Exec_Solver", true);
+                _h.get_at_path(Stabilize,                                "elmer.thermal_solver.Stabilize", true);
+                _h.get_at_path(Optimize_Bandwidth,                       "elmer.thermal_solver.Optimize_Bandwidth", true);
+                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.thermal_solver.Steady_State_Convergence_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.thermal_solver.Nonlinear_System_Convergence_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.thermal_solver.Nonlinear_System_Max_Iterations", true);
+                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.thermal_solver.Nonlinear_System_Newton_After_Iterations", true);
+                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.thermal_solver.Nonlinear_System_Newton_After_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.thermal_solver.Nonlinear_System_Relaxation_Factor", true);
+                _h.get_at_path(Linear_System_Solver,                     "elmer.thermal_solver.Linear_System_Solver", true);
+                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.thermal_solver.Linear_System_Iterative_Method", true);
+                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.thermal_solver.Linear_System_Max_Iterations", true);
+                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.thermal_solver.Linear_System_Convergence_Tolerance", true);
+                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.thermal_solver.BiCGstabl_polynomial_degree", true);
+                _h.get_at_path(Linear_System_Preconditioning,            "elmer.thermal_solver.Linear_System_Preconditioning", true);
+                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.thermal_solver.Linear_System_ILUT_Tolerance", true);
+                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.thermal_solver.Linear_System_Abort_Not_Converged", true);
+                _h.get_at_path(Linear_System_Residual_Output,            "elmer.thermal_solver.Linear_System_Residual_Output", true);
+            }
+
+
+            void join(std::ofstream& _buf) {
+                _buf << (name + "\n");
+                varToString(_buf, "Equation",                                  Equation);
+                varToString(_buf, "Procedure",                                 Procedure, false);
+                varToString(_buf, "Variable",                                  Variable);
+                varToString(_buf, "Exec Solver",                               Exec_Solver);
+                varToString(_buf, "Stabilize",                                 Stabilize);
+                varToString(_buf, "Optimize Bandwidth",                        Optimize_Bandwidth);
+                varToString(_buf, "Steady State Convergence Tolerance",        Steady_State_Convergence_Tolerance);
+                varToString(_buf, "Nonlinear System Convergence Tolerance",    Nonlinear_System_Convergence_Tolerance);
+                varToString(_buf, "Nonlinear System Max Iterations",           Nonlinear_System_Max_Iterations);
+                varToString(_buf, "Nonlinear System Newton After Iterations",  Nonlinear_System_Newton_After_Iterations);
+                varToString(_buf, "Nonlinear System Newton After Tolerance",   Nonlinear_System_Newton_After_Tolerance);
+                varToString(_buf, "Nonlinear System Relaxation Factor",        Nonlinear_System_Relaxation_Factor);
+                varToString(_buf, "Linear System Solver",                      Linear_System_Solver);
+                varToString(_buf, "Linear System Iterative Method",            Linear_System_Iterative_Method);
+                varToString(_buf, "Linear System Max Iterations",              Linear_System_Max_Iterations);
+                varToString(_buf, "Linear System Convergence Tolerance",       Linear_System_Convergence_Tolerance);
+                varToString(_buf, "BiCGstabl polynomial degree",               BiCGstabl_polynomial_degree);
+                varToString(_buf, "Linear System Preconditioning",             Linear_System_Preconditioning);
+                varToString(_buf, "Linear System ILUT Tolerance",              Linear_System_ILUT_Tolerance);
+                varToString(_buf, "Linear System Abort Not Converged",         Linear_System_Abort_Not_Converged);
+                varToString(_buf, "Linear System Residual Output",             Linear_System_Residual_Output);
+                _buf<<(_end + "\n");
+            }
+    };
+
+    /**
+     * handles elmer thermal_solver section
+    */
+    class Elastic_Solver : public Base {
+        public:
+            Elastic_Solver() : Base() {
+                this->name = "solver";
+                sep = " = ";
+                id = 2;
+                this->name += (" " + std::to_string(id));
+            }
+
+            std::vector<std::string> Procedure;
+            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
+            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
+            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
+            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
+
+
+            void set(toml::handler& _h) {
+                _h.get_at_path(Equation,                                 "elmer.elastic_solver.Equation", true);
+                _h.get_at_path(Procedure,                                "elmer.elastic_solver.Procedure", true);
+                _h.get_at_path(Calculate_Principal,                      "elmer.elastic_solver.Calculate_Principal", true);
+                _h.get_at_path(Calculate_Stresses,                       "elmer.elastic_solver.Calculate_Stresses", true);
+                _h.get_at_path(Variable,                                 "elmer.elastic_solver.Variable", true);
+                _h.get_at_path(Exec_Solver,                              "elmer.elastic_solver.Exec_Solver", true);
+                _h.get_at_path(Stabilize,                                "elmer.elastic_solver.Stabilize", true);
+                _h.get_at_path(Optimize_Bandwidth,                       "elmer.elastic_solver.Optimize_Bandwidth", true);
+                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.elastic_solver.Steady_State_Convergence_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.elastic_solver.Nonlinear_System_Convergence_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.elastic_solver.Nonlinear_System_Max_Iterations", true);
+                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.elastic_solver.Nonlinear_System_Newton_After_Iterations", true);
+                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.elastic_solver.Nonlinear_System_Newton_After_Tolerance", true);
+                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.elastic_solver.Nonlinear_System_Relaxation_Factor", true);
+                _h.get_at_path(Linear_System_Solver,                     "elmer.elastic_solver.Linear_System_Solver", true);
+                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.elastic_solver.Linear_System_Iterative_Method", true);
+                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.elastic_solver.Linear_System_Max_Iterations", true);
+                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.elastic_solver.Linear_System_Convergence_Tolerance", true);
+                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.elastic_solver.BiCGstabl_polynomial_degree", true);
+                _h.get_at_path(Linear_System_Preconditioning,            "elmer.elastic_solver.Linear_System_Preconditioning", true);
+                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.elastic_solver.Linear_System_ILUT_Tolerance", true);
+                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.elastic_solver.Linear_System_Abort_Not_Converged", true);
+                _h.get_at_path(Linear_System_Residual_Output,            "elmer.elastic_solver.Linear_System_Residual_Output", true);
+                _h.get_at_path(Linear_System_Precondition_Recompute,     "elmer.elastic_solver.Linear_System_Precondition_Recompute", true);
             }
 
 
@@ -502,7 +580,7 @@ namespace elmer {
             std::vector<int> Active_Solvers;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers");
+                _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers", true);
             }
 
             void join(std::ofstream& _buf) {
@@ -528,13 +606,13 @@ namespace elmer {
             double Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Poisson_ratio,               "elmer.material.Poisson_ratio");
-                _h.get_at_path(Heat_Capacity,               "elmer.material.Heat_Capacity");
-                _h.get_at_path(Density,                     "elmer.material.Density");
-                _h.get_at_path(Youngs_modulus,              "elmer.material.Youngs_modulus");
-                _h.get_at_path(Heat_expansion_Coefficient,  "elmer.material.Heat_expansion_Coefficient");
-                _h.get_at_path(Sound_speed,                 "elmer.material.Sound_speed");
-                _h.get_at_path(Heat_Conductivity,           "elmer.material.Heat_Conductivity");
+                _h.get_at_path(Poisson_ratio,               "elmer.material.Poisson_ratio", true);
+                _h.get_at_path(Heat_Capacity,               "elmer.material.Heat_Capacity", true);
+                _h.get_at_path(Density,                     "elmer.material.Density", true);
+                _h.get_at_path(Youngs_modulus,              "elmer.material.Youngs_modulus", true);
+                _h.get_at_path(Heat_expansion_Coefficient,  "elmer.material.Heat_expansion_Coefficient", true);
+                _h.get_at_path(Sound_speed,                 "elmer.material.Sound_speed", true);
+                _h.get_at_path(Heat_Conductivity,           "elmer.material.Heat_Conductivity", true);
             }
 
             void join(std::ofstream& _buf) {
@@ -634,12 +712,13 @@ namespace elmer {
 
         public:
             Elmer() {
-                this->header     = Header();
-                this->simulation = Simulation();
-                this->constants  = Constants();
-                this->equation   = Equation();
-                this->material   = Material();
-                this->solver     = Solver();
+                this->header         = Header();
+                this->simulation     = Simulation();
+                this->constants      = Constants();
+                this->equation       = Equation();
+                this->material       = Material();
+                this->thermal_solver = Thermal_Solver();
+                this->elastic_solver = Elastic_Solver();
 
                 // setting up the double converter
                 double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
@@ -666,20 +745,21 @@ namespace elmer {
                 header.join(_buf);
                 simulation.join(_buf);
                 constants.join(_buf);
-                solver.join(_buf);
+                thermal_solver.join(_buf);
+                elastic_solver.join(_buf);
                 equation.join(_buf);
                 material.join(_buf);
             }
 
 
             void join_conditions(std::ofstream& _buf) {
-                for (int i = 0; i < this->bodys.size(); i++)
+                for (long unsigned int i = 0; i < this->bodys.size(); i++)
                     this->bodys[i]->join(_buf);
 
-                for (int i = 0; i < this->initial_conditions.size(); i++)
+                for (long unsigned int i = 0; i < this->initial_conditions.size(); i++)
                     this->initial_conditions[i]->join(_buf);
 
-                for (int i = 0; i < this->boundary_conditions.size(); i++)
+                for (long unsigned int i = 0; i < this->boundary_conditions.size(); i++)
                     this->boundary_conditions[i]->join(_buf);
             }
 
@@ -712,7 +792,7 @@ namespace elmer {
                 this->bodys.clear();
                 // averages values for the nodes of a surface element and sets this average to the 
                 // temperature of the surface element
-                for (int i = 0; i < this->element_data.size(); i++) {
+                for (long unsigned int i = 0; i < this->element_data.size(); i++) {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
                     avg = 0;
@@ -727,7 +807,7 @@ namespace elmer {
                     // surface element
                     Body* _body = new Body(i+1);
                     _body->Initial_condition = i+1;
-                    _body->Target_Bodies = {i+1};
+                    _body->Target_Bodies = {(int)i+1};
                     Initial_Condition* _ic = new Initial_Condition(i+1);
                     _ic->Temperature = avg;
 
@@ -779,13 +859,13 @@ namespace elmer {
                     if (it.length() == 0) continue;
 
                     // splitting the line at spaces
-                    split(it, _split);
+                    split(it, _split, ' ');
 
                     // getting rid of stuff I do not need
                     _split.erase(_split.begin() + 1, _split.begin() + 3);
 
                     // adding the data
-                    for (int i = 1; i < _split.size(); i++)
+                    for (long unsigned int i = 1; i < _split.size(); i++)
                         arr.push_back(std::stoi(_split[i]));
 
                     // adding the data to the class vector
@@ -800,7 +880,7 @@ namespace elmer {
                 std::string lines;
                 this->node_data.clear();
     
-                std::ifstream f(this->simulation.Post_File);
+                std::ifstream f(this->node_data_file);
                 
                 if (f.is_open()) {
                     std::ostringstream ss;
@@ -814,13 +894,14 @@ namespace elmer {
                 int end   = lines.find('#', lines.find('#')+1)-1;
                 lines = lines.substr(start,  end - start);
 
-                split(lines, data);
+                split(lines, data, '\n');
 
-                int i, j;
+                long unsigned int i, j;
                 for (i = 0; i < data.size(); i++) {
-                    trim(data[i]); split(data[i], v);
+                    // std::cout << data[i] << "\n";
+                    trim(data[i]); split(data[i], v, ' ');
                     if (v.size() != dimension)
-                        error("node element is not correct size at element: " + std::to_string(v.size()));
+                        error("node element is not correct size at element: " + std::to_string(v.size()) + ", has size: " + std::to_string(v.size()));
 
                     for (j = 0; j < dimension; j++)
                         arr[j] = std::stod(v[j]);
@@ -832,12 +913,13 @@ namespace elmer {
 
             void set(toml::handler& _h) {
                 // setting needed variables
-                _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem");
-                _h.get_at_path(this->exe,                   "elmer.exe");
-                _h.get_at_path(this->sif,                   "elmer.sif");
-                _h.get_at_path(this->base_temp,             "elmer.base_temp");
-                _h.get_at_path(this->temperature_data_file, "elmer.temperature_data_file");
-                _h.get_at_path(this->dump_directory,        "elmer.dump_directory");
+                _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem",     true);
+                _h.get_at_path(this->exe,                   "elmer.exe", true);
+                _h.get_at_path(this->sif,                   "elmer.sif", true);
+                _h.get_at_path(this->base_temp,             "elmer.base_temp", true);
+                _h.get_at_path(this->temperature_data_file, "elmer.temperature_data_file", true);
+                _h.get_at_path(this->dump_directory,        "elmer.dump_directory", true);
+                _h.get_at_path(this->node_data_file,        "elmer.node_data_file", true);
 
                 // each elmer section sets its own variables, so passing it the data structure
                 this->header.set(_h);
@@ -845,7 +927,8 @@ namespace elmer {
                 this->constants.set(_h);
                 this->equation.set(_h);
                 this->material.set(_h);
-                this->solver.set(_h);
+                this->thermal_solver.set(_h);
+                this->elastic_solver.set(_h);
             }
 
 
@@ -870,15 +953,16 @@ namespace elmer {
             std::vector<double> node_temperature_data;
             std::vector<std::array<int,    elmer::boundary_size>> boundary_data;
             std::vector<std::array<double, elmer::dimension>>     node_data;
-            std::string name, exe, sif, meshDBstem, temperature_data_file, dump_directory;
+            std::string name, exe, sif, meshDBstem, temperature_data_file, dump_directory, node_data_file;
             double base_temp;
 
-            Header     header;
-            Simulation simulation;
-            Constants  constants;
-            Solver     solver;
-            Equation   equation;
-            Material   material;
+            Header          header;
+            Simulation      simulation;
+            Constants       constants;
+            Thermal_Solver  thermal_solver;
+            Elastic_Solver  elastic_solver;
+            Equation        equation;
+            Material        material;
             std::vector<Body*>               bodys;
             std::vector<Initial_Condition*>  initial_conditions;
             std::vector<Boundary_Condition*> boundary_conditions;

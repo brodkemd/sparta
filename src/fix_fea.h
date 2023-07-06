@@ -41,6 +41,7 @@ namespace SPARTA_NS {
             int setmask();
             virtual void init();
             virtual void end_of_step();
+            virtual double compute_scalar();
 
         private:
             void load_temperatures();
