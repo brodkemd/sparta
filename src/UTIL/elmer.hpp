@@ -1,706 +1,17 @@
 #ifndef ELMER_H
 #define ELMER_H
 
-#include <iostream>
-#include <fstream>
-#include <array>
+#include "elmer_classes.hpp"
 
-#include "toml.hpp"
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+    static const char SEP = '\\';
+#else
+    static const char SEP = '/';
+#endif
 
 namespace elmer {
     const unsigned int boundary_size = 4; // number of elements in a boundary element including id
     const unsigned int dimension     = 3;
-    const std::string indicator      = "Perm:"; // indicator for start of new timestep data section in data file
-
-    // error command
-    // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
-    void error(std::string _msg) { throw _msg; }
-
-    // used in the EXEC function below, represents data returned from a system command
-    struct CommandResult { std::string output; int exitstatus; };
-
-
-    /**
-     * Execute system command and get STDOUT result.
-     * Regular system() only gives back exit status, this gives back output as well.
-     * @param command system command to execute
-     * @return commandResult containing STDOUT (not stderr) output & exitstatus
-     * of command. Empty if command failed (or has no output). If you want stderr,
-     * use shell redirection (2&>1).
-     */
-    static CommandResult EXEC(const std::string &command) {
-        int exitcode = 0;
-        std::array<char, 1048576> buffer {};
-        std::string result;
-
-        FILE *pipe = popen(command.c_str(), "r");
-        if (pipe == nullptr) {
-            throw std::runtime_error("popen() failed!");
-        }
-        try {
-            std::size_t bytesread;
-            while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                result += std::string(buffer.data(), bytesread);
-            }
-        } catch (...) {
-            pclose(pipe);
-            error("unhandled exception occured");
-        }
-        exitcode = pclose(pipe);
-        return CommandResult{result, exitcode};
-    }
-
-    // left trims a string
-    void ltrim(std::string& _s) {
-        long unsigned int j;
-        for (j = 0; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
-        _s = _s.substr(j, _s.length() - j);
-    }
-
-    // right trims a string
-    void rtrim(std::string& _s) {
-        long unsigned int j;
-        for (j = _s.length()-1; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
-        _s = _s.substr(0,  j+1);
-    }
-
-    // trims a string from right and left
-    void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
-
-
-    void split(std::string& _s, std::vector<std::string>& _v, char sep) {
-        _v.clear();
-        long unsigned int last, j;
-        last = 0;
-        for (j = 0; j <= _s.length(); j++) {
-            if (j == _s.length()) {
-                _v.push_back(_s.substr(last, j-last));
-            } else if (_s[j] == sep) {
-                if (j != last)
-                    _v.push_back(_s.substr(last, j-last));
-                last = j+1;
-            }
-        }
-    }
-
-
-    /**
-     * erases the file at the path inputted
-    */ 
-    void eraseFile(std::string filename) {
-        std::ofstream ofs;
-        ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
-        if (!(ofs.is_open())) error(filename + " did not open");
-        ofs.close();
-    }
-
-    /**
-     * writes the inputted string to file at the path inputted
-    */ 
-    void writeFile(std::string filename, std::string& lines) {
-        std::ofstream out(filename);
-        if (!(out.is_open())) error(filename + " did not open");
-        out << lines;
-        out.close();
-    }
-
-    /**
-     * counts the number of lines in the file at the path inputted
-    */ 
-    int count_lines_in_file(std::string _file) {
-        int number_of_lines = 0;
-        std::string line;
-        std::ifstream myfile(_file);
-
-        while (std::getline(myfile, line)) ++number_of_lines;
-        return number_of_lines;
-    }
-
-    /**
-     * reads the contents of the file at the path inputted into the inputted
-     * vector, this function is designed to read the data file
-    */ 
-    void readDataFile(std::string filename, std::vector<std::string>& lines) {
-        std::ifstream myfile(filename);
-        if (!(myfile.is_open())) error(filename + " did not open");
-
-        std::string line;
-        while (std::getline(myfile, line)) {
-            if (line.length() >= indicator.length()) {
-                // resets the vector if it detects a new indicator, this allows it to get only the new data
-                if (line.substr(0, indicator.length()) == indicator){
-                    lines.clear();
-                    continue;
-                }
-            }
-            lines.push_back(line + "\n");
-        }
-        myfile.close();
-    }
-
-    /**
-     * reads the contents of the file at the path inputted into the inputted
-     * vector
-    */ 
-    void readFile(std::string fileName, std::vector<std::string>& lines) {
-        std::ifstream myfile(fileName);
-        std::string line;
-        while (std::getline(myfile, line)) {
-            lines.push_back(line + "\n");
-        }
-        myfile.close();
-    }
-
-    /**
-     * Gets the latest data for each node from the inputted file
-    */
-    void getLatestNodeData(std::string filename, std::vector<double>& data) {
-        std::vector<std::string> lines;
-
-        data.clear();
-
-        // reads the data file
-        readDataFile(filename, lines);
-
-        for (std::string it : lines) {
-            trim(it);
-            // if the line only has one thing in it
-            if (it.find(" ") == std::string::npos) {
-                // convert to double and add to list
-                data.push_back(std::stod(it));
-            }
-        }
-    }
-
-    /**
-     * Loads the boundary data from the inputted file into the vector
-    */
-    void getBoundaryData(std::string filename, std::vector<std::array<int, boundary_size>>& data) {
-        std::vector<std::string> lines, _split;
-        std::array<int, boundary_size> arr;
-        data.clear();
-
-        readFile(filename, lines);
-
-        int count = 1;
-        for (std::string it : lines) {
-            trim(it);
-            if (it.length() == 0) continue;
-
-            // splitting the line at spaces
-            split(it, _split, ' ');
-
-            if (_split[4] != (std::string)"303") 
-                error("element is not a triangle in boundary file at line: " + std::to_string(count));
-
-            // getting rid of stuff I do not need
-            _split.erase(_split.begin()+1, _split.begin() + 5);
-
-            // catching errors
-            if (_split.size() != boundary_size)
-                error("too many boundary elements to assign at line: " + std::to_string(count));
-
-            // adding the data
-            for (unsigned int i = 0; i < boundary_size; i++)
-                arr[i] = std::stoi(_split[i]);
-
-            // adding the data to the class vector
-            data.push_back(arr);
-            count++;
-        }
-    }
-
-    /**
-     * Base class that all elmer sections inherit from
-    */
-    class Base {
-        protected:
-            std::string name, sep;
-
-            // tab in the file
-            std::string _tab = "  ";
-
-            // ends the section
-            std::string _end = "End";
-            int id;
-
-            std::ostringstream double_converter;
-
-            Base() {
-                // setting up the double converter
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
-            }
-
-        private:
-            /**
-             * these functions convert the inputted var into a string
-            */
-            void _varToString(std::string& _buf, std::string _var) {
-                 _buf = "\""+_var+"\"";
-            }
-
-            void _varToString(std::string& _buf, double _var) {
-                double_converter.str("");
-                double_converter << _var;
-                _buf = double_converter.str();
-            }
-
-            void _varToString(std::string& _buf, int _var) {
-                _buf = std::to_string(_var);
-            }
-
-            void _varToString(std::string& _buf, bool _var) {
-                if (_var) _buf = "True";
-                else _buf = "False";
-            }
-
-        public:
-            // set function, this is overriden
-            virtual void set(toml::handler& _h) { return; }
-
-            /**
-             * these functions are outward facing and they build elmer file
-             * lines from the inputs
-            */ 
-            void varToString(std::ofstream& _buf, std::string _name, std::string _var) {
-                _buf << (_tab + _name + sep + "\""+_var+"\"" + "\n");
-            }
-
-            void varToString(std::ofstream& _buf, std::string _name, double _var) {
-                double_converter.str("");
-                double_converter << _var;
-                _buf << (_tab + _name + sep + double_converter.str() + "\n");
-            }
-
-            void varToString(std::ofstream& _buf, std::string _name, int _var) {
-                _buf << (_tab + _name + sep + std::to_string(_var) + "\n");
-            }
-
-            void varToString(std::ofstream& _buf, std::string _name, bool _var) {
-                if (_var) _buf << (_tab + _name + sep + "True" + "\n");
-                else      _buf << (_tab + _name + sep + "False" + "\n");
-            }
-
-            // for vectors
-            template<typename T>
-            void varToString(std::ofstream& _buf, std::string _name, std::vector<T> _var, bool include_count = true) {
-
-                if (_var.size() == 0) return;
-
-                std::string _temp;
-                if (include_count)
-                    _buf << (_tab + _name + "(" + std::to_string(_var.size()) + ")" + sep);
-                else 
-                    _buf << (_tab + _name + sep);
-
-
-                for (long unsigned int i = 0; i < (_var.size() - 1); i++){
-                    _varToString(_temp, _var[i]);
-                    _buf<<(_temp + " ");
-                }
-                _varToString(_temp, _var[_var.size() - 1]);
-                _buf << (_temp + "\n");
-            }
-    };
-
-    /**
-     * handles elmer header section
-    */
-    class Header : public Base {
-        public:
-            Header() : Base() {
-                this->name = "Header";
-                sep = " ";
-            }
-
-            std::vector<std::string> Mesh_DB;
-            std::string Include_Path, Results_Directory;
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Mesh_DB,           "elmer.header.Mesh_DB", true);
-                _h.get_at_path(Include_Path,      "elmer.header.Include_Path", true);
-                _h.get_at_path(Results_Directory, "elmer.header.Results_Directory", true);
-            }
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                // false tells it to not put array length in array definition in file
-                varToString(_buf, "Mesh DB",           Mesh_DB, false);
-                varToString(_buf, "Include Path",      Include_Path);
-                varToString(_buf, "Results Directory", Results_Directory);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer constants section
-    */
-    class Constants : public Base {
-        public:
-            Constants() : Base() {
-                this->name = "Constants";
-                sep = " = ";
-            }
-
-            std::vector<double> Gravity;
-            double Stefan_Boltzmann, Permittivity_of_Vacuum, Permeability_of_Vacuum, Boltzmann_Constant, Unit_Charge;
-
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Gravity,                 "elmer.constants.Gravity", true);
-                _h.get_at_path(Stefan_Boltzmann,        "elmer.constants.Stefan_Boltzmann", true);
-                _h.get_at_path(Permittivity_of_Vacuum,  "elmer.constants.Permittivity_of_Vacuum", true);
-                _h.get_at_path(Permeability_of_Vacuum,  "elmer.constants.Permeability_of_Vacuum", true);
-                _h.get_at_path(Boltzmann_Constant,      "elmer.constants.Boltzmann_Constant", true);
-                _h.get_at_path(Unit_Charge,             "elmer.constants.Unit_Charge", true);
-            }
-
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Gravity",                Gravity);
-                varToString(_buf, "Stefan Boltzmann",       Stefan_Boltzmann);
-                varToString(_buf, "Permittivity of Vacuum", Permittivity_of_Vacuum);
-                varToString(_buf, "Permeability of Vacuum", Permeability_of_Vacuum);
-                varToString(_buf, "Boltzmann Constant",     Boltzmann_Constant);
-                varToString(_buf, "Unit Charge",            Unit_Charge);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer simulation section
-    */
-    class Simulation : public Base {
-        public:
-            Simulation() : Base() {
-                this->name = "Simulation";
-                sep = " = ";
-            }
-
-            int Max_Output_Level, Steady_State_Max_Iterations, BDF_Order;
-            std::string Coordinate_System, Simulation_Type, Timestepping_Method, Solver_Input_File, Output_File,Post_File;
-            std::vector<int> Coordinate_Mapping, Output_Intervals, Timestep_intervals;
-            std::vector<double> Timestep_Sizes;
-            
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Max_Output_Level,            "elmer.simulation.Max_Output_Level", true);
-                _h.get_at_path(Coordinate_System,           "elmer.simulation.Coordinate_System", true);
-                _h.get_at_path(Coordinate_Mapping,          "elmer.simulation.Coordinate_Mapping", true);
-                _h.get_at_path(Simulation_Type,             "elmer.simulation.Simulation_Type", true);
-                _h.get_at_path(Steady_State_Max_Iterations, "elmer.simulation.Steady_State_Max_Iterations", true);
-                _h.get_at_path(Output_Intervals,            "elmer.simulation.Output_Intervals", true);
-                _h.get_at_path(Timestep_intervals,          "elmer.simulation.Timestep_intervals", true);
-                _h.get_at_path(Timestep_Sizes,              "elmer.simulation.Timestep_Sizes", true);
-                _h.get_at_path(Timestepping_Method,         "elmer.simulation.Timestepping_Method", true);
-                _h.get_at_path(BDF_Order,                   "elmer.simulation.BDF_Order", true);
-                _h.get_at_path(Solver_Input_File,           "elmer.simulation.Solver_Input_File", true);
-                _h.get_at_path(Output_File,                 "elmer.simulation.Output_File", true);
-                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File", true);
-            }
-
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Max Output Level",              Max_Output_Level);
-                varToString(_buf, "Coordinate System",             Coordinate_System);
-                varToString(_buf, "Coordinate Mapping",            Coordinate_Mapping);
-                varToString(_buf, "Simulation Type",               Simulation_Type);
-                varToString(_buf, "Steady State Max Iterations",   Steady_State_Max_Iterations);
-                varToString(_buf, "Output Intervals",              Output_Intervals);
-                varToString(_buf, "Timestep intervals",            Timestep_intervals);
-                varToString(_buf, "Timestep Sizes",                Timestep_Sizes);
-                varToString(_buf, "Timestepping Method",           Timestepping_Method);
-                varToString(_buf, "BDF Order",                     BDF_Order);
-                varToString(_buf, "Solver Input File",             Solver_Input_File);
-                varToString(_buf, "Output File",                   Output_File);
-                varToString(_buf, "Post File",                     Post_File);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer thermal_solver section
-    */
-    class Thermal_Solver : public Base {
-        public:
-            Thermal_Solver() : Base() {
-                this->name = "solver";
-                sep = " = ";
-                id = 1;
-                this->name += (" " + std::to_string(id));
-            }
-
-            std::vector<std::string> Procedure;
-            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
-            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
-            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
-            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
-
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Equation,                                 "elmer.thermal_solver.Equation", true);
-                _h.get_at_path(Procedure,                                "elmer.thermal_solver.Procedure", true);
-                _h.get_at_path(Variable,                                 "elmer.thermal_solver.Variable", true);
-                _h.get_at_path(Exec_Solver,                              "elmer.thermal_solver.Exec_Solver", true);
-                _h.get_at_path(Stabilize,                                "elmer.thermal_solver.Stabilize", true);
-                _h.get_at_path(Optimize_Bandwidth,                       "elmer.thermal_solver.Optimize_Bandwidth", true);
-                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.thermal_solver.Steady_State_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.thermal_solver.Nonlinear_System_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.thermal_solver.Nonlinear_System_Max_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.thermal_solver.Nonlinear_System_Newton_After_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.thermal_solver.Nonlinear_System_Newton_After_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.thermal_solver.Nonlinear_System_Relaxation_Factor", true);
-                _h.get_at_path(Linear_System_Solver,                     "elmer.thermal_solver.Linear_System_Solver", true);
-                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.thermal_solver.Linear_System_Iterative_Method", true);
-                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.thermal_solver.Linear_System_Max_Iterations", true);
-                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.thermal_solver.Linear_System_Convergence_Tolerance", true);
-                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.thermal_solver.BiCGstabl_polynomial_degree", true);
-                _h.get_at_path(Linear_System_Preconditioning,            "elmer.thermal_solver.Linear_System_Preconditioning", true);
-                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.thermal_solver.Linear_System_ILUT_Tolerance", true);
-                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.thermal_solver.Linear_System_Abort_Not_Converged", true);
-                _h.get_at_path(Linear_System_Residual_Output,            "elmer.thermal_solver.Linear_System_Residual_Output", true);
-            }
-
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Equation",                                  Equation);
-                varToString(_buf, "Procedure",                                 Procedure, false);
-                varToString(_buf, "Variable",                                  Variable);
-                varToString(_buf, "Exec Solver",                               Exec_Solver);
-                varToString(_buf, "Stabilize",                                 Stabilize);
-                varToString(_buf, "Optimize Bandwidth",                        Optimize_Bandwidth);
-                varToString(_buf, "Steady State Convergence Tolerance",        Steady_State_Convergence_Tolerance);
-                varToString(_buf, "Nonlinear System Convergence Tolerance",    Nonlinear_System_Convergence_Tolerance);
-                varToString(_buf, "Nonlinear System Max Iterations",           Nonlinear_System_Max_Iterations);
-                varToString(_buf, "Nonlinear System Newton After Iterations",  Nonlinear_System_Newton_After_Iterations);
-                varToString(_buf, "Nonlinear System Newton After Tolerance",   Nonlinear_System_Newton_After_Tolerance);
-                varToString(_buf, "Nonlinear System Relaxation Factor",        Nonlinear_System_Relaxation_Factor);
-                varToString(_buf, "Linear System Solver",                      Linear_System_Solver);
-                varToString(_buf, "Linear System Iterative Method",            Linear_System_Iterative_Method);
-                varToString(_buf, "Linear System Max Iterations",              Linear_System_Max_Iterations);
-                varToString(_buf, "Linear System Convergence Tolerance",       Linear_System_Convergence_Tolerance);
-                varToString(_buf, "BiCGstabl polynomial degree",               BiCGstabl_polynomial_degree);
-                varToString(_buf, "Linear System Preconditioning",             Linear_System_Preconditioning);
-                varToString(_buf, "Linear System ILUT Tolerance",              Linear_System_ILUT_Tolerance);
-                varToString(_buf, "Linear System Abort Not Converged",         Linear_System_Abort_Not_Converged);
-                varToString(_buf, "Linear System Residual Output",             Linear_System_Residual_Output);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer thermal_solver section
-    */
-    class Elastic_Solver : public Base {
-        public:
-            Elastic_Solver() : Base() {
-                this->name = "solver";
-                sep = " = ";
-                id = 2;
-                this->name += (" " + std::to_string(id));
-            }
-
-            std::vector<std::string> Procedure;
-            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
-            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
-            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
-            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
-
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Equation,                                 "elmer.elastic_solver.Equation", true);
-                _h.get_at_path(Procedure,                                "elmer.elastic_solver.Procedure", true);
-                _h.get_at_path(Calculate_Principal,                      "elmer.elastic_solver.Calculate_Principal", true);
-                _h.get_at_path(Calculate_Stresses,                       "elmer.elastic_solver.Calculate_Stresses", true);
-                _h.get_at_path(Variable,                                 "elmer.elastic_solver.Variable", true);
-                _h.get_at_path(Exec_Solver,                              "elmer.elastic_solver.Exec_Solver", true);
-                _h.get_at_path(Stabilize,                                "elmer.elastic_solver.Stabilize", true);
-                _h.get_at_path(Optimize_Bandwidth,                       "elmer.elastic_solver.Optimize_Bandwidth", true);
-                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.elastic_solver.Steady_State_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.elastic_solver.Nonlinear_System_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.elastic_solver.Nonlinear_System_Max_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.elastic_solver.Nonlinear_System_Newton_After_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.elastic_solver.Nonlinear_System_Newton_After_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.elastic_solver.Nonlinear_System_Relaxation_Factor", true);
-                _h.get_at_path(Linear_System_Solver,                     "elmer.elastic_solver.Linear_System_Solver", true);
-                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.elastic_solver.Linear_System_Iterative_Method", true);
-                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.elastic_solver.Linear_System_Max_Iterations", true);
-                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.elastic_solver.Linear_System_Convergence_Tolerance", true);
-                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.elastic_solver.BiCGstabl_polynomial_degree", true);
-                _h.get_at_path(Linear_System_Preconditioning,            "elmer.elastic_solver.Linear_System_Preconditioning", true);
-                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.elastic_solver.Linear_System_ILUT_Tolerance", true);
-                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.elastic_solver.Linear_System_Abort_Not_Converged", true);
-                _h.get_at_path(Linear_System_Residual_Output,            "elmer.elastic_solver.Linear_System_Residual_Output", true);
-                _h.get_at_path(Linear_System_Precondition_Recompute,     "elmer.elastic_solver.Linear_System_Precondition_Recompute", true);
-            }
-
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Equation",                                  Equation);
-                varToString(_buf, "Procedure",                                 Procedure, false);
-                varToString(_buf, "Variable",                                  Variable);
-                varToString(_buf, "Exec Solver",                               Exec_Solver);
-                varToString(_buf, "Stabilize",                                 Stabilize);
-                varToString(_buf, "Optimize Bandwidth",                        Optimize_Bandwidth);
-                varToString(_buf, "Steady State Convergence Tolerance",        Steady_State_Convergence_Tolerance);
-                varToString(_buf, "Nonlinear System Convergence Tolerance",    Nonlinear_System_Convergence_Tolerance);
-                varToString(_buf, "Nonlinear System Max Iterations",           Nonlinear_System_Max_Iterations);
-                varToString(_buf, "Nonlinear System Newton After Iterations",  Nonlinear_System_Newton_After_Iterations);
-                varToString(_buf, "Nonlinear System Newton After Tolerance",   Nonlinear_System_Newton_After_Tolerance);
-                varToString(_buf, "Nonlinear System Relaxation Factor",        Nonlinear_System_Relaxation_Factor);
-                varToString(_buf, "Linear System Solver",                      Linear_System_Solver);
-                varToString(_buf, "Linear System Iterative Method",            Linear_System_Iterative_Method);
-                varToString(_buf, "Linear System Max Iterations",              Linear_System_Max_Iterations);
-                varToString(_buf, "Linear System Convergence Tolerance",       Linear_System_Convergence_Tolerance);
-                varToString(_buf, "BiCGstabl polynomial degree",               BiCGstabl_polynomial_degree);
-                varToString(_buf, "Linear System Preconditioning",             Linear_System_Preconditioning);
-                varToString(_buf, "Linear System ILUT Tolerance",              Linear_System_ILUT_Tolerance);
-                varToString(_buf, "Linear System Abort Not Converged",         Linear_System_Abort_Not_Converged);
-                varToString(_buf, "Linear System Residual Output",             Linear_System_Residual_Output);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer equation section
-    */
-    class Equation : public Base {
-        public:
-            Equation() : Base() {
-                this->name = "Equation";
-                sep = " = ";
-                id = 1;
-                this->name += (" " + std::to_string(id));
-            }
-
-            std::vector<int> Active_Solvers;
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers", true);
-            }
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Name",           this->name);
-                varToString(_buf, "Active Solvers", Active_Solvers);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer material section
-    */
-    class Material : public Base {
-        public:
-            Material() : Base() {
-                this->name = "Material";
-                sep = " = ";
-                id = 1;
-                this->name += (" " + std::to_string(id));
-            }
-
-            double Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
-
-            void set(toml::handler& _h) {
-                _h.get_at_path(Poisson_ratio,               "elmer.material.Poisson_ratio", true);
-                _h.get_at_path(Heat_Capacity,               "elmer.material.Heat_Capacity", true);
-                _h.get_at_path(Density,                     "elmer.material.Density", true);
-                _h.get_at_path(Youngs_modulus,              "elmer.material.Youngs_modulus", true);
-                _h.get_at_path(Heat_expansion_Coefficient,  "elmer.material.Heat_expansion_Coefficient", true);
-                _h.get_at_path(Sound_speed,                 "elmer.material.Sound_speed", true);
-                _h.get_at_path(Heat_Conductivity,           "elmer.material.Heat_Conductivity", true);
-            }
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Name",                       this->name);
-                varToString(_buf, "Poisson ratio",              Poisson_ratio);
-                varToString(_buf, "Heat Capacity",              Heat_Capacity);
-                varToString(_buf, "Density",                    Density);
-                varToString(_buf, "Youngs modulus",             Youngs_modulus);
-                varToString(_buf, "Heat expansion Coefficient", Heat_expansion_Coefficient);
-                varToString(_buf, "Sound speed",                Sound_speed);
-                varToString(_buf, "Heat Conductivity",          Heat_Conductivity);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer body section
-    */
-    class Body : public Base {
-        public:
-            Body(int _id) : Base() {
-                this->name = "Body " + std::to_string(_id);
-                sep = " = ";
-                id = _id;
-                Equation = 1; Material = 1;
-            }
-            std::vector<int> Target_Bodies;
-            int Initial_condition, Equation, Material;
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Target Bodies",      this->Target_Bodies, true);
-                varToString(_buf, "Name",               this->name);
-                varToString(_buf, "Equation",           Equation);
-                varToString(_buf, "Material",           Material);
-                varToString(_buf, "Initial condition",  Initial_condition);
-                _buf<<(_end + "\n");
-            }
-    };
-
-    /**
-     * handles elmer initial condition section
-    */
-    class Initial_Condition : public Base {
-        public:
-            Initial_Condition(int _id) : Base() {
-                this->name = "Initial Condition " + std::to_string(_id);
-                sep = " = ";
-                id = _id;
-            }
-
-            double Temperature;
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Name",        this->name);
-                varToString(_buf, "Temperature", Temperature);
-                _buf<<(_end + "\n");
-            }
-
-    };
-
-    /**
-     * handles elmer boundary condition section
-    */
-    class Boundary_Condition : public Base {
-        public:
-            Boundary_Condition(int _id) : Base() {
-                this->name = "Boundary Condition " + std::to_string(_id);
-                sep = " = ";
-                id = _id;
-            }
-
-            std::vector<int> Target_Boundaries;
-            bool Heat_Flux_BC = true;
-            double Heat_Flux;
-
-            void join(std::ofstream& _buf) {
-                _buf << (name + "\n");
-                varToString(_buf, "Target Boundaries",  Target_Boundaries);
-                varToString(_buf, "Name",               this->name);
-                varToString(_buf, "Heat Flux BC",       Heat_Flux_BC);
-                varToString(_buf, "Heat Flux",          Heat_Flux);
-                _buf<<(_end + "\n");
-            }
-
-    };
 
     /**
      * the main elmer class, this handles almost everything to do with elmer
@@ -711,6 +22,24 @@ namespace elmer {
             std::ostringstream double_converter;
 
         public:
+            std::vector<std::vector<int>> element_data;
+            std::vector<double> node_temperature_data, node_delta_x_data, node_delta_y_data, node_delta_z_data;
+            std::vector<std::array<int,    elmer::boundary_size>> boundary_data;
+            std::vector<std::array<double, elmer::dimension>>     node_data;
+            std::string name, exe, sif, meshDB, node_data_file, dump_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext;
+            double base_temp;
+
+            Header          header;
+            Simulation      simulation;
+            Constants       constants;
+            Thermal_Solver  thermal_solver;
+            Elastic_Solver  elastic_solver;
+            Equation        equation;
+            Material        material;
+            std::vector<Body*>               bodys;
+            std::vector<Initial_Condition*>  initial_conditions;
+            std::vector<Boundary_Condition*> boundary_conditions;
+
             Elmer() {
                 this->header         = Header();
                 this->simulation     = Simulation();
@@ -724,21 +53,326 @@ namespace elmer {
                 double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
             }
 
+            void set(toml::handler& _h) {
+                // setting needed variables
+                _h.get_at_path(this->meshDB,                "elmer.meshDB",     true);
+                _h.get_at_path(this->exe,                   "elmer.exe", true);
+                _h.get_at_path(this->sif,                   "elmer.sif", true);
+                _h.get_at_path(this->base_temp,             "elmer.base_temp", true);
+                _h.get_at_path(this->node_data_file,        "elmer.node_data_file", true);
+                _h.get_at_path(this->dump_directory,        "elmer.dump_directory", true);
+                _h.get_at_path(this->node_temperature_file_ext, "elmer.node_temperature_file_ext", true);
+                _h.get_at_path(this->node_position_file_ext,    "elmer.node_position_file_ext", true);
+
+                // each elmer section sets its own variables, so passing it the data structure
+                this->header.set(_h);
+                this->simulation.set(_h);
+                this->constants.set(_h);
+                this->equation.set(_h);
+                this->material.set(_h);
+                this->thermal_solver.set(_h);
+                this->elastic_solver.set(_h);
+
+                this->checks();
+            }
+
+            void checks() {
+                struct stat sb;
+                // making sure the elmer exe 
+                if (!(stat(this->exe.c_str(),  &sb) == 0))
+                    util::error("Illegal fix fea command, exe path does not exist");
+                
+                // making sure the mesh database is complete
+                std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+                for (int i = 0; i < 4; i++) {
+                    if (!(stat((this->meshDB + SEP + "mesh." + exts[i]).c_str(),  &sb) == 0))
+                        util::error("Illegal fix fea command, mesh database incomplete, " + (this->meshDB + SEP + "mesh." + exts[i]) + " does not exist");
+                }
+
+                // making sure base temperature is valid
+                if (this->base_temp <= (double)0)
+                    util::error("base temperature must be greater than 0");
+
+                if (this->dump_directory.back() == SEP)
+                    this->dump_directory = this->dump_directory.substr(0, this->dump_directory.length()-1);
+            }
+
+            /* ---------------------------------------------------------------------- */
+
+            void setupDumpDirectory() {
+                // making sure the mesh database is complete
+                std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
+                for (int i = 0; i < 4; i++) {
+                    util::copyFile(this->meshDB + "/mesh." + exts[i], this->dump_directory + "/mesh." + exts[i]);
+                }
+
+                this->boundary_file = this->dump_directory + SEP + "mesh.boundary";
+                this->element_file = this->dump_directory + SEP + "mesh.elements";
+                this->node_file = this->dump_directory + SEP + "mesh.nodes";
+            }
+
+            
+            void setupNodeDataFileAndVectors() {
+                // getting the number of nodes
+                int count = util::count_lines_in_file(this->node_data_file);
+
+                // setting up object to convert doubles
+                this->double_converter.str("");
+                this->double_converter << this->base_temp;
+
+                // getting string version of elmer.base_temp
+                std::string str = this->double_converter.str();
+
+                // writing base temperature to file for each node
+                std::ofstream output(this->node_data_file);
+                if (!(output.is_open()))
+                    util::error("could not open node data file");
+                
+                output << "Time:      1\n";
+                output << "temperature\n";
+                output << "Perm:      \n";
+                for (int i = 0; i < count; i++) {
+                    output << "   " << str << "\n";
+                    this->node_temperature_data.push_back(this->base_temp);
+                }
+
+                output << "displacement 1\nPerm:    \n";
+                this->double_converter.str("");
+                this->double_converter << (double)0;
+                str = double_converter.str();
+                for (int i = 0; i < count; i++) {
+                    output << "   " << str << "\n";
+                    this->node_delta_x_data.push_back((double)0);
+                }
+
+                output << "displacement 2\nPerm:    \n";
+                for (int i = 0; i < count; i++) {
+                    output << "   " << str << "\n";
+                    this->node_delta_y_data.push_back((double)0);
+                }
+
+                output << "displacement 3\nPerm:    \n";
+                for (int i = 0; i < count; i++) {
+                    output << "   " << str << "\n";
+                    this->node_delta_z_data.push_back((double)0);
+                }
+                output.close();
+                this->double_converter.str("");
+            }
+
+
+            void setup() {
+                this->setupDumpDirectory();
+                this->setupNodeDataFileAndVectors();
+                this->loadBoundaryData();
+                this->loadElements();
+            }
+
 
             void run() {
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
-                CommandResult command_result;
+                util::CommandResult command_result;
                 try {
-                    command_result = EXEC(exe+" "+this->sif+" 2>&1");
+                    command_result = util::EXEC(exe+" "+this->sif+" 2>&1");
                 } catch (std::exception& e) {
-                    error(e.what());
+                    util::error(e.what());
                 }
                 // if the command did not succeed
                 if (command_result.exitstatus)
-                    error(command_result.output);
+                    util::error(command_result.output);
                 
             }
+
+
+            void loadBoundaryData() {
+                std::vector<std::string> lines, _split;
+                std::array<int, boundary_size> arr;
+                this->boundary_data.clear();
+
+                util::readFile(this->boundary_file, lines);
+
+                int count = 1;
+                for (std::string it : lines) {
+                    util::trim(it);
+                    if (it.length() == 0) continue;
+
+                    // splitting the line at spaces
+                    util::split(it, _split, ' ');
+
+                    if (_split[4] != (std::string)"303") 
+                        util::error("element is not a triangle in boundary file at line: " + std::to_string(count));
+
+                    // getting rid of stuff I do not need
+                    _split.erase(_split.begin()+1, _split.begin() + 5);
+
+                    // catching errors
+                    if (_split.size() != boundary_size)
+                        util::error("too many boundary elements to assign at line: " + std::to_string(count));
+
+                    // adding the data
+                    for (unsigned int i = 0; i < boundary_size; i++)
+                        arr[i] = std::stoi(_split[i]);
+
+                    // adding the data to the class vector
+                    this->boundary_data.push_back(arr);
+                    count++;
+                }
+            }
+
+
+            void loadNodeData() {
+                this->node_temperature_data.clear();
+                this->node_delta_x_data.clear();
+                this->node_delta_y_data.clear();
+                this->node_delta_z_data.clear();
+
+                long unsigned int i, start;
+                std::vector<double>* v;
+                std::vector<std::string> lines, split_line;
+                std::string cur_key, line;
+                
+                util::readFile(this->node_data_file, lines);
+                start = 0;
+                for (i = 0; i < lines.size(); i++) {
+                    util::split(lines[i], split_line, ' ');
+                    if (split_line[0] == (std::string)"Time:")
+                        start = i;
+                }
+
+                for (i = start+1; i < lines.size(); i++) {
+                    line = lines[i];
+                    util::trim(line);
+                    util::split(line, split_line, ' ');
+                    if (lines[i][0] == ' ' && split_line.size() == 1)
+                        v->push_back(std::stod(line));
+                    else if ("Perm:" == split_line[0]) {
+                        cur_key = lines[i-1];
+                        util::trim(cur_key);
+                        if (cur_key == (std::string)"temperature")
+                            v = &this->node_temperature_data;
+                        else if (cur_key == (std::string)"displacement 1")
+                            v = &this->node_delta_x_data;
+                        else if (cur_key == (std::string)"displacement 2")
+                            v = &this->node_delta_y_data;
+                        else if (cur_key == (std::string)"displacement 3")
+                            v = &this->node_delta_z_data;
+                        else
+                            util::error("got unknown key in data file: " + cur_key);
+                    }
+                }
+            }
+
+
+            void loadElements() {
+                std::vector<std::string> _temp_data, _split;
+                std::vector<int> arr;
+                this->element_data.clear();
+
+                util::readFile(this->element_file, _temp_data);
+
+                this->element_data.resize(_temp_data.size());
+
+                for (std::string it : _temp_data) {
+                    arr.clear();
+
+                    util::trim(it);
+                    if (it.length() == 0) continue;
+
+                    // splitting the line at spaces
+                    util::split(it, _split, ' ');
+
+                    // getting rid of stuff I do not need
+                    _split.erase(_split.begin() + 1, _split.begin() + 3);
+
+                    // adding the data
+                    for (long unsigned int i = 1; i < _split.size(); i++)
+                        arr.push_back(std::stoi(_split[i]));
+
+                    // adding the data to the class vector
+                    this->element_data[std::stoi(_split[0]) - 1] = arr;
+                }
+            }
+
+
+            void createInitCondsFromData() {
+                // used later
+                double avg;
+                int _size;
+                int size = this->node_temperature_data.size();
+
+                this->initial_conditions.clear();
+                this->bodys.clear();
+                // averages values for the nodes of a surface element and sets this average to the 
+                // temperature of the surface element
+                for (long unsigned int i = 0; i < this->element_data.size(); i++) {
+                    // computes the average temperature of the nodes that make up the surface element
+                    // this value is used to set the surface element temperature
+                    avg = 0;
+                    _size = this->element_data[i].size();
+                    for (int j = 0; j < _size; j++) {
+                        // gets the data point corresponding to node id and adds it to the rolling sum
+                        if (this->element_data[i][j]-1 >= size)
+                            util::error("index out of bounds in creating initial conditions");
+                        avg += (this->node_temperature_data[this->element_data[i][j]-1]/((double)_size));
+                    }
+
+                    // surface element
+                    Body* _body = new Body(i+1);
+                    _body->Initial_condition = i+1;
+                    _body->Target_Bodies = {(int)i+1};
+                    Initial_Condition* _ic = new Initial_Condition(i+1);
+                    _ic->Temperature = avg;
+
+                    this->initial_conditions.push_back(_ic);
+                    this->bodys.push_back(_body);
+                }
+            }
+
+
+            void makeSif() {
+                std::ofstream _buf(this->sif);
+                if (!(_buf.is_open())) util::error(this->sif + " did not open");
+                this->join(_buf);                
+                _buf.close();
+            }
+
+
+            // void loadNodeDataFromPostFile() {
+            //     std::vector<std::string> data, v;
+            //     std::array<double, dimension> arr;
+            //     std::string lines;
+            //     this->node_data.clear();
+    
+            //     std::ifstream f(this->node_data_file);
+                
+            //     if (f.is_open()) {
+            //         std::ostringstream ss;
+            //         ss << f.rdbuf();
+            //         lines = ss.str();
+            //     }
+
+            //     f.close();
+
+            //     int start = lines.find('\n', lines.find('#')+1)+1;
+            //     int end   = lines.find('#', lines.find('#')+1)-1;
+            //     lines = lines.substr(start,  end - start);
+
+            //     split(lines, data, '\n');
+
+            //     long unsigned int i, j;
+            //     for (i = 0; i < data.size(); i++) {
+            //         // std::cout << data[i] << "\n";
+            //         trim(data[i]); split(data[i], v, ' ');
+            //         if (v.size() != dimension)
+            //             error("node element is not correct size at element: " + std::to_string(v.size()) + ", has size: " + std::to_string(v.size()));
+
+            //         for (j = 0; j < dimension; j++)
+            //             arr[j] = std::stod(v[j]);
+
+            //         this->node_data.push_back(arr);
+            //     }
+            // }
 
 
             void small_join(std::ofstream& _buf) {
@@ -770,175 +404,16 @@ namespace elmer {
             }
 
 
-            void loadNodeTemperatureData() {
-                // get the temperatures per node from the file and putting them into the elmer variable, elmer needs to know this info
-                getLatestNodeData(this->temperature_data_file, this->node_temperature_data);
-            }
-
-
-            void loadBoundaryData() {
-                // loading the boundary data into the local variable
-                getBoundaryData(this->meshDBstem + ".boundary", this->boundary_data);
-            }
-
-
-            void createInitCondsFromData() {
-                // used later
-                double avg;
-                int _size;
-                int size = this->node_temperature_data.size();
-
-                this->initial_conditions.clear();
-                this->bodys.clear();
-                // averages values for the nodes of a surface element and sets this average to the 
-                // temperature of the surface element
-                for (long unsigned int i = 0; i < this->element_data.size(); i++) {
-                    // computes the average temperature of the nodes that make up the surface element
-                    // this value is used to set the surface element temperature
-                    avg = 0;
-                    _size = this->element_data[i].size();
-                    for (int j = 0; j < _size; j++) {
-                        // gets the data point corresponding to node id and adds it to the rolling sum
-                        if (this->element_data[i][j]-1 >= size)
-                            error("index out of bounds in creating initial conditions");
-                        avg += (this->node_temperature_data[this->element_data[i][j]-1]/((double)_size));
-                    }
-
-                    // surface element
-                    Body* _body = new Body(i+1);
-                    _body->Initial_condition = i+1;
-                    _body->Target_Bodies = {(int)i+1};
-                    Initial_Condition* _ic = new Initial_Condition(i+1);
-                    _ic->Temperature = avg;
-
-                    this->initial_conditions.push_back(_ic);
-                    this->bodys.push_back(_body);
-                }
-            }
-
-
-            void setupTemperatureDataFile() {
-                // getting the number of nodes
-                int count = elmer::count_lines_in_file(this->meshDBstem + ".nodes");
-
-                // setting up object to convert doubles
-                this->double_converter.str("");
-                this->double_converter << this->base_temp;
-
-                // getting string version of elmer.base_temp
-                std::string base_temp_str = this->double_converter.str();
-
-                // writing base temperature to file for each node
-                std::ofstream output(this->temperature_data_file);
-                for (int i = 0; i < count; i++) output << base_temp_str << "\n";
-                output.close();
-            }
-
-
-            void makeSif() {
-                std::ofstream _buf(this->sif);
-                if (!(_buf.is_open())) error(this->sif + " did not open");
-                this->join(_buf);                
-                _buf.close();
-            }
-
-
-            void loadElements() {
-                std::vector<std::string> _temp_data, lines, _split;
-                std::vector<int> arr;
-                this->element_data.clear();
-
-                readFile(this->meshDBstem + ".elements", _temp_data);
-
-                this->element_data.resize(_temp_data.size());
-
-                for (std::string it : _temp_data) {
-                    arr.clear();
-
-                    trim(it);
-                    if (it.length() == 0) continue;
-
-                    // splitting the line at spaces
-                    split(it, _split, ' ');
-
-                    // getting rid of stuff I do not need
-                    _split.erase(_split.begin() + 1, _split.begin() + 3);
-
-                    // adding the data
-                    for (long unsigned int i = 1; i < _split.size(); i++)
-                        arr.push_back(std::stoi(_split[i]));
-
-                    // adding the data to the class vector
-                    this->element_data[std::stoi(_split[0]) - 1] = arr;
-                }
-            }
-
-
-            void loadNodeDataFromPostFile() {
-                std::vector<std::string> data, v;
-                std::array<double, dimension> arr;
-                std::string lines;
-                this->node_data.clear();
-    
-                std::ifstream f(this->node_data_file);
-                
-                if (f.is_open()) {
-                    std::ostringstream ss;
-                    ss << f.rdbuf();
-                    lines = ss.str();
-                }
-
-                f.close();
-
-                int start = lines.find('\n', lines.find('#')+1)+1;
-                int end   = lines.find('#', lines.find('#')+1)-1;
-                lines = lines.substr(start,  end - start);
-
-                split(lines, data, '\n');
-
-                long unsigned int i, j;
-                for (i = 0; i < data.size(); i++) {
-                    // std::cout << data[i] << "\n";
-                    trim(data[i]); split(data[i], v, ' ');
-                    if (v.size() != dimension)
-                        error("node element is not correct size at element: " + std::to_string(v.size()) + ", has size: " + std::to_string(v.size()));
-
-                    for (j = 0; j < dimension; j++)
-                        arr[j] = std::stod(v[j]);
-
-                    this->node_data.push_back(arr);
-                }
-            }
-
-
-            void set(toml::handler& _h) {
-                // setting needed variables
-                _h.get_at_path(this->meshDBstem,            "elmer.meshDBstem",     true);
-                _h.get_at_path(this->exe,                   "elmer.exe", true);
-                _h.get_at_path(this->sif,                   "elmer.sif", true);
-                _h.get_at_path(this->base_temp,             "elmer.base_temp", true);
-                _h.get_at_path(this->temperature_data_file, "elmer.temperature_data_file", true);
-                _h.get_at_path(this->dump_directory,        "elmer.dump_directory", true);
-                _h.get_at_path(this->node_data_file,        "elmer.node_data_file", true);
-
-                // each elmer section sets its own variables, so passing it the data structure
-                this->header.set(_h);
-                this->simulation.set(_h);
-                this->constants.set(_h);
-                this->equation.set(_h);
-                this->material.set(_h);
-                this->thermal_solver.set(_h);
-                this->elastic_solver.set(_h);
+            void dump(long _timestep) {
+                this->dumpNodeTemperatures(_timestep);
+                this->dumpNodePositions(_timestep);
             }
 
 
             void dumpNodeTemperatures(long _timestep) {
-                if (this->dump_directory.back() != '/')
-                    this->dump_directory+='/';
-
-                std::string filename = this->dump_directory + std::to_string(_timestep) + ".node_temperatures";
+                std::string filename = this->dump_directory + std::to_string(_timestep) + "." + this->node_temperature_file_ext;
                 std::ofstream out(filename);
-                if (!(out.is_open())) error(filename + " did not open");
+                if (!(out.is_open())) util::error(filename + " did not open");
 
                 for (double it : this->node_temperature_data) {
                     this->double_converter.str("");
@@ -949,23 +424,23 @@ namespace elmer {
             }
 
 
-            std::vector<std::vector<int>> element_data;
-            std::vector<double> node_temperature_data;
-            std::vector<std::array<int,    elmer::boundary_size>> boundary_data;
-            std::vector<std::array<double, elmer::dimension>>     node_data;
-            std::string name, exe, sif, meshDBstem, temperature_data_file, dump_directory, node_data_file;
-            double base_temp;
+            void dumpNodePositions(long _timestep) {
+                std::string filename = this->dump_directory + std::to_string(_timestep) + "." + this->node_position_file_ext;
+                std::ofstream out(filename);
+                if (!(out.is_open())) util::error(filename + " did not open");
 
-            Header          header;
-            Simulation      simulation;
-            Constants       constants;
-            Thermal_Solver  thermal_solver;
-            Elastic_Solver  elastic_solver;
-            Equation        equation;
-            Material        material;
-            std::vector<Body*>               bodys;
-            std::vector<Initial_Condition*>  initial_conditions;
-            std::vector<Boundary_Condition*> boundary_conditions;
+                if (this->node_delta_x_data.size() != this->node_delta_y_data.size() || this->node_delta_y_data.size() != this->node_delta_z_data.size() || this->node_delta_x_data.size() != this->node_delta_z_data.size())
+                    util::error("position delta vectors do not have the same size");
+
+                for (long unsigned int i = 0; i < this->node_delta_x_data.size(); i++) {
+                    this->double_converter.str("");
+                    this->double_converter << this->node_data[i][0] << " " << this->node_data[i][1] << " " << this->node_data[i][2];
+                    out << this->double_converter.str() << "\n";
+                }
+                out.close();
+
+            }
+
     };
 }
 
