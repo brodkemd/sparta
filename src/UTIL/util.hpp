@@ -128,28 +128,6 @@ namespace util {
         return number_of_lines;
     }
 
-    // /**
-    //  * reads the contents of the file at the path inputted into the inputted
-    //  * vector, this function is designed to read the data file
-    // */ 
-    // void readDataFile(std::string filename, std::vector<std::string>& lines) {
-    //     std::ifstream myfile(filename);
-    //     if (!(myfile.is_open())) error(filename + " did not open");
-
-    //     std::string line;
-    //     while (std::getline(myfile, line)) {
-    //         if (line.length() >= indicator.length()) {
-    //             // resets the vector if it detects a new indicator, this allows it to get only the new data
-    //             if (line.substr(0, indicator.length()) == indicator){
-    //                 lines.clear();
-    //                 continue;
-    //             }
-    //         }
-    //         lines.push_back(line + "\n");
-    //     }
-    //     myfile.close();
-    // }
-
     /**
      * reads the contents of the file at the path inputted into the inputted
      * vector

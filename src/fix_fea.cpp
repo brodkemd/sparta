@@ -49,14 +49,6 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 #define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
 
-// static std::ostringstream double_converter;
-
-/* ----------------------------------------------------------------------
-    
-    FixFea class methods
-
- ---------------------------------------------------------------------- */
-
 /**
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
 */
@@ -101,78 +93,25 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     toml::handler s(arg[2]);
 
     // getting the val at the path (second input) and setting the variable (first input) to that variable
-    s.get_at_path(this->run_every,   "sparta.run_every", true);
-    s.get_at_path(this->nevery,      "sparta.nevery", true);
-    s.get_at_path(this->energy_threshold,   "sparta.energy_threshold", true);
-    s.get_at_path(this->force_threshold,   "sparta.force_threshold", true);
-    s.get_at_path(this->shear_threshold,   "sparta.shear_threshold", true);
-    s.get_at_path(this->connectflag, "sparta.connect", true);
-    s.get_at_path(groupID,           "sparta.groupID", true);
-    s.get_at_path(mixID,             "sparta.mixID", true);
-    s.get_at_path(customID,          "sparta.customID", true);
-    s.get_at_path(compute_args,      "sparta.compute", true);
-    s.get_at_path(surf_collide_args, "sparta.surf_collide", true);
-    s.get_at_path(surf_modify_args,  "sparta.surf_modify", true);  
+    s.get_at_path(this->run_every,          "sparta.run_every",         true);
+    s.get_at_path(this->nevery,             "sparta.nevery",            true);
+    s.get_at_path(this->energy_threshold,   "sparta.energy_threshold",  true);
+    s.get_at_path(this->force_threshold,    "sparta.force_threshold",   true);
+    s.get_at_path(this->shear_threshold,    "sparta.shear_threshold",   true);
+    s.get_at_path(this->connectflag,        "sparta.connect",           true);
+    s.get_at_path(groupID,                  "sparta.groupID",           true);
+    s.get_at_path(mixID,                    "sparta.mixID",             true);
+    s.get_at_path(customID,                 "sparta.customID",          true);
+    s.get_at_path(compute_args,             "sparta.compute",           true);
+    s.get_at_path(surf_collide_args,        "sparta.surf_collide",      true);
+    s.get_at_path(surf_modify_args,         "sparta.surf_modify",       true);  
 
     // letting elmer handle its variable setting
     this->elmer->set(s);
 
     END_TRY
 
-    // elmer prints
-    this->print(("base temperature = " + std::to_string(this->elmer->base_temp)).c_str());
-    this->print(("data_file = " + this->elmer->node_data_file).c_str());
-    this->print(("meshDB = " + this->elmer->meshDB).c_str());
-
-    if (this->energy_threshold < (double)0)
-        error->all(FLERR, "Fix fea energy threshold must be greater than 0.0");
-    this->print(("energy_threshold = " + std::to_string(this->energy_threshold)).c_str());
-
-    if (this->force_threshold < (double)0)
-        error->all(FLERR, "Fix fea force threshold must be greater than 0.0");
-    this->print(("force_threshold = " + std::to_string(this->force_threshold)).c_str());
-
-    if (this->shear_threshold < (double)0)
-        error->all(FLERR, "Fix fea shear threshold must be greater than 0.0");
-    this->print(("shear_threshold = " + std::to_string(this->shear_threshold)).c_str());
-
-    // checking run_every
-    if (this->run_every <= 0)
-        error->all(FLERR,"Illegal fix fea command, run_every <= 0");
-    this->print(("run_every = " + std::to_string(this->run_every)).c_str());
-
-    // checking nevery
-    if (this->nevery <= 0)
-        error->all(FLERR,"Illegal fix fea command, nevery <= 0");
-    if (this->run_every % this->nevery != 0)
-        error->all(FLERR, "Illegal fix fea command, run_every must be a multiple of nevery");
-    this->print(("nevery = " + std::to_string(this->nevery)).c_str());
-
-    // get the surface group
-    int igroup = surf->find_group(groupID.c_str());
-    if (igroup < 0)
-        error->all(FLERR,"Fix fea group ID does not exist");
     
-    this->groupbit = surf->bitmask[igroup];
-    this->print(("groupID = " + groupID).c_str());
-
-    // getting the mixture
-    int imix = particle->find_mixture((char*)mixID.c_str());
-    if (imix < 0)
-        error->all(FLERR,"Compute thermal/grid mixture ID does not exist");
-    this->print(("mixID = " + mixID).c_str());
-    
-    // creating the custom variable for the surface temperature
-    this->tindex = surf->add_custom((char*)customID.c_str(), DOUBLE, 0);
-    this->print(("customID = " + customID).c_str());
-    
-    this->dimension = domain->dimension;
-    if (this->dimension != 3)
-        error->all(FLERR, "Can not use fix fea with 2d simulation");
-    
-    if (this->connectflag != 0 && this->connectflag != 1)
-        error->all(FLERR, "connect must be 0 or 1");
-    this->print(("Connect flag: " + std::to_string(this->connectflag)).c_str());
     
     // adding surf collision model needed
     // adding s_ to temperature variable, this is required
@@ -236,10 +175,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // adding collision by modifying surf
     size = toml::vec_to_arr(surf_modify_args, arr);
     this->surf->modify_params(size, arr);
-   
-    // modifying elmer variables to match sparta vairables
-    this->elmer->simulation.Timestep_intervals = { this->run_every };
-    this->elmer->simulation.Output_Intervals   = { this->run_every };
 
     // initing vars
     this->qw_avg = NULL;
@@ -259,9 +194,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // telling the compute surf etot to run
     modify->addstep_compute_all(1);
-
-    // setting up the double converter
-    // double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
 
     // initial output
     this->ndeleted = 0;
@@ -390,10 +322,10 @@ void FixFea::end_of_step() {
     for (i = comm->me; i < nsurf; i += nprocs) {
         if (!(surf->tris[i].mask & groupbit))
         
-        this->qw_avg_me[i]+=cqw->array_surf[m][energy_loc];
-        this->fx_avg_me[i]+=cqw->array_surf[m][force_locs[0]];
-        this->fy_avg_me[i]+=cqw->array_surf[m][force_locs[1]];
-        this->fz_avg_me[i]+=cqw->array_surf[m][force_locs[2]];
+        this->qw_avg_me[i] +=cqw->array_surf[m][energy_loc];
+        this->fx_avg_me[i] +=cqw->array_surf[m][force_locs[0]];
+        this->fy_avg_me[i] +=cqw->array_surf[m][force_locs[1]];
+        this->fz_avg_me[i] +=cqw->array_surf[m][force_locs[2]];
         this->shx_avg_me[i]+=cqw->array_surf[m][shear_locs[0]];
         this->shy_avg_me[i]+=cqw->array_surf[m][shear_locs[1]];
         this->shz_avg_me[i]+=cqw->array_surf[m][shear_locs[2]];
@@ -403,10 +335,10 @@ void FixFea::end_of_step() {
     // if should run elmer
     if (this->run_condition()) {
         // summing all of the heat fluxes into one vector, namely qw_avg
-        MPI_Allreduce(this->qw_avg_me, this->qw_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fx_avg_me, this->fx_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fy_avg_me, this->fy_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fz_avg_me, this->fz_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->qw_avg_me,  this->qw_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->fx_avg_me,  this->fx_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->fy_avg_me,  this->fy_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->fz_avg_me,  this->fz_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->shx_avg_me, this->shx_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->shy_avg_me, this->shy_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->shz_avg_me, this->shz_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -421,33 +353,19 @@ void FixFea::end_of_step() {
                 // this->print(("Got sum " +  var_name   ", " + double_converter.str()).c_str());
                 this->print(("got sum over threshold for variable: " + var_name).c_str());
                 this->print("Setting up Elmer");
-                
-                // setting the elmer timestep to the sparta timestep
-                this->elmer->simulation.Timestep_Sizes = { update->dt };
-
-                // clearing the vectors in elmer to make room for the new data
-                this->elmer->bodys.clear();
-                this->elmer->initial_conditions.clear();
-                this->elmer->boundary_conditions.clear();
 
                 // wrapping in try to catch if exception is,
                 // elmer throws exceptions if it encounters an error
                 START_TRY
 
-                this->print("creating boundary conditions");
-                for (i = 0; i < nsurf; i++) {
-                    elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
-                    bc->Heat_Flux = this->qw_avg[i]/this->run_every; // the average heat flux
-                    this->elmer->boundary_conditions.push_back(bc);
-                }
+                
+                this->elmer->createConditionsFrom(
+                    qw_avg, 
+                    fx_avg, fy_avg, fz_avg, 
+                    shx_avg, shy_avg, shz_avg, 
+                    this->run_every, update->dt, this->nsurf
+                );
 
-                this->print("creating initial conditions");
-                this->elmer->createInitCondsFromData();
-
-                this->print("making sif");
-                this->elmer->makeSif();
-
-                this->print("running sif");
                 this->elmer->run();
 
                 // done running so reloading temperatures
@@ -466,7 +384,7 @@ void FixFea::end_of_step() {
 
             START_TRY
             this->print("dumping node temperatures");
-            this->elmer->dumpNodeTemperatures(update->ntimestep);
+            this->elmer->dump(update->ntimestep);
             END_TRY
 
         }
@@ -540,41 +458,25 @@ bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; 
 
 /* ---------------------------------------------------------------------- */
 
+
+void FixFea::reload() {
+    this->load_temperatures();
+    
+}
+
 /**
  * Loads temperature data from file and sets needed variables
  * Must only run on process 0 
 */
 void FixFea::load_temperatures() {
+    // the wall temperature variable
+    double *tvector = surf->edvec[surf->ewhich[tindex]];
 
     START_TRY
     // loading per node temperature data
     this->print("loading temperatures");
-    this->elmer->loadNodeData();
+    this->elmer->averageNodeTemperaturesInto(tvector, this->nsurf);
     END_TRY
-
-    // the wall temperature variable
-    double *tvector = surf->edvec[surf->ewhich[tindex]];
-
-    // making sure everything is consistent
-    if ((long unsigned int)this->nsurf != this->elmer->boundary_data.size())
-        error->all(FLERR, ("boundary data does not match required size, required size " + std::to_string(this->nsurf) + ", size " + std::to_string(this->elmer->boundary_data.size())).c_str());
-
-    // used later
-    double avg;
-    
-    // averages values for the nodes of a surface element and sets this average to the 
-    // temperature of the surface element
-    for (long unsigned int i = 0; i < this->elmer->boundary_data.size(); i++) {
-        // computes the average temperature of the nodes that make up the surface element
-        // this value is used to set the surface element temperature
-        avg = 0;
-        for (unsigned int j = 1; j < elmer::boundary_size; j++) {
-            // gets the data point corresponding to node id and adds it to the rolling sum
-            avg += this->elmer->node_temperature_data[this->elmer->boundary_data[i][j]-1];
-        }
-        // computing the average by dividing the sum by the number of points and setting the surface element
-        tvector[this->elmer->boundary_data[i][0]-1] = avg/(elmer::boundary_size - 1);
-    }
 
     // checking to make sure all values where set to something non zero
     for (int i = 0; i < this->nsurf; i++) {
@@ -604,17 +506,13 @@ void FixFea::move_surf() {
     for (i = 0; i < (unsigned)this->nsurf; i++) {
         if (!(surf->tris[i].mask & this->groupbit)) continue;
 
-        for (j = 0; j < elmer::dimension; j++) {
-            surf->tris[i].p1[j] = this->elmer->node_data[this->elmer->boundary_data[i][1]-1][j];
-        }
+        this->elmer->getNodeAtIndex(i, 1, surf->tris[i].p1);
         this->pselect[3*i] = 1; // saying the first point of the triangle moved
 
-        for (j = 0; j < elmer::dimension; j++)
-            surf->tris[i].p2[j] = this->elmer->node_data[this->elmer->boundary_data[i][2]-1][j];
+        this->elmer->getNodeAtIndex(i, 2, surf->tris[i].p2);
         this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
 
-        for (j = 0; j < elmer::dimension; j++)
-            surf->tris[i].p3[j] = this->elmer->node_data[this->elmer->boundary_data[i][3]-1][j];
+        this->elmer->getNodeAtIndex(i, 3, surf->tris[i].p3);
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
     }
     

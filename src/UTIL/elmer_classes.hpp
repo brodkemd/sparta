@@ -5,65 +5,6 @@
 #include "toml.hpp"
 
 namespace elmer {
-        // /**
-    //  * Gets the latest data for each node from the inputted file
-    // */
-    // void getLatestNodeData(std::string filename, std::vector<double>& data) {
-    //     std::vector<std::string> lines;
-
-    //     data.clear();
-
-    //     // reads the data file
-    //     readDataFile(filename, lines);
-
-    //     for (std::string it : lines) {
-    //         trim(it);
-    //         // if the line only has one thing in it
-    //         if (it.find(" ") == std::string::npos) {
-    //             // convert to double and add to list
-    //             data.push_back(std::stod(it));
-    //         }
-    //     }
-    // }
-
-    /**
-     * Loads the boundary data from the inputted file into the vector
-    */
-    // void getBoundaryData(std::string filename, std::vector<std::array<int, boundary_size>>& data) {
-    //     std::vector<std::string> lines, _split;
-    //     std::array<int, boundary_size> arr;
-    //     data.clear();
-
-    //     readFile(filename, lines);
-
-    //     int count = 1;
-    //     for (std::string it : lines) {
-    //         trim(it);
-    //         if (it.length() == 0) continue;
-
-    //         // splitting the line at spaces
-    //         split(it, _split, ' ');
-
-    //         if (_split[4] != (std::string)"303") 
-    //             error("element is not a triangle in boundary file at line: " + std::to_string(count));
-
-    //         // getting rid of stuff I do not need
-    //         _split.erase(_split.begin()+1, _split.begin() + 5);
-
-    //         // catching errors
-    //         if (_split.size() != boundary_size)
-    //             error("too many boundary elements to assign at line: " + std::to_string(count));
-
-    //         // adding the data
-    //         for (unsigned int i = 0; i < boundary_size; i++)
-    //             arr[i] = std::stoi(_split[i]);
-
-    //         // adding the data to the class vector
-    //         data.push_back(arr);
-    //         count++;
-    //     }
-    // }
-
     /**
      * Base class that all elmer sections inherit from
     */
