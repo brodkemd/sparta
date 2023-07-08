@@ -7,18 +7,37 @@
 #include <limits>
 #include <iomanip>
 #include <string>
+#include "float.h"
 
 namespace util {
     std::ostringstream makeDoubleConverter() {
         std::ostringstream __double_converter;
         __double_converter << std::scientific<<std::setprecision(std::numeric_limits<double>::digits10+2);
+        return __double_converter;
     }
+
+    FILE* _screen;
+    FILE* _logfile;
+    int _me;
 
     static std::ostringstream _double_converter = makeDoubleConverter();
 
     // error command
     // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
     void error(std::string _msg) { throw _msg; }
+
+    /**
+     * custom printing for this class
+    */
+    void print(std::string str, int num_indent=1, std::string end = "\n") {
+        // only prints on the main process
+        if (_me == 0) {
+            std::string space = "";
+            for (int i = 0; i < num_indent; i++) space += "  ";
+            if (_screen)  fprintf(_screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+            if (_logfile) fprintf(_logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+        }
+    }
 
     // used in the EXEC function below, represents data returned from a system command
     struct CommandResult { std::string output; int exitstatus; };
@@ -72,14 +91,14 @@ namespace util {
 
     // left trims a string
     void ltrim(std::string& _s) {
-        long unsigned int j;
+        std::size_t j;
         for (j = 0; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(j, _s.length() - j);
     }
 
     // right trims a string
     void rtrim(std::string& _s) {
-        long unsigned int j;
+        std::size_t j;
         for (j = _s.length()-1; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(0,  j+1);
     }
@@ -90,7 +109,7 @@ namespace util {
 
     void split(std::string& _s, std::vector<std::string>& _v, char sep) {
         _v.clear();
-        long unsigned int last, j;
+        std::size_t last, j;
         last = 0;
         for (j = 0; j <= _s.length(); j++) {
             if (j == _s.length()) {
@@ -105,12 +124,46 @@ namespace util {
 
     template<typename T>
     int find(std::vector<T> _v, T _find) {
-        for (long unsigned int i = 0; i < _v.size(); i++) {
+        for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] == _find) return (int)i;
         }
         return -1;
     }
 
+
+    int max(std::vector<int> _v) {
+        int _max = INT_MIN;
+        for (std::size_t i = 0; i < _v.size(); i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
+
+
+    double max(std::vector<double> _v) {
+        double _max = -DBL_MAX;
+        for (std::size_t i = 0; i < _v.size(); i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
+
+
+    double max(double* _v, int _size) {
+        double _max = -DBL_MAX;
+        for (int i = 0; i < _size; i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
+
+    int max(int* _v, int _size) {
+        int _max = INT_MIN;
+        for (int i = 0; i < _size; i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
 
     /**
      * erases the file at the path inputted

@@ -12,7 +12,7 @@
 namespace elmer {
     const unsigned int boundary_size = 4; // number of elements in a boundary element including id
     const unsigned int dimension     = 3;
-    const long unsigned int node_element_size = 5;
+    const std::size_t node_element_size = 5;
 
     /**
      * the main elmer class, this handles almost everything to do with elmer
@@ -62,9 +62,9 @@ namespace elmer {
                 _h.get_at_path(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
 
                 // each elmer section sets its own variables, so passing it the data structure
-                this->header.set(_h);
+                // this->header.set(_h);
                 this->simulation.set(_h);
-                this->constants.set(_h);
+                // this->constants.set(_h);
                 this->equation.set(_h);
                 this->material.set(_h);
                 this->thermal_solver.set(_h);
@@ -96,9 +96,17 @@ namespace elmer {
                 
                 // setting vars from provided values
                 this->node_data_file = this->simulation_directory + SEP + this->simulation.Output_File;
+                
                 this->header.Mesh_DB = { this->simulation_directory, "." };
                 this->header.Include_Path = "";
                 this->header.Results_Directory = this->simulation_directory;
+
+                this->constants.Gravity = { 0.0, -1.0, 0.0, 9.80665 };
+                this->constants.Stefan_Boltzmann = 5.670374419e-8;
+                this->constants.Permittivity_of_Vacuum = 8.85418781e-12;
+                this->constants.Permeability_of_Vacuum = 1.25663706e-6;
+                this->constants.Boltzmann_Constant = 1.380649e-23;
+                this->constants.Unit_Charge = 1.6021766e-19;
 
             }
 
@@ -119,48 +127,53 @@ namespace elmer {
             
             void setupNodeDataFileAndVectors() {
                 // getting the number of nodes
-                int count = util::count_lines_in_file(this->node_data_file);
+                int count = util::count_lines_in_file(this->node_file);
 
                 // getting string version of elmer.base_temp
                 std::string str = util::dtos(this->base_temp);
 
                 // writing base temperature to file for each node
-                std::ofstream output(this->node_data_file);
-                if (!(output.is_open()))
-                    util::error("could not open node data file");
+                // std::ofstream output(this->node_data_file);
+                // if (!(output.is_open()))
+                //     util::error("could not open node data file");
                 
-                output << "Time:      1\n";
-                output << "temperature\n";
-                output << "Perm:      \n";
+                // output << "Time:      1\n";
+                // output << "temperature\n";
+                // output << "Perm:      \n";
                 for (int i = 0; i < count; i++) {
-                    output << "   " << str << "\n";
+                    // output << "   " << str << "\n";
                     this->node_temperature_data.push_back(this->base_temp);
                 }
 
-                output << "displacement 1\nPerm:    \n";
-                str = util::dtos(0.0);
-                for (int i = 0; i < count; i++) {
-                    output << "   " << str << "\n";
-                }
+                // output << "displacement 1\nPerm:    \n";
+                // str = util::dtos(0.0);
+                // for (int i = 0; i < count; i++) {
+                //     output << "   " << str << "\n";
+                // }
 
-                output << "displacement 2\nPerm:    \n";
-                for (int i = 0; i < count; i++) {
-                    output << "   " << str << "\n";
-                }
+                // output << "displacement 2\nPerm:    \n";
+                // for (int i = 0; i < count; i++) {
+                //     output << "   " << str << "\n";
+                // }
 
-                output << "displacement 3\nPerm:    \n";
-                for (int i = 0; i < count; i++) {
-                    output << "   " << str << "\n";
-                }
-                output.close();
+                // output << "displacement 3\nPerm:    \n";
+                // for (int i = 0; i < count; i++) {
+                //     output << "   " << str << "\n";
+                // }
+                // output.close();
             }
 
 
             void setup() {
+                util::print("setting up dump directory");
                 this->setupDumpDirectory();
+                util::print("setting up node data file and vectors");
                 this->setupNodeDataFileAndVectors();
+                util::print("loading boundaries");
                 this->loadBoundaries();
+                util::print("loading elements");
                 this->loadElements();
+                util::print("loading nodes");
                 this->loadNodes();
             }
 
@@ -191,7 +204,7 @@ namespace elmer {
 
 
             void getNodePointAtIndex(int _index, int _boundary_index, double(&_point)[3]) {
-                for (int j = 0; j < elmer::dimension; j++)
+                for (std::size_t j = 0; j < elmer::dimension; j++)
                     _point[j] = this->nodes[this->boundaries[_index][_boundary_index]-1][j];
             }
 
@@ -226,7 +239,7 @@ namespace elmer {
 
                 // averages values for the nodes of a surface element and sets this average to the 
                 // temperature of the surface element
-                for (long unsigned int i = 0; i < this->elements.size(); i++) {
+                for (std::size_t i = 0; i < this->elements.size(); i++) {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
                     avg = 0;
@@ -253,7 +266,7 @@ namespace elmer {
 
             void averageNodeTemperaturesInto(double*& _temperatures, int _length) {
                 // making sure everything is consistent
-                if ((long unsigned int)_length != this->boundaries.size())
+                if ((std::size_t)_length != this->boundaries.size())
                     util::error("boundary data does not match required size, required size " + std::to_string(_length) + ", size " + std::to_string(this->boundaries.size()));
 
                 // used later
@@ -261,7 +274,7 @@ namespace elmer {
                 
                 // averages values for the nodes of a surface element and sets this average to the 
                 // temperature of the surface element
-                for (long unsigned int i = 0; i < this->boundaries.size(); i++) {
+                for (std::size_t i = 0; i < this->boundaries.size(); i++) {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
                     avg = 0;
@@ -275,8 +288,7 @@ namespace elmer {
             }
 
             void loadNodeData() {
-                long unsigned int i, start;
-                std::vector<double>* v;
+                std::size_t i, start;
                 std::vector<std::string> lines, split_line;
                 std::string cur_key, line;
                 
@@ -407,7 +419,7 @@ namespace elmer {
                     _split.erase(_split.begin() + 1, _split.begin() + 3);
 
                     // adding the data
-                    for (long unsigned int i = 1; i < _split.size(); i++)
+                    for (std::size_t i = 1; i < _split.size(); i++)
                         arr.push_back(std::stoi(_split[i]));
 
                     // adding the data to the class vector
@@ -425,13 +437,13 @@ namespace elmer {
                 equation.join(_buf);
                 material.join(_buf);
 
-                for (long unsigned int i = 0; i < this->bodies.size(); i++)
+                for (std::size_t i = 0; i < this->bodies.size(); i++)
                     this->bodies[i]->join(_buf);
 
-                for (long unsigned int i = 0; i < this->initial_conditions.size(); i++)
+                for (std::size_t i = 0; i < this->initial_conditions.size(); i++)
                     this->initial_conditions[i]->join(_buf);
 
-                for (long unsigned int i = 0; i < this->boundary_conditions.size(); i++)
+                for (std::size_t i = 0; i < this->boundary_conditions.size(); i++)
                     this->boundary_conditions[i]->join(_buf);
             }
 
@@ -459,7 +471,7 @@ namespace elmer {
                 std::ofstream out(filename);
                 if (!(out.is_open())) util::error(filename + " did not open");
 
-                for (long unsigned int i = 0; i < this->nodes.size(); i++) {    
+                for (std::size_t i = 0; i < this->nodes.size(); i++) {    
                     out << util::dtos(this->nodes[i][0]) << " " << util::dtos(this->nodes[i][1]) << " " << util::dtos(this->nodes[i][2]) << "\n";
                 }
                 out.close();

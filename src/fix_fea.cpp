@@ -22,8 +22,6 @@
 #include "error.h"
 #include "surf.h"
 #include "modify.h"
-// #include "move_surf.h"
-
 #include "dump.h"
 #include "compute.h"
 #include "grid.h"
@@ -59,8 +57,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     struct stat sb;
     std::string groupID, mixID, customID;
     std::vector<std::string> compute_args, surf_collide_args, surf_modify_args;
+    util::_screen  = &*screen;
+    util::_logfile = &*logfile;
+    util::_me = comm->me;
 
-    this->print("Setting up fix fea:", 0);
+    util::print("Setting up fix fea:", 0);
 
     // checking if the number of args is correct
     if (narg > 3)
@@ -81,7 +82,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
-    this->print(("Loading config from: " + std::string(arg[2])).c_str());
+    util::print("Loading config from: " + std::string(arg[2]));
 
     // making new fea class
     this->fea = new elmer::Elmer();
@@ -110,9 +111,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->fea->set(s);
 
     END_TRY
-
     
-    
+    this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
     // adding surf collision model needed
     // adding s_ to temperature variable, this is required
     size = toml::vec_to_arr(surf_collide_args, arr);
@@ -142,35 +142,40 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     energy_loc = util::find(compute_args, (std::string)"etot")-4;
     if (energy_loc < 0)
         error->all(FLERR, "etot is not provided as compute arg");
-    this->print(("Energy flux index = " + std::to_string(energy_loc)).c_str());
+    util::print("Energy flux index = " + std::to_string(energy_loc));
     
     std::vector<std::string> opts = {"fx", "fy", "fz"};
-    for (long unsigned int i = 0; i < opts.size(); i++) {
+    for (std::size_t i = 0; i < opts.size(); i++) {
         force_locs[i] = util::find(compute_args, opts[i])-4;
         if (force_locs[i] < 0)
             error->all(FLERR, (opts[i] + " is not provided as compute arg").c_str());
     }
 
-    this->print(("fx index = " + std::to_string(force_locs[0])).c_str());
-    this->print(("fy index = " + std::to_string(force_locs[1])).c_str());
-    this->print(("fz index = " + std::to_string(force_locs[2])).c_str());
+    util::print("fx index = " + std::to_string(force_locs[0]));
+    util::print("fy index = " + std::to_string(force_locs[1]));
+    util::print("fz index = " + std::to_string(force_locs[2]));
 
     opts = {"shx", "shy", "shz"};
-    for (long unsigned int i = 0; i < opts.size(); i++) {
+    for (std::size_t i = 0; i < opts.size(); i++) {
         shear_locs[i] = util::find(compute_args, opts[i])-4;
         if (shear_locs[i] < 0)
             error->all(FLERR, (opts[i] + " is not provided as compute arg").c_str());
     }
     
-    this->print(("shx index = " + std::to_string(shear_locs[0])).c_str());
-    this->print(("shy index = " + std::to_string(shear_locs[1])).c_str());
-    this->print(("shz index = " + std::to_string(shear_locs[2])).c_str());
+    util::print("shx index = " + std::to_string(shear_locs[0]));
+    util::print("shy index = " + std::to_string(shear_locs[1]));
+    util::print("shz index = " + std::to_string(shear_locs[2]));
 
-    this->print(("added surf compute with id: " + std::string(modify->compute[icompute]->id)).c_str());
+    std::vector<int> _temp_indicies = {energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]};
+    int max = util::max(_temp_indicies);
+    if (max > 0 && max > cqw->size_per_surf_cols)
+        error->all(FLERR,"Fix fea compute array is accessed out-of-range");
+
+    util::print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
-    this->print(("nprocs = " + std::to_string(nprocs)).c_str());
+    util::print("nprocs = " + std::to_string(nprocs));
 
     // adding collision by modifying surf
     size = toml::vec_to_arr(surf_modify_args, arr);
@@ -283,6 +288,8 @@ void FixFea::init() {
     memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
+    util::print("done creating memory");
+
     // loading the boundary data
     if (comm->me == 0) {
         START_TRY
@@ -294,7 +301,7 @@ void FixFea::init() {
 
     // waits for all processes to get here
     MPI_Barrier(world);
-    error->all(FLERR, "done initing");
+    util::print("done initing");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -304,12 +311,14 @@ void FixFea::init() {
  * writing the surface data to the file
  */
 void FixFea::end_of_step() {
+    util::print("end of step");
     int i,m;
     
     // number of surface elements
     if (this->nsurf != surf->nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
+    util::print("setting up and running compute");
     // required to run the compute
     modify->clearstep_compute();
     if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
@@ -319,22 +328,33 @@ void FixFea::end_of_step() {
     cqw->post_process_surf();
 
     // adding the heat flux to the running average
+    util::print("averaging");
     m = 0;
     for (i = comm->me; i < nsurf; i += nprocs) {
         if (!(surf->tris[i].mask & groupbit))
         
         this->qw_avg_me[i] +=cqw->array_surf[m][energy_loc];
-        this->fx_avg_me[i] +=cqw->array_surf[m][force_locs[0]];
-        this->fy_avg_me[i] +=cqw->array_surf[m][force_locs[1]];
-        this->fz_avg_me[i] +=cqw->array_surf[m][force_locs[2]];
-        this->shx_avg_me[i]+=cqw->array_surf[m][shear_locs[0]];
+        util::print("energy");
         this->shy_avg_me[i]+=cqw->array_surf[m][shear_locs[1]];
+        util::print("x force");
+        this->fy_avg_me[i] +=cqw->array_surf[m][force_locs[1]];
+        util::print("y force");
+        this->fz_avg_me[i] +=cqw->array_surf[m][force_locs[2]];
+        util::print("z force");
+        this->shx_avg_me[i]+=cqw->array_surf[m][shear_locs[0]];
+        util::print("shx force");
+        this->shy_avg_me[i]+=cqw->array_surf[m][shear_locs[1]];
+        util::print("shy force");
         this->shz_avg_me[i]+=cqw->array_surf[m][shear_locs[2]];
+        util::print("shz force");
         m++;
     }
+    util::print("done averaging");
 
     // if should run fea
     if (this->run_condition()) {
+        util::print("running");
+        util::print("mpi reducing vars");
         // summing all of the heat fluxes into one vector, namely qw_avg
         MPI_Allreduce(this->qw_avg_me,  this->qw_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->fx_avg_me,  this->fx_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -351,8 +371,8 @@ void FixFea::end_of_step() {
             // if it less than the threshold, do not run fea
             if (this->checkVarSums(var_name)) {
                 // messages
-                this->print(("got sum over threshold for variable: " + var_name).c_str());
-                this->print("Setting up fea");
+                util::print("got sum over threshold for variable: " + var_name);
+                util::print("Setting up fea");
 
                 // wrapping in try to catch if exception is,
                 // fea throws exceptions if it encounters an error
@@ -370,16 +390,15 @@ void FixFea::end_of_step() {
                 /* -------------------------------
                  loading new surface and temperatures
                    ------------------------------- */
-                this->print("moving surf");
                 this->update_temperatures();
                 this->update_surf();
 
                 END_TRY
 
-            } else this->print("Skipping fea, no params detected");
+            } else util::print("Skipping fea, no params detected");
 
             START_TRY
-            this->print("dumping node temperatures and points");
+            util::print("dumping node temperatures and points");
             this->fea->dump(update->ntimestep);
             END_TRY
 
@@ -455,10 +474,6 @@ bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; 
 /* ---------------------------------------------------------------------- */
 
 
-
-    
-    
-
 /**
  * Loads temperature data from file and sets needed variables
  * Must only run on process 0 
@@ -469,7 +484,7 @@ void FixFea::update_temperatures() {
 
     START_TRY
     // loading per node temperature data
-    this->print("loading temperatures");
+    util::print("loading temperatures");
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
     END_TRY
 
@@ -484,7 +499,7 @@ void FixFea::update_temperatures() {
 
 void FixFea::update_surf() {
 
-    // if (this->fea->node_data.size() != (long unsigned int)this->nsurf)
+    // if (this->fea->node_data.size() != (std::size_t)this->nsurf)
     //     error->all(FLERR, "detected a surface change while moving the surface");
 
     // sort particles
@@ -492,7 +507,7 @@ void FixFea::update_surf() {
     if (this->connectflag && this->groupbit != 1) this->connect_3d_pre();
 
     /**** this part does the moving */
-    unsigned int i, j;
+    unsigned int i;
 
     // resetting pselect
     for (i = 0; i < (unsigned)3*this->nsurf; i++) this->pselect[i] = 0;
@@ -681,19 +696,4 @@ bigint FixFea::remove_particles() {
     bigint ndeleted;
     MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
     return ndeleted;
-}
-
-/* ---------------------------------------------------------------------- */
-
-/**
- * custom printing for this class
-*/
-void FixFea::print(const char* str, int num_indent, const char* end) {
-    // only prints on the main process
-    if (comm->me == 0) {
-        std::string space = "";
-        for (int i = 0; i < num_indent; i++) space += "  ";
-        if (screen)  fprintf(screen,  "%s%s%s", space.c_str(), str, end);
-        if (logfile) fprintf(logfile, "%s%s%s", space.c_str(), str, end);
-    }
 }

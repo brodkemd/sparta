@@ -49,7 +49,6 @@ namespace SPARTA_NS {
             bigint remove_particles();
             void connect_3d_pre();
             void connect_3d_post();
-            void print(const char* str, int num_indent = 1, const char* end = "\n");
             bool run_condition();
             bool checkVarSums(std::string& _name);
 
