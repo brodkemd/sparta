@@ -19,12 +19,7 @@ namespace elmer {
             std::string _end = "End";
             int id;
 
-            std::ostringstream double_converter;
-
-            Base() {
-                // setting up the double converter
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
-            }
+            Base() {}
 
         private:
             /**
@@ -35,9 +30,7 @@ namespace elmer {
             }
 
             void _varToString(std::string& _buf, double _var) {
-                double_converter.str("");
-                double_converter << _var;
-                _buf = double_converter.str();
+                _buf = util::dtos(_var);
             }
 
             void _varToString(std::string& _buf, int _var) {
@@ -62,9 +55,7 @@ namespace elmer {
             }
 
             void varToString(std::ofstream& _buf, std::string _name, double _var) {
-                double_converter.str("");
-                double_converter << _var;
-                _buf << (_tab + _name + sep + double_converter.str() + "\n");
+                _buf << (_tab + _name + sep + util::dtos(_var) + "\n");
             }
 
             void varToString(std::ofstream& _buf, std::string _name, int _var) {

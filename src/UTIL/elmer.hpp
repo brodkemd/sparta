@@ -20,15 +20,14 @@ namespace elmer {
     class Elmer {
         private:
             const std::string sep = "\n\n";
-            std::ostringstream double_converter;
 
         public:
-            std::vector<double> node_temperature_data, node_delta_x_data, node_delta_y_data, node_delta_z_data;
+            std::vector<double> node_temperature_data;
             std::vector<std::array<int, elmer::boundary_size>> boundaries;
-            //                    temperature    x       y       z
-            std::vector<std::tuple<double,     double, double, double>>  nodes;
+            // array format: x, y, z
+            std::vector<std::array<double, 3>>  nodes;
             std::vector<std::vector<int>> elements;
-            std::string name, exe, sif, meshDB, node_data_file, dump_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext;
+            std::string name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext;
             double base_temp;
 
             Header          header;
@@ -50,9 +49,6 @@ namespace elmer {
                 this->material       = Material();
                 this->thermal_solver = Thermal_Solver();
                 this->elastic_solver = Elastic_Solver();
-
-                // setting up the double converter
-                double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
             }
 
             void set(toml::handler& _h) {
@@ -61,8 +57,7 @@ namespace elmer {
                 _h.get_at_path(this->exe,                       "elmer.exe",                        true);
                 _h.get_at_path(this->sif,                       "elmer.sif",                        true);
                 _h.get_at_path(this->base_temp,                 "elmer.base_temp",                  true);
-                _h.get_at_path(this->node_data_file,            "elmer.node_data_file",             true);
-                _h.get_at_path(this->dump_directory,            "elmer.dump_directory",             true);
+                _h.get_at_path(this->simulation_directory,      "simulation_directory",             true);
                 _h.get_at_path(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
                 _h.get_at_path(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
 
@@ -96,8 +91,15 @@ namespace elmer {
                 if (this->base_temp <= (double)0)
                     util::error("base temperature must be greater than 0");
 
-                if (this->dump_directory.back() == SEP)
-                    this->dump_directory = this->dump_directory.substr(0, this->dump_directory.length()-1);
+                if (this->simulation_directory.back() == SEP)
+                    this->simulation_directory = this->simulation_directory.substr(0, this->simulation_directory.length()-1);
+                
+                // setting vars from provided values
+                this->node_data_file = this->simulation_directory + SEP + this->simulation.Output_File;
+                this->header.Mesh_DB = { this->simulation_directory, "." };
+                this->header.Include_Path = "";
+                this->header.Results_Directory = this->simulation_directory;
+
             }
 
             /* ---------------------------------------------------------------------- */
@@ -106,12 +108,12 @@ namespace elmer {
                 // making sure the mesh database is complete
                 std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
                 for (int i = 0; i < 4; i++) {
-                    util::copyFile(this->meshDB + SEP + "mesh." + exts[i], this->dump_directory + SEP + "mesh." + exts[i]);
+                    util::copyFile(this->meshDB + SEP + "mesh." + exts[i], this->simulation_directory + SEP + "mesh." + exts[i]);
                 }
 
-                this->boundary_file = this->dump_directory + SEP + "mesh.boundary";
-                this->element_file = this->dump_directory + SEP + "mesh.elements";
-                this->node_file = this->dump_directory + SEP + "mesh.nodes";
+                this->boundary_file = this->simulation_directory + SEP + "mesh.boundary";
+                this->element_file = this->simulation_directory + SEP + "mesh.elements";
+                this->node_file = this->simulation_directory + SEP + "mesh.nodes";
             }
 
             
@@ -119,12 +121,8 @@ namespace elmer {
                 // getting the number of nodes
                 int count = util::count_lines_in_file(this->node_data_file);
 
-                // setting up object to convert doubles
-                this->double_converter.str("");
-                this->double_converter << this->base_temp;
-
                 // getting string version of elmer.base_temp
-                std::string str = this->double_converter.str();
+                std::string str = util::dtos(this->base_temp);
 
                 // writing base temperature to file for each node
                 std::ofstream output(this->node_data_file);
@@ -140,35 +138,30 @@ namespace elmer {
                 }
 
                 output << "displacement 1\nPerm:    \n";
-                this->double_converter.str("");
-                this->double_converter << (double)0;
-                str = double_converter.str();
+                str = util::dtos(0.0);
                 for (int i = 0; i < count; i++) {
                     output << "   " << str << "\n";
-                    this->node_delta_x_data.push_back((double)0);
                 }
 
                 output << "displacement 2\nPerm:    \n";
                 for (int i = 0; i < count; i++) {
                     output << "   " << str << "\n";
-                    this->node_delta_y_data.push_back((double)0);
                 }
 
                 output << "displacement 3\nPerm:    \n";
                 for (int i = 0; i < count; i++) {
                     output << "   " << str << "\n";
-                    this->node_delta_z_data.push_back((double)0);
                 }
                 output.close();
-                this->double_converter.str("");
             }
 
 
             void setup() {
                 this->setupDumpDirectory();
                 this->setupNodeDataFileAndVectors();
-                this->loadBoundary();
+                this->loadBoundaries();
                 this->loadElements();
+                this->loadNodes();
             }
 
 
@@ -191,14 +184,15 @@ namespace elmer {
                 if (command_result.exitstatus)
                     util::error(command_result.output);
                 
-                this->loadVarNodeData();
+                this->loadNodeData();
+                this->updateNodeFile();
 
             }
 
 
-            void getNodeAtIndex(int _index, int _boundary_index, double(&_point)[3]) {
+            void getNodePointAtIndex(int _index, int _boundary_index, double(&_point)[3]) {
                 for (int j = 0; j < elmer::dimension; j++)
-                    _point[j] = std::get<1>(this->nodes[this->boundaries[_index][_boundary_index]-1])[j];
+                    _point[j] = this->nodes[this->boundaries[_index][_boundary_index]-1][j];
             }
 
 
@@ -280,12 +274,7 @@ namespace elmer {
                 }
             }
 
-            void loadVarNodeData() {
-                this->node_temperature_data.clear();
-                this->node_delta_x_data.clear();
-                this->node_delta_y_data.clear();
-                this->node_delta_z_data.clear();
-
+            void loadNodeData() {
                 long unsigned int i, start;
                 std::vector<double>* v;
                 std::vector<std::string> lines, split_line;
@@ -299,33 +288,44 @@ namespace elmer {
                         start = i;
                 }
 
+                int cur_index = 0;
                 for (i = start+1; i < lines.size(); i++) {
                     line = lines[i];
                     util::trim(line);
                     util::split(line, split_line, ' ');
-                    if (lines[i][0] == ' ' && split_line.size() == 1)
-                        v->push_back(std::stod(line));
-                    else if ("Perm:" == split_line[0]) {
-                        cur_key = lines[i-1];
-                        util::trim(cur_key);
+                    if (lines[i][0] == ' ' && split_line.size() == 1) {
                         if (cur_key == (std::string)"temperature")
-                            v = &this->node_temperature_data;
+                            this->node_temperature_data[cur_index] = std::stod(line);
                         else if (cur_key == (std::string)"displacement 1")
-                            v = &this->node_delta_x_data;
+                            this->nodes[cur_index][0] += std::stod(line);
                         else if (cur_key == (std::string)"displacement 2")
-                            v = &this->node_delta_y_data;
+                            this->nodes[cur_index][1] += std::stod(line);
                         else if (cur_key == (std::string)"displacement 3")
-                            v = &this->node_delta_z_data;
+                            this->nodes[cur_index][2] += std::stod(line);
                         else
                             util::error("got unknown key in data file: " + cur_key);
+                        cur_index++;
+                    } else if ("Perm:" == split_line[0]) {
+                        cur_index = 0;
+                        cur_key = lines[i-1];
+                        util::trim(cur_key);
                     }
                 }
             }
 
 
-            void loadNodeData() {
+            void updateNodeFile() {
+                std::ofstream out(this->node_file);
+                if (!(out.is_open())) util::error(this->node_file + " did not open");
+
+                for (std::size_t i = 0; i < this->nodes.size(); i++) {
+                    out << i+1 << " " << -1 << " " << util::dtos(this->nodes[i][0]) << " " << util::dtos(this->nodes[i][1]) << " " << util::dtos(this->nodes[i][2]) << "\n";
+                }
+            }
+
+            void loadNodes() {
                 std::vector<std::string> lines, split_line;
-                std::tuple<int, std::array<double, 3>> data_item;
+                std::array<double, 3> data_item;
 
                 util::readFile(node_file, lines);
                 int count = 0;
@@ -339,14 +339,17 @@ namespace elmer {
                     if (std::stoi(split_line[0]) != count)
                         util::error("detected unordered node element at line " + std::to_string(count));
 
-                    std::get<0>(data_item) = std::stoi(split_line[1]);
-                    std::get<1>(data_item) = { std::stod(split_line[2]), std::stod(split_line[3]), std::stod(split_line[4]) };
+                    if (std::stoi(split_line[1]) != -1)
+                        util::error("detected a value that is not -1 in the second column of the node file, this is not yet support");
+                    
+
+                    data_item = { std::stod(split_line[2]), std::stod(split_line[3]), std::stod(split_line[4]) };
                     this->nodes.push_back(data_item);
                 }
             }
 
 
-            void loadBoundary() {
+            void loadBoundaries() {
                 std::vector<std::string> lines, _split;
                 std::array<int, boundary_size> arr;
                 this->boundaries.clear();
@@ -440,34 +443,24 @@ namespace elmer {
 
 
             void dumpNodeTemperatures(long _timestep) {
-                std::string filename = this->dump_directory + SEP + std::to_string(_timestep) + "." + this->node_temperature_file_ext;
+                std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_temperature_file_ext;
                 std::ofstream out(filename);
                 if (!(out.is_open())) util::error(filename + " did not open");
 
                 for (double it : this->node_temperature_data) {
-                    this->double_converter.str("");
-                    this->double_converter << it;
-                    out << this->double_converter.str() << "\n";
+                    out << util::dtos(it) << "\n";
                 }
                 out.close();
             }
 
 
             void dumpNodePositions(long _timestep) {
-                std::string filename = this->dump_directory + SEP + std::to_string(_timestep) + "." + this->node_position_file_ext;
+                std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_position_file_ext;
                 std::ofstream out(filename);
                 if (!(out.is_open())) util::error(filename + " did not open");
 
-                if (this->node_delta_x_data.size() != this->node_delta_y_data.size() || 
-                    this->node_delta_y_data.size() != this->node_delta_z_data.size() || 
-                    this->node_delta_x_data.size() != this->node_delta_z_data.size())
-                    util::error("position delta vectors do not have the same size");
-
-                this->double_converter.str("");
-                for (long unsigned int i = 0; i < this->node_delta_x_data.size(); i++) {    
-                    this->double_converter << std::get<1>(this->nodes[i])[0] << " " << std::get<1>(this->nodes[i])[1] << " " << std::get<1>(this->nodes[i])[2];
-                    out << this->double_converter.str() << "\n";
-                    this->double_converter.str("");
+                for (long unsigned int i = 0; i < this->nodes.size(); i++) {    
+                    out << util::dtos(this->nodes[i][0]) << " " << util::dtos(this->nodes[i][1]) << " " << util::dtos(this->nodes[i][2]) << "\n";
                 }
                 out.close();
 

@@ -4,8 +4,18 @@
 #include <fstream>
 #include <array>
 #include <vector>
+#include <limits>
+#include <iomanip>
+#include <string>
 
 namespace util {
+    std::ostringstream makeDoubleConverter() {
+        std::ostringstream __double_converter;
+        __double_converter << std::scientific<<std::setprecision(std::numeric_limits<double>::digits10+2);
+    }
+
+    static std::ostringstream _double_converter = makeDoubleConverter();
+
     // error command
     // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
     void error(std::string _msg) { throw _msg; }
@@ -41,6 +51,12 @@ namespace util {
         }
         exitcode = pclose(pipe);
         return CommandResult{result, exitcode};
+    }
+
+    std::string dtos(double _val) {
+        _double_converter.str("");
+        _double_converter << _val;
+        return _double_converter.str();
     }
 
     void copyFile(std::string from, std::string to) {

@@ -44,14 +44,13 @@ namespace SPARTA_NS {
             virtual double compute_scalar();
 
         private:
-            void load_temperatures();
-            void move_surf();
+            void update_temperatures();
+            void update_surf();
             bigint remove_particles();
             void connect_3d_pre();
             void connect_3d_post();
             void print(const char* str, int num_indent = 1, const char* end = "\n");
             bool run_condition();
-			void reload();
             bool checkVarSums(std::string& _name);
 
             #include "hash_options.h"
@@ -66,7 +65,7 @@ namespace SPARTA_NS {
 
             MyHash *hash;
             class Compute *cqw;
-            class elmer::Elmer* elmer;
+            class elmer::Elmer* fea;
 
             int groupbit, nprocs, tindex, run_every, nsurf, dimension, connectflag, *pselect, shear_locs[3], force_locs[3], energy_loc;
             double energy_threshold, force_threshold, shear_threshold, *qw_avg_me, *qw_avg, *fx_avg_me, *fx_avg, *fy_avg_me, *fy_avg, *fz_avg_me, *fz_avg, *shx_avg_me, *shx_avg, *shy_avg_me, *shy_avg, *shz_avg_me, *shz_avg;

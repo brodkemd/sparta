@@ -83,8 +83,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
     this->print(("Loading config from: " + std::string(arg[2])).c_str());
 
-    // making new elmer class
-    this->elmer = new elmer::Elmer();
+    // making new fea class
+    this->fea = new elmer::Elmer();
 
     // wrapping in a try catch defined above
     START_TRY
@@ -106,8 +106,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     s.get_at_path(surf_collide_args,        "sparta.surf_collide",      true);
     s.get_at_path(surf_modify_args,         "sparta.surf_modify",       true);  
 
-    // letting elmer handle its variable setting
-    this->elmer->set(s);
+    // letting fea handle its variable setting
+    this->fea->set(s);
 
     END_TRY
 
@@ -205,7 +205,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 /* ---------------------------------------------------------------------- */
 
 FixFea::~FixFea() {
-    delete this->elmer;
+    delete this->fea;
     memory->destroy(this->pselect);
     memory->destroy(this->qw_avg_me);
     memory->destroy(this->qw_avg);
@@ -286,8 +286,9 @@ void FixFea::init() {
     // loading the boundary data
     if (comm->me == 0) {
         START_TRY
-        this->elmer->setup();
-        this->load_temperatures();
+        this->fea->setup();
+        this->update_temperatures();
+        // no need to update surf here
         END_TRY
     }
 
@@ -332,7 +333,7 @@ void FixFea::end_of_step() {
         m++;
     }
 
-    // if should run elmer
+    // if should run fea
     if (this->run_condition()) {
         // summing all of the heat fluxes into one vector, namely qw_avg
         MPI_Allreduce(this->qw_avg_me,  this->qw_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -347,44 +348,39 @@ void FixFea::end_of_step() {
         // only run on the main process
         if (comm->me == 0) {
             std::string var_name;
-            // if it less than the threshold, do not run elmer
+            // if it less than the threshold, do not run fea
             if (this->checkVarSums(var_name)) {
                 // messages
-                // this->print(("Got sum " +  var_name   ", " + double_converter.str()).c_str());
                 this->print(("got sum over threshold for variable: " + var_name).c_str());
-                this->print("Setting up Elmer");
+                this->print("Setting up fea");
 
                 // wrapping in try to catch if exception is,
-                // elmer throws exceptions if it encounters an error
+                // fea throws exceptions if it encounters an error
                 START_TRY
 
-                
-                this->elmer->createConditionsFrom(
+                this->fea->createConditionsFrom(
                     qw_avg, 
                     fx_avg, fy_avg, fz_avg, 
                     shx_avg, shy_avg, shz_avg, 
                     this->run_every, update->dt, this->nsurf
                 );
 
-                this->elmer->run();
-
-                // done running so reloading temperatures
-                this->load_temperatures();
+                this->fea->run();
 
                 /* -------------------------------
-                 loading new surface 
+                 loading new surface and temperatures
                    ------------------------------- */
                 this->print("moving surf");
-                // this->elmer->loadNodeDataFromPostFile();
-                this->move_surf();
+                this->update_temperatures();
+                this->update_surf();
 
                 END_TRY
 
-            } else this->print("Skipping elmer, no params detected");
+            } else this->print("Skipping fea, no params detected");
 
             START_TRY
-            this->print("dumping node temperatures");
-            this->elmer->dump(update->ntimestep);
+            this->print("dumping node temperatures and points");
+            this->fea->dump(update->ntimestep);
             END_TRY
 
         }
@@ -452,30 +448,29 @@ bool FixFea::checkVarSums(std::string& _name) {
 }
 
 /**
- * Condition to run elmer on
+ * Condition to run fea on
 */
 bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
 
 /* ---------------------------------------------------------------------- */
 
 
-void FixFea::reload() {
-    this->load_temperatures();
+
     
-}
+    
 
 /**
  * Loads temperature data from file and sets needed variables
  * Must only run on process 0 
 */
-void FixFea::load_temperatures() {
+void FixFea::update_temperatures() {
     // the wall temperature variable
     double *tvector = surf->edvec[surf->ewhich[tindex]];
 
     START_TRY
     // loading per node temperature data
     this->print("loading temperatures");
-    this->elmer->averageNodeTemperaturesInto(tvector, this->nsurf);
+    this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
     END_TRY
 
     // checking to make sure all values where set to something non zero
@@ -487,9 +482,9 @@ void FixFea::load_temperatures() {
 
 /* ---------------------------------------------------------------------- */
 
-void FixFea::move_surf() {
+void FixFea::update_surf() {
 
-    // if (this->elmer->node_data.size() != (long unsigned int)this->nsurf)
+    // if (this->fea->node_data.size() != (long unsigned int)this->nsurf)
     //     error->all(FLERR, "detected a surface change while moving the surface");
 
     // sort particles
@@ -506,13 +501,13 @@ void FixFea::move_surf() {
     for (i = 0; i < (unsigned)this->nsurf; i++) {
         if (!(surf->tris[i].mask & this->groupbit)) continue;
 
-        this->elmer->getNodeAtIndex(i, 1, surf->tris[i].p1);
+        this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p1);
         this->pselect[3*i] = 1; // saying the first point of the triangle moved
 
-        this->elmer->getNodeAtIndex(i, 2, surf->tris[i].p2);
+        this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p2);
         this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
 
-        this->elmer->getNodeAtIndex(i, 3, surf->tris[i].p3);
+        this->fea->getNodePointAtIndex(i, 3, surf->tris[i].p3);
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
     }
     

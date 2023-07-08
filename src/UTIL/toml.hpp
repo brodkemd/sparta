@@ -3,8 +3,6 @@
 
 #include <string>
 #include <vector>
-#include <iomanip>
-#include <limits>
 
 #include "python_config.h"
 
