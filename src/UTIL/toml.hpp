@@ -10,10 +10,10 @@
 namespace toml {
     void error(std::string _msg) { throw _msg; }
 
-    const double noDouble   = std::numeric_limits<double>::max();
-    const int noInt         = std::numeric_limits<int>::max();
-    const char noString     = std::char_traits<char>::eof();
-    const bool noBool       = 2;
+    const double noDouble       = std::numeric_limits<double>::max();
+    const int noInt             = std::numeric_limits<int>::max();
+    const std::string noString  = std::to_string((char)std::char_traits<char>::eof());
+    const bool noBool           = 2;
 
     int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
         const int _size = _vec.size();
@@ -80,8 +80,10 @@ namespace toml {
             }
 
             void _handle_var(double& _var, PyObject *_src, std::string _path) {
-                if (Py_IsNone(_src))
+                if (Py_IsNone(_src)) {
                     _var = noDouble;
+                    return;
+                }
 
                 if (!(PyFloat_Check(_src)))
                     error(_path + " is not the correct type, must be float");
@@ -89,8 +91,10 @@ namespace toml {
             }
 
             void _handle_var(std::string& _var, PyObject *_src, std::string _path) {
-                if (Py_IsNone(_src))
+                if (Py_IsNone(_src)) {
                     _var = noString;
+                    return;
+                }
 
                 if (!(PyUnicode_Check(_src)))
                     error(_path + " is not the correct type, must be string");
@@ -98,8 +102,10 @@ namespace toml {
             }
 
             void _handle_var(int& _var, PyObject *_src, std::string _path) {
-                if (Py_IsNone(_src))
+                if (Py_IsNone(_src)) {
                     _var = noInt;
+                    return;
+                }
 
                 if (!(PyLong_Check(_src)))
                     error(_path + " is not the correct type, must be int");
@@ -107,8 +113,10 @@ namespace toml {
             }
 
             void _handle_var(bool& _var, PyObject *_src, std::string _path) {
-                if (Py_IsNone(_src))
-                    _var = 2;
+                if (Py_IsNone(_src)) {
+                    _var = noBool;
+                    return;
+                }
 
                 if (!(PyBool_Check(_src)))
                     error(_path + " is not the correct type, must be int");

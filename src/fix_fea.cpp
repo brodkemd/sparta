@@ -38,11 +38,14 @@
 using namespace SPARTA_NS;
 
 
+// DO NOT CHANGE THESE
 enum{INT,DOUBLE};                      // several files
 enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 
-
+// DO NOT CHANGE THIS
 #define INVOKED_PER_SURF 32
+
+// THESE CAN CHANGE BUT BE VERY CAREFUL
 #define START_TRY try {
 #define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
@@ -97,7 +100,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     s.get_at_path(this->run_every,          "sparta.run_every",         true);
     s.get_at_path(this->nevery,             "sparta.nevery",            true);
     s.get_at_path(this->energy_threshold,   "sparta.energy_threshold",  true);
-    s.get_at_path(this->force_threshold,    "sparta.force_threshold",   true);
+    s.get_at_path(this->pressure_threshold, "sparta.pressure_threshold",true);
     s.get_at_path(this->shear_threshold,    "sparta.shear_threshold",   true);
     s.get_at_path(this->connectflag,        "sparta.connect",           true);
     s.get_at_path(groupID,                  "sparta.groupID",           true);
@@ -113,8 +116,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     END_TRY
     
     this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
+    
     // adding surf collision model needed
-    // adding s_ to temperature variable, this is required
     size = toml::vec_to_arr(surf_collide_args, arr);
     this->surf->add_collide(size, arr);
 
@@ -131,29 +134,22 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Could not find fix fea compute ID");
     if (cqw->per_surf_flag == 0)
         error->all(FLERR,"Fix fea compute does not compute per-surf info");
-    // if (qwindex == 0 && cqw->size_per_surf_cols > 0)
-    //     error->all(FLERR,"Fix fea compute does not compute per-surf vector");
-    // if (qwindex > 0 && cqw->size_per_surf_cols == 0)
-    //     error->all(FLERR,"Fix fea compute does not compute per-surf array");
-    // if (qwindex > 0 && qwindex > cqw->size_per_surf_cols)
-    //     error->all(FLERR,"Fix fea compute array is accessed out-of-range");
-    // this->icol = qwindex-1;
 
     energy_loc = util::find(compute_args, (std::string)"etot")-4;
     if (energy_loc < 0)
         error->all(FLERR, "etot is not provided as compute arg");
     util::print("Energy flux index = " + std::to_string(energy_loc));
     
-    std::vector<std::string> opts = {"fx", "fy", "fz"};
+    std::vector<std::string> opts = {"px", "py", "pz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
         force_locs[i] = util::find(compute_args, opts[i])-4;
         if (force_locs[i] < 0)
             error->all(FLERR, (opts[i] + " is not provided as compute arg").c_str());
     }
 
-    util::print("fx index = " + std::to_string(force_locs[0]));
-    util::print("fy index = " + std::to_string(force_locs[1]));
-    util::print("fz index = " + std::to_string(force_locs[2]));
+    util::print("px index = " + std::to_string(force_locs[0]));
+    util::print("py index = " + std::to_string(force_locs[1]));
+    util::print("pz index = " + std::to_string(force_locs[2]));
 
     opts = {"shx", "shy", "shz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
@@ -168,6 +164,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     std::vector<int> _temp_indicies = {energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]};
     int max = util::max(_temp_indicies);
+    util::print("max = "+std::to_string(max));
     if (max > 0 && max > cqw->size_per_surf_cols)
         error->all(FLERR,"Fix fea compute array is accessed out-of-range");
 
@@ -182,20 +179,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->surf->modify_params(size, arr);
 
     // initing vars
-    this->qw_avg = NULL;
-    this->qw_avg_me = NULL;
-    this->fx_avg = NULL;
-    this->fx_avg_me = NULL;
-    this->fy_avg = NULL;
-    this->fy_avg_me = NULL;
-    this->fz_avg = NULL;
-    this->fz_avg_me = NULL;
-    this->shx_avg = NULL;
-    this->shx_avg_me = NULL;
-    this->shy_avg = NULL;
-    this->shy_avg_me = NULL;
-    this->shz_avg = NULL;
-    this->shz_avg_me = NULL;
+    this->qw = NULL;
+    this->qw_me = NULL;
+    this->px = NULL;
+    this->px_me = NULL;
+    this->py = NULL;
+    this->py_me = NULL;
+    this->pz = NULL;
+    this->pz_me = NULL;
+    this->shx = NULL;
+    this->shx_me = NULL;
+    this->shy = NULL;
+    this->shy_me = NULL;
+    this->shz = NULL;
+    this->shz_me = NULL;
 
     // telling the compute surf etot to run
     modify->addstep_compute_all(1);
@@ -212,20 +209,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 FixFea::~FixFea() {
     delete this->fea;
     memory->destroy(this->pselect);
-    memory->destroy(this->qw_avg_me);
-    memory->destroy(this->qw_avg);
-    memory->destroy(this->fx_avg_me);
-    memory->destroy(this->fx_avg);
-    memory->destroy(this->fy_avg_me);
-    memory->destroy(this->fy_avg);
-    memory->destroy(this->fz_avg_me);
-    memory->destroy(this->fz_avg);
-    memory->destroy(this->shx_avg_me);
-    memory->destroy(this->shx_avg);
-    memory->destroy(this->shy_avg_me);
-    memory->destroy(this->shy_avg);
-    memory->destroy(this->shz_avg_me);
-    memory->destroy(this->shz_avg);
+    memory->destroy(this->qw_me);
+    memory->destroy(this->qw);
+    memory->destroy(this->px_me);
+    memory->destroy(this->px);
+    memory->destroy(this->py_me);
+    memory->destroy(this->py);
+    memory->destroy(this->pz_me);
+    memory->destroy(this->pz);
+    memory->destroy(this->shx_me);
+    memory->destroy(this->shx);
+    memory->destroy(this->shy_me);
+    memory->destroy(this->shy);
+    memory->destroy(this->shz_me);
+    memory->destroy(this->shz);
     surf->remove_custom(this->tindex);
 }
 
@@ -243,47 +240,47 @@ void FixFea::init() {
     // int nlocal = surf->nlocal;
     this->nsurf = surf->nlocal;
 
-    memory->create(this->qw_avg, this->nsurf, "fea:qw_avg");
-    memset(this->qw_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->qw, this->nsurf, "fea:qw");
+    memset(this->qw, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->qw_avg_me, this->nsurf, "fea:qw_avg_me");
-    memset(this->qw_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->qw_me, this->nsurf, "fea:qw_me");
+    memset(this->qw_me, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fx_avg, this->nsurf, "fea:fx_avg");
-    memset(this->fx_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->px, this->nsurf, "fea:px");
+    memset(this->px, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fx_avg_me, this->nsurf, "fea:fx_avg_me");
-    memset(this->fx_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->px_me, this->nsurf, "fea:px_me");
+    memset(this->px_me, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fy_avg, this->nsurf, "fea:fy_avg");
-    memset(this->fy_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->py, this->nsurf, "fea:py");
+    memset(this->py, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fy_avg_me, this->nsurf, "fea:fy_avg_me");
-    memset(this->fy_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->py_me, this->nsurf, "fea:py_me");
+    memset(this->py_me, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fx_avg, this->nsurf, "fea:fx_avg");
-    memset(this->fx_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->pz, this->nsurf, "fea:px");
+    memset(this->pz, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->fz_avg_me, this->nsurf, "fea:fz_avg_me");
-    memset(this->fz_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->pz_me, this->nsurf, "fea:pz_me");
+    memset(this->pz_me, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->shx_avg, this->nsurf, "fea:shx_avg");
-    memset(this->shx_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->shx, this->nsurf, "fea:shx");
+    memset(this->shx, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->shx_avg_me, this->nsurf, "fea:shx_avg_me");
-    memset(this->shx_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->shx_me, this->nsurf, "fea:shx_me");
+    memset(this->shx_me, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->shy_avg, this->nsurf, "fea:shy_avg");
-    memset(this->shy_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->shy, this->nsurf, "fea:shy");
+    memset(this->shy, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->shz_avg_me, this->nsurf, "fea:shz_avg_me");
-    memset(this->shz_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->shy_me, this->nsurf, "fea:shz_me");
+    memset(this->shy_me, 0, this->nsurf*sizeof(double));
     
-    memory->create(this->shz_avg, this->nsurf, "fea:shz_avg");
-    memset(this->shz_avg, 0, this->nsurf*sizeof(double));
+    memory->create(this->shz, this->nsurf, "fea:shz");
+    memset(this->shz, 0, this->nsurf*sizeof(double));
 
-    memory->create(this->shz_avg_me, this->nsurf, "fea:shz_avg_me");
-    memset(this->shz_avg_me, 0, this->nsurf*sizeof(double));
+    memory->create(this->shz_me, this->nsurf, "fea:shz_me");
+    memset(this->shz_me, 0, this->nsurf*sizeof(double));
 
     memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
@@ -311,14 +308,14 @@ void FixFea::init() {
  * writing the surface data to the file
  */
 void FixFea::end_of_step() {
-    util::print("end of step");
+    //util::print("end of step");
     int i,m;
     
     // number of surface elements
     if (this->nsurf != surf->nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
-    util::print("setting up and running compute");
+    //util::print("setting up and running compute");
     // required to run the compute
     modify->clearstep_compute();
     if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
@@ -328,41 +325,41 @@ void FixFea::end_of_step() {
     cqw->post_process_surf();
 
     // adding the heat flux to the running average
-    util::print("averaging");
+    //util::print("averaging");
     m = 0;
     for (i = comm->me; i < nsurf; i += nprocs) {
         if (!(surf->tris[i].mask & groupbit))
         
-        this->qw_avg_me[i] +=cqw->array_surf[m][energy_loc];
-        util::print("energy");
-        this->shy_avg_me[i]+=cqw->array_surf[m][shear_locs[1]];
-        util::print("x force");
-        this->fy_avg_me[i] +=cqw->array_surf[m][force_locs[1]];
-        util::print("y force");
-        this->fz_avg_me[i] +=cqw->array_surf[m][force_locs[2]];
-        util::print("z force");
-        this->shx_avg_me[i]+=cqw->array_surf[m][shear_locs[0]];
-        util::print("shx force");
-        this->shy_avg_me[i]+=cqw->array_surf[m][shear_locs[1]];
-        util::print("shy force");
-        this->shz_avg_me[i]+=cqw->array_surf[m][shear_locs[2]];
-        util::print("shz force");
+        this->qw_me[i] +=cqw->array_surf[m][energy_loc];
+        //util::print("energy");
+        this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
+        //util::print("x force");
+        this->py_me[i] +=cqw->array_surf[m][force_locs[1]];
+        //util::print("y force");
+        this->pz_me[i] +=cqw->array_surf[m][force_locs[2]];
+        //util::print("z force");
+        this->shx_me[i]+=cqw->array_surf[m][shear_locs[0]];
+        //util::print("shx force");
+        this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
+        //util::print("shy force");
+        this->shz_me[i]+=cqw->array_surf[m][shear_locs[2]];
+        //util::print("shz force");
         m++;
     }
-    util::print("done averaging");
+    //util::print("done averaging");
 
     // if should run fea
     if (this->run_condition()) {
         util::print("running");
         util::print("mpi reducing vars");
-        // summing all of the heat fluxes into one vector, namely qw_avg
-        MPI_Allreduce(this->qw_avg_me,  this->qw_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fx_avg_me,  this->fx_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fy_avg_me,  this->fy_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->fz_avg_me,  this->fz_avg,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shx_avg_me, this->shx_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shy_avg_me, this->shy_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shz_avg_me, this->shz_avg, nsurf, MPI_DOUBLE, MPI_SUM, world);
+        // summing all of the heat fluxes into one vector, namely qw
+        MPI_Allreduce(this->qw_me,  this->qw,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->px_me,  this->px,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->py_me,  this->py,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->pz_me,  this->pz,  nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shx_me, this->shx, nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shy_me, this->shy, nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shz_me, this->shz, nsurf, MPI_DOUBLE, MPI_SUM, world);
         
 
         // only run on the main process
@@ -379,9 +376,9 @@ void FixFea::end_of_step() {
                 START_TRY
 
                 this->fea->createConditionsFrom(
-                    qw_avg, 
-                    fx_avg, fy_avg, fz_avg, 
-                    shx_avg, shy_avg, shz_avg, 
+                    qw, 
+                    px, py, pz, 
+                    shx, shy, shz, 
                     this->run_every, update->dt, this->nsurf
                 );
 
@@ -403,8 +400,14 @@ void FixFea::end_of_step() {
             END_TRY
 
         }
-        // resetting the heat flux array
-        for (i = 0; i < nsurf; i++) this->qw_avg_me[i] = (double)0;
+        // resetting arrays to zero
+        memset(this->qw_me,  0, this->nsurf*sizeof(double));
+        memset(this->px_me,  0, this->nsurf*sizeof(double));
+        memset(this->py_me,  0, this->nsurf*sizeof(double));
+        memset(this->pz_me,  0, this->nsurf*sizeof(double));
+        memset(this->shx_me, 0, this->nsurf*sizeof(double));
+        memset(this->shy_me, 0, this->nsurf*sizeof(double));
+        memset(this->shz_me, 0, this->nsurf*sizeof(double));
         MPI_Barrier(world);
     }
     // telling the compute to run on the next timestep
@@ -422,43 +425,43 @@ bool FixFea::checkVarSums(std::string& _name) {
     double sum;
 
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(qw_avg[i]);
+    for (i = 0; i < nsurf; i++) sum+=std::abs(qw[i]);
     if (sum > this->energy_threshold) {
         _name = "energy";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(fx_avg[i]);
-    if (sum > this->force_threshold) {
-        _name = "fx";
+    for (i = 0; i < nsurf; i++) sum+=std::abs(px[i]);
+    if (sum > this->pressure_threshold) {
+        _name = "px";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(fy_avg[i]);
-    if (sum > this->force_threshold) {
-        _name = "fy";
+    for (i = 0; i < nsurf; i++) sum+=std::abs(py[i]);
+    if (sum > this->pressure_threshold) {
+        _name = "py";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(fz_avg[i]);
-    if (sum > this->force_threshold) {
-        _name = "fz";
+    for (i = 0; i < nsurf; i++) sum+=std::abs(pz[i]);
+    if (sum > this->pressure_threshold) {
+        _name = "pz";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(shx_avg[i]);
+    for (i = 0; i < nsurf; i++) sum+=std::abs(shx[i]);
     if (sum > this->shear_threshold) {
         _name = "shx";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(shy_avg[i]);
+    for (i = 0; i < nsurf; i++) sum+=std::abs(shy[i]);
     if (sum > this->shear_threshold) {
         _name = "shy";
         return true;
     }
     sum = 0;
-    for (i = 0; i < nsurf; i++) sum+=std::abs(shz_avg[i]);
+    for (i = 0; i < nsurf; i++) sum+=std::abs(shz[i]);
     if (sum > this->shear_threshold) {
         _name = "shz";
         return true;

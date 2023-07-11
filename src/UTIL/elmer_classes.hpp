@@ -51,18 +51,22 @@ namespace elmer {
              * lines from the inputs
             */ 
             void varToString(std::ofstream& _buf, std::string _name, std::string _var) {
+                if (_var == toml::noString) return;
                 _buf << (_tab + _name + sep + "\""+_var+"\"" + "\n");
             }
 
             void varToString(std::ofstream& _buf, std::string _name, double _var) {
+                if (_var == toml::noDouble) return;
                 _buf << (_tab + _name + sep + util::dtos(_var) + "\n");
             }
 
             void varToString(std::ofstream& _buf, std::string _name, int _var) {
+                if (_var == toml::noInt) return;
                 _buf << (_tab + _name + sep + std::to_string(_var) + "\n");
             }
 
             void varToString(std::ofstream& _buf, std::string _name, bool _var) {
+                if (_var == toml::noBool) return;
                 if (_var) _buf << (_tab + _name + sep + "True" + "\n");
                 else      _buf << (_tab + _name + sep + "False" + "\n");
             }
@@ -183,7 +187,7 @@ namespace elmer {
                 _h.get_at_path(BDF_Order,                   "elmer.simulation.BDF_Order", true);
                 _h.get_at_path(Solver_Input_File,           "elmer.simulation.Solver_Input_File", true);
                 _h.get_at_path(Output_File,                 "elmer.simulation.Output_File", true);
-                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File", true);
+                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File", false);
             }
 
 
@@ -424,10 +428,11 @@ namespace elmer {
                 this->name = "Body " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
-                Equation = 1; Material = 1;
+                Equation = Material = 1;
+                Initial_condition = Body_Force = toml::noInt;
             }
             std::vector<int> Target_Bodies;
-            int Initial_condition, Equation, Material;
+            int Initial_condition, Equation, Material, Body_Force;
 
             void join(std::ofstream& _buf) {
                 _buf << (name + "\n");
@@ -436,9 +441,34 @@ namespace elmer {
                 varToString(_buf, "Equation",           Equation);
                 varToString(_buf, "Material",           Material);
                 varToString(_buf, "Initial condition",  Initial_condition);
+                varToString(_buf, "Body Force",         Body_Force);
                 _buf<<(_end + "\n");
             }
     };
+
+
+    class Body_Force : public Base {
+        public:
+            Body_Force(int _id) {
+                this->name = "Body Force " + std::to_string(_id);
+                sep = " = ";
+                id = _id;
+                Stress_Bodyforce_2 = Force_2 = Density = toml::noDouble;
+            }
+            double Stress_Bodyforce_2, Force_2, Density;
+
+            void join(std::ofstream& _buf) {
+                _buf << (name + "\n");
+                varToString(_buf, "Name",               this->name);
+                // custom line
+                if (Stress_Bodyforce_2 != toml::noDouble && Density != toml::noDouble) {
+                    _buf << _tab << "Stress Bodyforce 2" << sep << "$ " << util::dtos(Stress_Bodyforce_2) << "*" << util::dtos(Density) << "\n";
+                }
+                varToString(_buf, "Force 2",            Force_2);
+                _buf<<(_end + "\n");
+            }
+    };
+
 
     /**
      * handles elmer initial condition section
@@ -449,6 +479,7 @@ namespace elmer {
                 this->name = "Initial Condition " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
+                Temperature = toml::noDouble;
             }
 
             double Temperature;
@@ -471,11 +502,14 @@ namespace elmer {
                 this->name = "Boundary Condition " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
+                Heat_Flux_BC = toml::noBool;
+                Heat_Flux    = toml::noDouble;
             }
 
             std::vector<int> Target_Boundaries;
-            bool Heat_Flux_BC = true;
+            bool Heat_Flux_BC;
             double Heat_Flux;
+            std::vector<double> stress_6_vector;
 
             void join(std::ofstream& _buf) {
                 _buf << (name + "\n");
@@ -483,6 +517,7 @@ namespace elmer {
                 varToString(_buf, "Name",               this->name);
                 varToString(_buf, "Heat Flux BC",       Heat_Flux_BC);
                 varToString(_buf, "Heat Flux",          Heat_Flux);
+                varToString(_buf, "Stress",             stress_6_vector, true);
                 _buf<<(_end + "\n");
             }
 

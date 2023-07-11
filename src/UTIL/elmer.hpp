@@ -27,8 +27,9 @@ namespace elmer {
             // array format: x, y, z
             std::vector<std::array<double, 3>>  nodes;
             std::vector<std::vector<int>> elements;
-            std::string name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext;
+            std::string name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, print_intensity;
             double base_temp;
+            bool gravity_on;
 
             Header          header;
             Simulation      simulation;
@@ -37,6 +38,7 @@ namespace elmer {
             Elastic_Solver  elastic_solver;
             Equation        equation;
             Material        material;
+            std::vector<Body_Force*>         body_forces;
             std::vector<Body*>               bodies;
             std::vector<Initial_Condition*>  initial_conditions;
             std::vector<Boundary_Condition*> boundary_conditions;
@@ -60,6 +62,8 @@ namespace elmer {
                 _h.get_at_path(this->simulation_directory,      "simulation_directory",             true);
                 _h.get_at_path(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
                 _h.get_at_path(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
+                _h.get_at_path(this->gravity_on,                "elmer.gravity_on",                 true);
+                _h.get_at_path(this->print_intensity,           "elmer.print_intensity",            false);
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
@@ -107,6 +111,16 @@ namespace elmer {
                 this->constants.Permeability_of_Vacuum = 1.25663706e-6;
                 this->constants.Boltzmann_Constant = 1.380649e-23;
                 this->constants.Unit_Charge = 1.6021766e-19;
+
+                if (this->gravity_on) {
+                    elmer::Body_Force* bf = new elmer::Body_Force(1);
+                    bf->Stress_Bodyforce_2 = this->constants.Gravity[(int)this->constants.Gravity.size()-1];
+                    bf->Density            = this->material.Density;
+                    this->body_forces.push_back(bf);
+                }
+
+                if (this->print_intensity == toml::noString)
+                    this->print_intensity = "none";
 
             }
 
@@ -179,23 +193,27 @@ namespace elmer {
 
 
             void run() {
+                util::print("running");
                 // making the sif file
                 std::ofstream _buf(this->sif);
                 if (!(_buf.is_open())) util::error(this->sif + " did not open");
                 this->join(_buf);                
                 _buf.close();
+                // util::error("done");
 
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
-                util::CommandResult command_result;
+                int exit_status;
                 try {
-                    command_result = util::EXEC(exe+" "+this->sif+" 2>&1");
+                    exit_status = util::EXEC(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
                 } catch (std::exception& e) {
                     util::error(e.what());
                 }
                 // if the command did not succeed
-                if (command_result.exitstatus)
-                    util::error(command_result.output);
+                if (exit_status)
+                    util::error("check elmer output");
+                // else
+                //     util::printToFile(command_result.output, 0);
                 
                 this->loadNodeData();
                 this->updateNodeFile();
@@ -209,9 +227,14 @@ namespace elmer {
             }
 
 
-            void createConditionsFrom(double*& _qw, double*& _fx, double*& _fy, double*& _fz, double*& _shx, double*& _shy, double*& _shz, int _ntimesteps, double _timestep_size, int _length) {
-                int i, _size, size;
+            void createConditionsFrom(double*& _qw, double*& _px, double*& _py, double*& _pz, double*& _shx, double*& _shy, double*& _shz, int _ntimesteps, double _timestep_size, int _length) {
+                int i, _size, size, _body_force;
                 double avg;
+
+                if (this->gravity_on)
+                    _body_force = 1;
+                else
+                    _body_force = toml::noInt;
 
                 // clearing the vectors in elmer to make room for the new data
                 this->bodies.clear();
@@ -227,8 +250,15 @@ namespace elmer {
                  * boundary conditions
                  */
                 for (i = 0; i < _length; i++) {
-                    elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(i+1);
+                    elmer::Boundary_Condition* bc;
+                    bc = new elmer::Boundary_Condition(2*i+1);
+                    bc->Heat_Flux_BC = true;
                     bc->Heat_Flux = _qw[i]/_ntimesteps; // the average heat flux
+                    this->boundary_conditions.push_back(bc);
+                    
+                    bc = new elmer::Boundary_Condition(2*(i+1));
+                    // setting the stress tensor tensor components, averaging them
+                    bc->stress_6_vector = {_px[i]/_ntimesteps, _py[i]/_ntimesteps, _pz[i]/_ntimesteps, _shx[i]/_ntimesteps, _shy[i]/_ntimesteps, _shz[i]/_ntimesteps};
                     this->boundary_conditions.push_back(bc);
                 }
 
@@ -255,6 +285,7 @@ namespace elmer {
                     Body* _body = new Body(i+1);
                     _body->Initial_condition = i+1;
                     _body->Target_Bodies = {(int)i+1};
+                    _body->Body_Force = _body_force;
                     Initial_Condition* _ic = new Initial_Condition(i+1);
                     _ic->Temperature = avg;
 
@@ -287,7 +318,9 @@ namespace elmer {
                 }
             }
 
+
             void loadNodeData() {
+                util::print("loading node data");
                 std::size_t i, start;
                 std::vector<std::string> lines, split_line;
                 std::string cur_key, line;
@@ -299,6 +332,7 @@ namespace elmer {
                     if (split_line[0] == (std::string)"Time:")
                         start = i;
                 }
+                std::vector<std::array<double, 3>> temp_nodes = this->nodes;
 
                 int cur_index = 0;
                 for (i = start+1; i < lines.size(); i++) {
@@ -318,15 +352,25 @@ namespace elmer {
                             util::error("got unknown key in data file: " + cur_key);
                         cur_index++;
                     } else if ("Perm:" == split_line[0]) {
+                        if (cur_index > 0) {
+                            if ((std::size_t)cur_index != this->nodes.size()) util::error("did not get all indicies while loading data");
+                        }
                         cur_index = 0;
                         cur_key = lines[i-1];
                         util::trim(cur_key);
                     }
                 }
+
+                int j;
+                for (i = 0; i < temp_nodes.size(); i++) {
+                    for (j = 0; j < 3; j++)
+                        if (std::abs(nodes[i][j] - temp_nodes[i][j]) > 0.0) util::print("got difference");
+                }
             }
 
 
             void updateNodeFile() {
+                util::print("updating node file");
                 std::ofstream out(this->node_file);
                 if (!(out.is_open())) util::error(this->node_file + " did not open");
 
@@ -439,6 +483,9 @@ namespace elmer {
 
                 for (std::size_t i = 0; i < this->bodies.size(); i++)
                     this->bodies[i]->join(_buf);
+
+                for (std::size_t i = 0; i < this->body_forces.size(); i++)
+                    this->body_forces[i]->join(_buf);
 
                 for (std::size_t i = 0; i < this->initial_conditions.size(); i++)
                     this->initial_conditions[i]->join(_buf);

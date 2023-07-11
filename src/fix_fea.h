@@ -67,7 +67,7 @@ namespace SPARTA_NS {
             class elmer::Elmer* fea;
 
             int groupbit, nprocs, tindex, run_every, nsurf, dimension, connectflag, *pselect, shear_locs[3], force_locs[3], energy_loc;
-            double energy_threshold, force_threshold, shear_threshold, *qw_avg_me, *qw_avg, *fx_avg_me, *fx_avg, *fy_avg_me, *fy_avg, *fz_avg_me, *fz_avg, *shx_avg_me, *shx_avg, *shy_avg_me, *shy_avg, *shz_avg_me, *shz_avg;
+            double energy_threshold, pressure_threshold, shear_threshold, *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
             bigint ndeleted;
                    
     };
