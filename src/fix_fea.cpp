@@ -42,6 +42,8 @@ using namespace SPARTA_NS;
 enum{INT,DOUBLE};                      // several files
 enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 
+/* ---------------------------------------------------------------------- */
+
 // DO NOT CHANGE THIS
 #define INVOKED_PER_SURF 32
 
@@ -49,6 +51,7 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 #define START_TRY try {
 #define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
+/* ---------------------------------------------------------------------- */
 
 /**
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
@@ -81,6 +84,10 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         error->all(FLERR,"Cannot use fix fea with implicit surfs");
     if (surf->distributed)
         error->all(FLERR,"Cannot use fix fea with distributed surfs");
+    
+    // making sure the dimension is correct
+    if (domain->dimension != elmer::dimension)
+        error->all(FLERR, ("Invalid dimension detected, must be " + std::to_string(elmer::dimension) + " dimensional").c_str());
 
     // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
@@ -115,6 +122,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     END_TRY
     
+    // getting the index of the surface variable added
     this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
     
     // adding surf collision model needed
@@ -135,11 +143,13 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (cqw->per_surf_flag == 0)
         error->all(FLERR,"Fix fea compute does not compute per-surf info");
 
+    // getting the index in the compute of the energy value
     energy_loc = util::find(compute_args, (std::string)"etot")-4;
     if (energy_loc < 0)
         error->all(FLERR, "etot is not provided as compute arg");
     util::print("Energy flux index = " + std::to_string(energy_loc));
-    
+
+    // getting the indicies for the pressures (stresses) from the compute
     std::vector<std::string> opts = {"px", "py", "pz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
         force_locs[i] = util::find(compute_args, opts[i])-4;
@@ -151,6 +161,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     util::print("py index = " + std::to_string(force_locs[1]));
     util::print("pz index = " + std::to_string(force_locs[2]));
 
+    // getting the indicies for the shear stresses from the compute
     opts = {"shx", "shy", "shz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
         shear_locs[i] = util::find(compute_args, opts[i])-4;
@@ -162,6 +173,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     util::print("shy index = " + std::to_string(shear_locs[1]));
     util::print("shz index = " + std::to_string(shear_locs[2]));
 
+    // checking to make sure the indicies just detected do not go above the bounds of the compute array
     std::vector<int> _temp_indicies = {energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]};
     int max = util::max(_temp_indicies);
     util::print("max = "+std::to_string(max));
@@ -206,8 +218,14 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * cleaning up the class and freeing up memory 
+ */
 FixFea::~FixFea() {
+    // deleting the pointer
     delete this->fea;
+
+    // freeing up memory
     memory->destroy(this->pselect);
     memory->destroy(this->qw_me);
     memory->destroy(this->qw);
@@ -223,6 +241,8 @@ FixFea::~FixFea() {
     memory->destroy(this->shy);
     memory->destroy(this->shz_me);
     memory->destroy(this->shz);
+
+    // removing the variable from the surface
     surf->remove_custom(this->tindex);
 }
 
@@ -235,9 +255,11 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * allocates memory, loads the initial data, and performs some checks
+ */
 void FixFea::init() {
     // number of surface elements
-    // int nlocal = surf->nlocal;
     this->nsurf = surf->nlocal;
 
     memory->create(this->qw, this->nsurf, "fea:qw");
@@ -290,8 +312,12 @@ void FixFea::init() {
     // loading the boundary data
     if (comm->me == 0) {
         START_TRY
+        // setups elmer
         this->fea->setup();
+
+        // sets the temperatures of the surface elements
         this->update_temperatures();
+        
         // no need to update surf here
         END_TRY
     }
@@ -304,8 +330,8 @@ void FixFea::init() {
 /* ---------------------------------------------------------------------- */
 
 /**
- * Runs at the end of each time step
- * writing the surface data to the file
+ * Runs at the end of each time step gets values from the compute and sends them
+ * to elmer
  */
 void FixFea::end_of_step() {
     //util::print("end of step");
@@ -315,7 +341,6 @@ void FixFea::end_of_step() {
     if (this->nsurf != surf->nlocal)
         error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
 
-    //util::print("setting up and running compute");
     // required to run the compute
     modify->clearstep_compute();
     if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
@@ -324,35 +349,25 @@ void FixFea::end_of_step() {
     }
     cqw->post_process_surf();
 
-    // adding the heat flux to the running average
-    //util::print("averaging");
+    // adding the heat flux and all of the stress to the running averages
     m = 0;
     for (i = comm->me; i < nsurf; i += nprocs) {
         if (!(surf->tris[i].mask & groupbit))
-        
         this->qw_me[i] +=cqw->array_surf[m][energy_loc];
-        //util::print("energy");
         this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
-        //util::print("x force");
         this->py_me[i] +=cqw->array_surf[m][force_locs[1]];
-        //util::print("y force");
         this->pz_me[i] +=cqw->array_surf[m][force_locs[2]];
-        //util::print("z force");
         this->shx_me[i]+=cqw->array_surf[m][shear_locs[0]];
-        //util::print("shx force");
         this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
-        //util::print("shy force");
         this->shz_me[i]+=cqw->array_surf[m][shear_locs[2]];
-        //util::print("shz force");
         m++;
     }
-    //util::print("done averaging");
 
     // if should run fea
     if (this->run_condition()) {
         util::print("running");
-        util::print("mpi reducing vars");
-        // summing all of the heat fluxes into one vector, namely qw
+
+        // summing all of the per process arrays into shared arrays
         MPI_Allreduce(this->qw_me,  this->qw,  nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->px_me,  this->px,  nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->py_me,  this->py,  nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -365,8 +380,9 @@ void FixFea::end_of_step() {
         // only run on the main process
         if (comm->me == 0) {
             std::string var_name;
-            // if it less than the threshold, do not run fea
-            if (this->checkVarSums(var_name)) {
+            // checks to see if elmer should be run, and indicates which variable 
+            // triggered the run
+            if (this->checkRun(var_name)) {
                 // messages
                 util::print("got sum over threshold for variable: " + var_name);
                 util::print("Setting up fea");
@@ -375,6 +391,7 @@ void FixFea::end_of_step() {
                 // fea throws exceptions if it encounters an error
                 START_TRY
 
+                // creates bodies, boundary, and initial conditions
                 this->fea->createConditionsFrom(
                     qw, 
                     px, py, pz, 
@@ -382,11 +399,10 @@ void FixFea::end_of_step() {
                     this->run_every, update->dt, this->nsurf
                 );
 
-                this->fea->run();
+                // runs the fea solver
+                this->fea->run(update->ntimestep);
 
-                /* -------------------------------
-                 loading new surface and temperatures
-                   ------------------------------- */
+                // loading new temperatures and surface points from the fea result
                 this->update_temperatures();
                 this->update_surf();
 
@@ -395,12 +411,13 @@ void FixFea::end_of_step() {
             } else util::print("Skipping fea, no params detected");
 
             START_TRY
+            // dumps the data obtained from the fea solver
             util::print("dumping node temperatures and points");
             this->fea->dump(update->ntimestep);
             END_TRY
 
         }
-        // resetting arrays to zero
+        // resetting arrays to all zeros
         memset(this->qw_me,  0, this->nsurf*sizeof(double));
         memset(this->px_me,  0, this->nsurf*sizeof(double));
         memset(this->py_me,  0, this->nsurf*sizeof(double));
@@ -416,56 +433,41 @@ void FixFea::end_of_step() {
 
 /* ---------------------------------------------------------------------- */
 
+// returns the number particles deleted
 double FixFea::compute_scalar() { return (double) this->ndeleted; }
 
 /* ---------------------------------------------------------------------- */
 
-bool FixFea::checkVarSums(std::string& _name) {
+/**
+ * checks if the fea solver should be run
+*/
+bool FixFea::checkRun(std::string& _name) {
     int i;
     double sum;
 
+    // summing all of the vars and checking if they are above the threshold
+    // returns true if above the threshold
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(qw[i]);
-    if (sum > this->energy_threshold) {
-        _name = "energy";
-        return true;
-    }
+    if (sum > this->energy_threshold)   { _name = "energy"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(px[i]);
-    if (sum > this->pressure_threshold) {
-        _name = "px";
-        return true;
-    }
+    if (sum > this->pressure_threshold) { _name = "px"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(py[i]);
-    if (sum > this->pressure_threshold) {
-        _name = "py";
-        return true;
-    }
+    if (sum > this->pressure_threshold) { _name = "py"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(pz[i]);
-    if (sum > this->pressure_threshold) {
-        _name = "pz";
-        return true;
-    }
+    if (sum > this->pressure_threshold) { _name = "pz"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shx[i]);
-    if (sum > this->shear_threshold) {
-        _name = "shx";
-        return true;
-    }
+    if (sum > this->shear_threshold)    { _name = "shx"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shy[i]);
-    if (sum > this->shear_threshold) {
-        _name = "shy";
-        return true;
-    }
+    if (sum > this->shear_threshold)    { _name = "shy"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shz[i]);
-    if (sum > this->shear_threshold) {
-        _name = "shz";
-        return true;
-    }
+    if (sum > this->shear_threshold)    { _name = "shz"; return true; }
     return false;
 }
 
@@ -475,7 +477,6 @@ bool FixFea::checkVarSums(std::string& _name) {
 bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
 
 /* ---------------------------------------------------------------------- */
-
 
 /**
  * Loads temperature data from file and sets needed variables
@@ -488,32 +489,36 @@ void FixFea::update_temperatures() {
     START_TRY
     // loading per node temperature data
     util::print("loading temperatures");
+
+    // averages node temperatures on a per surface basis
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
+
     END_TRY
 
     // checking to make sure all values where set to something non zero
     for (int i = 0; i < this->nsurf; i++) {
-        if (tvector[i] == (double)0)
+        if (tvector[i] == 0.0)
             error->all(FLERR, "wall temperature not set correctly");
     }
 }
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Updates the surface in sparta using the data from fea
+*/
 void FixFea::update_surf() {
-
-    // if (this->fea->node_data.size() != (std::size_t)this->nsurf)
-    //     error->all(FLERR, "detected a surface change while moving the surface");
-
     // sort particles
     if (particle->exist) particle->sort();
+
+    // connects the surfs, makes it water tight
     if (this->connectflag && this->groupbit != 1) this->connect_3d_pre();
 
     /**** this part does the moving */
     unsigned int i;
 
     // resetting pselect
-    for (i = 0; i < (unsigned)3*this->nsurf; i++) this->pselect[i] = 0;
+    memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
     // moving points
     for (i = 0; i < (unsigned)this->nsurf; i++) {
@@ -529,6 +534,7 @@ void FixFea::update_surf() {
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
     }
     
+    // connects the surfs, makes it water tight
     if (this->connectflag && this->groupbit != 1) this->connect_3d_post();
 
     surf->compute_tri_normal(0);

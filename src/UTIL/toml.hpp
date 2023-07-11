@@ -1,19 +1,17 @@
 #ifndef TOML_H
 #define TOML_H
 
-#include <string>
-#include <vector>
-
 #include "python_config.h"
+#include "util.hpp"
 
 
 namespace toml {
-    void error(std::string _msg) { throw _msg; }
-
     const double noDouble       = std::numeric_limits<double>::max();
     const int noInt             = std::numeric_limits<int>::max();
     const std::string noString  = std::to_string((char)std::char_traits<char>::eof());
     const bool noBool           = 2;
+
+    /* ---------------------------------------------------------------------- */
 
     int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
         const int _size = _vec.size();
@@ -21,6 +19,8 @@ namespace toml {
         for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
         return _size;
     }
+
+    /* ---------------------------------------------------------------------- */
 
     class handler {
         public:
@@ -46,15 +46,19 @@ namespace toml {
                     this->_err();
 
                     if (!(this->get_at && PyCallable_Check(this->get_at))) {  
-                        error("get_at_path function does not exists or is not callable");
+                        ERR("get_at_path function does not exists or is not callable");
                     }
                 }
             }
+
+            /* ---------------------------------------------------------------------- */
 
             ~handler() {
                 Py_Finalize();
                 Py_DECREF(pValue);
             }
+
+            /* ---------------------------------------------------------------------- */
 
             template<typename T>
             void get_at_path(T& _var, std::string _path, bool _strict) {
@@ -71,13 +75,17 @@ namespace toml {
         private:
             PyObject *get_at, *pValue, *pArgs, *type, *value, *traceback;
 
+            /* ---------------------------------------------------------------------- */
+
             void _err() {
                 if (PyErr_Occurred()) {
                     PyErr_Fetch(&this->type, &this->value, &this->traceback);
                     std::string _value = _PyUnicode_AsString(PyObject_Repr(this->value));
-                    error(_value);
+                    ERR(_value);
                 }
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void _handle_var(double& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
@@ -86,9 +94,11 @@ namespace toml {
                 }
 
                 if (!(PyFloat_Check(_src)))
-                    error(_path + " is not the correct type, must be float");
+                    ERR(_path + " is not the correct type, must be float");
                 _var = PyFloat_AsDouble(_src);
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void _handle_var(std::string& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
@@ -97,9 +107,11 @@ namespace toml {
                 }
 
                 if (!(PyUnicode_Check(_src)))
-                    error(_path + " is not the correct type, must be string");
+                    ERR(_path + " is not the correct type, must be string");
                 _var = _PyUnicode_AsString(_src);
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void _handle_var(int& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
@@ -108,9 +120,11 @@ namespace toml {
                 }
 
                 if (!(PyLong_Check(_src)))
-                    error(_path + " is not the correct type, must be int");
+                    ERR(_path + " is not the correct type, must be int");
                 _var = PyLong_AsLong(_src);
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void _handle_var(bool& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
@@ -119,13 +133,15 @@ namespace toml {
                 }
 
                 if (!(PyBool_Check(_src)))
-                    error(_path + " is not the correct type, must be int");
+                    ERR(_path + " is not the correct type, must be bool");
                 
                 if (PyObject_IsTrue(_src))
                     _var = true;
                 else
                     _var = false;
             }
+
+            /* ---------------------------------------------------------------------- */
 
             template<typename T>
             void _list(std::vector<T>& _var, PyObject *_src, std::string _path) {
@@ -137,32 +153,39 @@ namespace toml {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
+
             void _handle_var(std::vector<std::string>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    error(_path + " is not the correct type, must be array of strings");
+                    ERR(_path + " is not the correct type, must be array of strings");
 
                 _list(_var, _src, _path);
             }
 
+            /* ---------------------------------------------------------------------- */
+
             void _handle_var(std::vector<double>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    error(_path + " is not the correct type, must be array of floats");
+                    ERR(_path + " is not the correct type, must be array of floats");
                 
                 _list(_var, _src, _path);
             }
 
+            /* ---------------------------------------------------------------------- */
+
             void _handle_var(std::vector<int>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    error(_path + " is not the correct type, must be array of ints");
+                    ERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
             }
 
+            /* ---------------------------------------------------------------------- */
+
             void _handle_var(std::vector<bool>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    error(_path + " is not the correct type, must be array of ints");
+                    ERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
-            }
-            
+            }            
     };
 }
 

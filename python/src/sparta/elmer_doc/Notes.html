@@ -33,7 +33,6 @@
 <article class="markdown-body" id="MD">
 <h1 id="input-file">Input File</h1>
 <h2 id="sections">Sections</h2>
-<p>========================</p>
 <p>Each section started with a row containing the name of the section, sometimes a number, followed by a number of keyword commands, and ended with a row containing the word End. The names for starting new sections are:</p>
 <ul>
 <li>Header</li>
@@ -61,10 +60,7 @@ End
 <p>Note that separate equations can nevertheless be discretized using different meshes if the location of mesh
 files is given in the solver section described below.</p>
 <h3 id="simulation">Simulation</h3>
-<p>The simulation section is used for giving general information that is not specific to a particular PDE model
-involved in the simulation. This information describes the coordinate system used, indicates whether the
-problem is stationary or evolutionary, defines the file names for outputting, etc. Without trying to describe
-many possibilities and the details of commands, we only give the following simple example:</p>
+<p>The simulation section is used for giving general information that is not specific to a particular PDE model involved in the simulation. This information describes the coordinate system used, indicates whether the problem is stationary or evolutionary, defines the file names for outputting, etc.</p>
 <pre><code>Simulation
   Coordinate System = &quot;Cartesian 2D&quot;
   Coordinate Mapping(3) = 1 2 3
@@ -78,8 +74,15 @@ many possibilities and the details of commands, we only give the following simpl
 End
 </code></pre>
 <p>Currently the preferred method for visualization is to use VTU output and compatible visualization tool,
-such as Paraview. Hence the suffix .vtu is used in the value of the Post File. Historically ElmerPost
-with suffix .ep was used but this tool is obsolete.</p>
+such as Paraview. Hence the suffix .vtu is used in the value of the Post File.</p>
+<h3 id="constants">Constants</h3>
+<p>The constants section is used for defining certain physical constants. For example the gravity vector and the Stefan-Boltzmann constant may be defined using the commands</p>
+<pre><code>Constants
+  Gravity(4) = 0 -1 0 9.82
+  Stefan Boltzmann = 5.67e-08
+End
+</code></pre>
+<p>If the constants are not actually needed in the simulation, this section can also be left empty.</p>
 
 </article>
 </body>

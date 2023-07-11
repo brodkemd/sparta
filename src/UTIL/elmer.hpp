@@ -3,6 +3,7 @@
 
 #include "elmer_classes.hpp"
 
+// defining the os path separator based on the detected os
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
     static const char SEP = '\\';
 #else
@@ -11,7 +12,7 @@
 
 namespace elmer {
     const unsigned int boundary_size = 4; // number of elements in a boundary element including id
-    const unsigned int dimension     = 3;
+    const unsigned int dimension     = 3; // the dimension
     const std::size_t node_element_size = 5;
 
     /**
@@ -43,6 +44,8 @@ namespace elmer {
             std::vector<Initial_Condition*>  initial_conditions;
             std::vector<Boundary_Condition*> boundary_conditions;
 
+            /* ---------------------------------------------------------------------- */
+
             Elmer() {
                 this->header         = Header();
                 this->simulation     = Simulation();
@@ -52,6 +55,8 @@ namespace elmer {
                 this->thermal_solver = Thermal_Solver();
                 this->elastic_solver = Elastic_Solver();
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void set(toml::handler& _h) {
                 // setting needed variables
@@ -77,29 +82,35 @@ namespace elmer {
                 this->checks();
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void checks() {
                 struct stat sb;
                 // making sure the elmer exe 
                 if (!(stat(this->exe.c_str(),  &sb) == 0))
-                    util::error("Illegal fix fea command, exe path does not exist");
+                    ERR("Illegal fix fea command, exe path does not exist");
                 
                 // making sure the mesh database is complete
                 std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
                 for (int i = 0; i < 4; i++) {
                     if (!(stat((this->meshDB + SEP + "mesh." + exts[i]).c_str(),  &sb) == 0))
-                        util::error("Illegal fix fea command, mesh database incomplete, " + (this->meshDB + SEP + "mesh." + exts[i]) + " does not exist");
+                        ERR("Illegal fix fea command, mesh database incomplete, " + (this->meshDB + SEP + "mesh." + exts[i]) + " does not exist");
                 }
 
                 // making sure base temperature is valid
-                if (this->base_temp <= (double)0)
-                    util::error("base temperature must be greater than 0");
+                if (this->base_temp <= 0.0)
+                    ERR("base temperature must be greater than 0");
 
                 if (this->simulation_directory.back() == SEP)
                     this->simulation_directory = this->simulation_directory.substr(0, this->simulation_directory.length()-1);
                 
+                if (this->print_intensity == toml::noString) this->print_intensity = "none";
+                if (this->print_intensity != "none" && this->print_intensity != "limited" && this->print_intensity != "verbose")
+                    ERR("invalid print intensity for elmer");
+                
                 // setting vars from provided values
                 this->node_data_file = this->simulation_directory + SEP + this->simulation.Output_File;
+                this->simulation.Output_File = this->node_data_file;
                 
                 this->header.Mesh_DB = { this->simulation_directory, "." };
                 this->header.Include_Path = "";
@@ -118,10 +129,6 @@ namespace elmer {
                     bf->Density            = this->material.Density;
                     this->body_forces.push_back(bf);
                 }
-
-                if (this->print_intensity == toml::noString)
-                    this->print_intensity = "none";
-
             }
 
             /* ---------------------------------------------------------------------- */
@@ -133,50 +140,27 @@ namespace elmer {
                     util::copyFile(this->meshDB + SEP + "mesh." + exts[i], this->simulation_directory + SEP + "mesh." + exts[i]);
                 }
 
+                // setting files
                 this->boundary_file = this->simulation_directory + SEP + "mesh.boundary";
                 this->element_file = this->simulation_directory + SEP + "mesh.elements";
                 this->node_file = this->simulation_directory + SEP + "mesh.nodes";
             }
 
+            /* ---------------------------------------------------------------------- */
             
             void setupNodeDataFileAndVectors() {
                 // getting the number of nodes
                 int count = util::count_lines_in_file(this->node_file);
 
-                // getting string version of elmer.base_temp
+                // setting temperature vector to all base temperatures
                 std::string str = util::dtos(this->base_temp);
 
                 // writing base temperature to file for each node
-                // std::ofstream output(this->node_data_file);
-                // if (!(output.is_open()))
-                //     util::error("could not open node data file");
-                
-                // output << "Time:      1\n";
-                // output << "temperature\n";
-                // output << "Perm:      \n";
-                for (int i = 0; i < count; i++) {
-                    // output << "   " << str << "\n";
+                for (int i = 0; i < count; i++)
                     this->node_temperature_data.push_back(this->base_temp);
-                }
-
-                // output << "displacement 1\nPerm:    \n";
-                // str = util::dtos(0.0);
-                // for (int i = 0; i < count; i++) {
-                //     output << "   " << str << "\n";
-                // }
-
-                // output << "displacement 2\nPerm:    \n";
-                // for (int i = 0; i < count; i++) {
-                //     output << "   " << str << "\n";
-                // }
-
-                // output << "displacement 3\nPerm:    \n";
-                // for (int i = 0; i < count; i++) {
-                //     output << "   " << str << "\n";
-                // }
-                // output.close();
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void setup() {
                 util::print("setting up dump directory");
@@ -191,27 +175,33 @@ namespace elmer {
                 this->loadNodes();
             }
 
+            /* ---------------------------------------------------------------------- */
 
-            void run() {
+            void run(long _ntimestep) {
                 util::print("running");
                 // making the sif file
-                std::ofstream _buf(this->sif);
-                if (!(_buf.is_open())) util::error(this->sif + " did not open");
+                util::oFile _buf(this->sif);
                 this->join(_buf);                
                 _buf.close();
-                // util::error("done");
+
+                this->dump_before(_ntimestep);
 
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
                 int exit_status;
                 try {
-                    exit_status = util::EXEC(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
+                    if (this->print_intensity == "none")
+                        exit_status = util::quietEXEC(exe+" "+this->sif+" 2>&1");
+                    else if (this->print_intensity == "limited")
+                        exit_status = util::limitedEXEC(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
+                    else
+                        exit_status = util::verboseEXEC(exe+" "+this->sif+" 2>&1");
                 } catch (std::exception& e) {
-                    util::error(e.what());
+                    ERR(e.what());
                 }
                 // if the command did not succeed
                 if (exit_status)
-                    util::error("check elmer output");
+                    ERR("check elmer output");
                 // else
                 //     util::printToFile(command_result.output, 0);
                 
@@ -220,12 +210,14 @@ namespace elmer {
 
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void getNodePointAtIndex(int _index, int _boundary_index, double(&_point)[3]) {
                 for (std::size_t j = 0; j < elmer::dimension; j++)
                     _point[j] = this->nodes[this->boundaries[_index][_boundary_index]-1][j];
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void createConditionsFrom(double*& _qw, double*& _px, double*& _py, double*& _pz, double*& _shx, double*& _shy, double*& _shz, int _ntimesteps, double _timestep_size, int _length) {
                 int i, _size, size, _body_force;
@@ -277,7 +269,7 @@ namespace elmer {
                     for (int j = 0; j < _size; j++) {
                         // gets the data point corresponding to node id and adds it to the rolling sum
                         if (this->elements[i][j]-1 >= size)
-                            util::error("index out of bounds in creating initial conditions");
+                            ERR("index out of bounds in creating initial conditions");
                         avg += (this->node_temperature_data[this->elements[i][j]-1]/((double)_size));
                     }
 
@@ -294,11 +286,12 @@ namespace elmer {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void averageNodeTemperaturesInto(double*& _temperatures, int _length) {
                 // making sure everything is consistent
                 if ((std::size_t)_length != this->boundaries.size())
-                    util::error("boundary data does not match required size, required size " + std::to_string(_length) + ", size " + std::to_string(this->boundaries.size()));
+                    ERR("boundary data does not match required size, required size " + std::to_string(_length) + ", size " + std::to_string(this->boundaries.size()));
 
                 // used later
                 double avg;
@@ -318,19 +311,18 @@ namespace elmer {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void loadNodeData() {
                 util::print("loading node data");
                 std::size_t i, start;
                 std::vector<std::string> lines, split_line;
                 std::string cur_key, line;
-                
                 util::readFile(this->node_data_file, lines);
                 start = 0;
                 for (i = 0; i < lines.size(); i++) {
                     util::split(lines[i], split_line, ' ');
-                    if (split_line[0] == (std::string)"Time:")
-                        start = i;
+                    if (split_line[0] == (std::string)"Time:") start = i;
                 }
                 std::vector<std::array<double, 3>> temp_nodes = this->nodes;
 
@@ -340,20 +332,20 @@ namespace elmer {
                     util::trim(line);
                     util::split(line, split_line, ' ');
                     if (lines[i][0] == ' ' && split_line.size() == 1) {
-                        if (cur_key == (std::string)"temperature")
+                        if (cur_key == (std::string)"temperature") {
                             this->node_temperature_data[cur_index] = std::stod(line);
-                        else if (cur_key == (std::string)"displacement 1")
+                        } else if (cur_key == (std::string)"displacement 1") {
                             this->nodes[cur_index][0] += std::stod(line);
-                        else if (cur_key == (std::string)"displacement 2")
+                        } else if (cur_key == (std::string)"displacement 2") {
                             this->nodes[cur_index][1] += std::stod(line);
-                        else if (cur_key == (std::string)"displacement 3")
+                        } else if (cur_key == (std::string)"displacement 3") {
                             this->nodes[cur_index][2] += std::stod(line);
-                        else
-                            util::error("got unknown key in data file: " + cur_key);
+                        } else
+                            ERR("got unknown key in data file: " + cur_key);
                         cur_index++;
                     } else if ("Perm:" == split_line[0]) {
                         if (cur_index > 0) {
-                            if ((std::size_t)cur_index != this->nodes.size()) util::error("did not get all indicies while loading data");
+                            if ((std::size_t)cur_index != this->nodes.size()) ERR("did not get all indicies while loading data");
                         }
                         cur_index = 0;
                         cur_key = lines[i-1];
@@ -361,23 +353,27 @@ namespace elmer {
                     }
                 }
 
-                int j;
-                for (i = 0; i < temp_nodes.size(); i++) {
-                    for (j = 0; j < 3; j++)
-                        if (std::abs(nodes[i][j] - temp_nodes[i][j]) > 0.0) util::print("got difference");
-                }
+                // int j;
+                // for (i = 0; i < temp_nodes.size(); i++) {
+                //     for (j = 0; j < 3; j++)
+                //         if (std::abs(nodes[i][j] - temp_nodes[i][j]) > 0.0) {
+                //             util::print("got difference");
+                //             break;
+                //         }
+                // }
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void updateNodeFile() {
                 util::print("updating node file");
-                std::ofstream out(this->node_file);
-                if (!(out.is_open())) util::error(this->node_file + " did not open");
+                util::oFile out(this->node_file);
 
-                for (std::size_t i = 0; i < this->nodes.size(); i++) {
-                    out << i+1 << " " << -1 << " " << util::dtos(this->nodes[i][0]) << " " << util::dtos(this->nodes[i][1]) << " " << util::dtos(this->nodes[i][2]) << "\n";
-                }
+                for (std::size_t i = 0; i < this->nodes.size(); i++)
+                    out << i+1 << " " << -1 << " " << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
             }
+
+            /* ---------------------------------------------------------------------- */
 
             void loadNodes() {
                 std::vector<std::string> lines, split_line;
@@ -390,13 +386,13 @@ namespace elmer {
                     util::trim(it);
                     util::split(it, split_line, ' ');
                     if (split_line.size() != node_element_size)
-                        util::error("node element not correct size at line " + std::to_string(count) + ", should have size " + std::to_string(node_element_size));
+                        ERR("node element not correct size at line " + std::to_string(count) + ", should have size " + std::to_string(node_element_size));
 
                     if (std::stoi(split_line[0]) != count)
-                        util::error("detected unordered node element at line " + std::to_string(count));
+                        ERR("detected unordered node element at line " + std::to_string(count));
 
                     if (std::stoi(split_line[1]) != -1)
-                        util::error("detected a value that is not -1 in the second column of the node file, this is not yet support");
+                        ERR("detected a value that is not -1 in the second column of the node file, this is not yet support");
                     
 
                     data_item = { std::stod(split_line[2]), std::stod(split_line[3]), std::stod(split_line[4]) };
@@ -404,6 +400,7 @@ namespace elmer {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void loadBoundaries() {
                 std::vector<std::string> lines, _split;
@@ -421,14 +418,14 @@ namespace elmer {
                     util::split(it, _split, ' ');
 
                     if (_split[4] != (std::string)"303") 
-                        util::error("element is not a triangle in boundary file at line: " + std::to_string(count));
+                        ERR("element is not a triangle in boundary file at line: " + std::to_string(count));
 
                     // getting rid of stuff I do not need
                     _split.erase(_split.begin()+1, _split.begin() + 5);
 
                     // catching errors
                     if (_split.size() != boundary_size)
-                        util::error("too many boundary elements to assign at line: " + std::to_string(count));
+                        ERR("too many boundary elements to assign at line: " + std::to_string(count));
 
                     // adding the data
                     for (unsigned int i = 0; i < boundary_size; i++)
@@ -440,6 +437,7 @@ namespace elmer {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void loadElements() {
                 std::vector<std::string> _temp_data, _split;
@@ -471,8 +469,9 @@ namespace elmer {
                 }
             }
 
+            /* ---------------------------------------------------------------------- */
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 header.join(_buf);
                 simulation.join(_buf);
                 constants.join(_buf);
@@ -494,39 +493,44 @@ namespace elmer {
                     this->boundary_conditions[i]->join(_buf);
             }
 
+            /* ---------------------------------------------------------------------- */
+
+            void dump_before(long _timestep) {
+                util::print("dumping before");
+                std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + ".before_" + this->node_position_file_ext;
+                util::oFile out(filename);
+    
+                for (std::size_t i = 0; i < this->nodes.size(); i++)    
+                    out << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
+            }
+
+            /* ---------------------------------------------------------------------- */
 
             void dump(long _timestep) {
                 this->dumpNodeTemperatures(_timestep);
                 this->dumpNodePositions(_timestep);
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void dumpNodeTemperatures(long _timestep) {
                 std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_temperature_file_ext;
-                std::ofstream out(filename);
-                if (!(out.is_open())) util::error(filename + " did not open");
+                util::oFile out(filename);
 
-                for (double it : this->node_temperature_data) {
-                    out << util::dtos(it) << "\n";
-                }
-                out.close();
+                for (double& it : this->node_temperature_data)
+                    out << it << "\n";
             }
 
+            /* ---------------------------------------------------------------------- */
 
             void dumpNodePositions(long _timestep) {
                 std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_position_file_ext;
-                std::ofstream out(filename);
-                if (!(out.is_open())) util::error(filename + " did not open");
+                util::oFile out(filename);
 
-                for (std::size_t i = 0; i < this->nodes.size(); i++) {    
-                    out << util::dtos(this->nodes[i][0]) << " " << util::dtos(this->nodes[i][1]) << " " << util::dtos(this->nodes[i][2]) << "\n";
-                }
-                out.close();
-
+                for (std::size_t i = 0; i < this->nodes.size(); i++) 
+                    out << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
             }
-
     };
 }
-
 
 #endif

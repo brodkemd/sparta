@@ -1,0 +1,515 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="github-markdown-dark.css">
+<script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      },
+      svg: {
+        fontCache: 'global'
+      }
+    };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+<style>
+    .markdown-body {
+        box-sizing: border-box;
+        min-width: 200px;
+        max-width: 980px;
+        margin: -1;
+        padding: 45px;
+    }
+
+    @media (max-width: 767px) {
+        .markdown-body {
+            padding: 15px;
+        }
+    }
+</style>
+
+<body>
+<article class="markdown-body" id="MD">
+<h1 id="variable-documentation">Variable Documentation</h1>
+<ul>
+<li>simulation_directory<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>sparta<ul>
+<li>emi<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>nevery<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>connect<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>run_every<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>energy_threshold<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>pressure_threshold<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>shear_threshold<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>groupID<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>mixID<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>customID<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>compute<ul>
+<li>required type = array[str]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>surf_collide<ul>
+<li>required type = array[str]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>surf_modify<ul>
+<li>required type = array[str]</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>elmer<ul>
+<li>exe<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>sif<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>base_temp<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>meshDB<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>node_temperature_file_ext<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>node_position_file_ext<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>gravity_on<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>print_intensity<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>simulation<ul>
+<li>Max_Output_Level<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Coordinate_System<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Coordinate_Mapping<ul>
+<li>required type = array[int]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Simulation_Type<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Steady_State_Max_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Output_Intervals<ul>
+<li>required type = array[int]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Timestep_intervals<ul>
+<li>required type = array[int]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Timestep_Sizes<ul>
+<li>required type = array[float]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Timestepping_Method<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>BDF_Order<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Solver_Input_File<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Output_File<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>thermal_solver<ul>
+<li>Equation<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Procedure<ul>
+<li>required type = array[str]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Variable<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Exec_Solver<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Stabilize<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Optimize_Bandwidth<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Steady_State_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Max_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Newton_After_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Newton_After_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Relaxation_Factor<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Solver<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Iterative_Method<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Max_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>BiCGstabl_polynomial_degree<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Preconditioning<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_ILUT_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Abort_Not_Converged<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Residual_Output<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>elastic_solver<ul>
+<li>Equation<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Variable<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Calculate_Principal<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Calculate_Stresses<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Procedure<ul>
+<li>required type = array[str]</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Exec_Solver<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Stabilize<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Optimize_Bandwidth<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Steady_State_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Max_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Newton_After_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Newton_After_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Nonlinear_System_Relaxation_Factor<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Solver<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Iterative_Method<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Max_Iterations<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Convergence_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>BiCGstabl_polynomial_degree<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Preconditioning<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_ILUT_Tolerance<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Abort_Not_Converged<ul>
+<li>required type = bool</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Residual_Output<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Linear_System_Precondition_Recompute<ul>
+<li>required type = int</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>equation<ul>
+<li>Name<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Active_Solvers<ul>
+<li>required type = array[int]</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>material<ul>
+<li>Name<ul>
+<li>required type = string</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Poisson_ratio<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Heat_Capacity<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Density<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Youngs_modulus<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Heat_expansion_Coefficient<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Sound_speed<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+<li>Heat_Conductivity<ul>
+<li>required type = float</li>
+<li>Description:</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+</article>
+</body>
+
+<script>
+  md = document.getElementById("MD");
+
+  let bg = window.getComputedStyle(md).backgroundColor;
+  var color = window.getComputedStyle(md).color;
+  
+  document.body.style.backgroundColor = bg;
+  document.body.style.color = color;
+</script>

@@ -1,7 +1,6 @@
 #ifndef ELMER_CLASSES_H
 #define ELMER_CLASSES_H
 
-#include "util.hpp"
 #include "toml.hpp"
 
 namespace elmer {
@@ -50,22 +49,22 @@ namespace elmer {
              * these functions are outward facing and they build elmer file
              * lines from the inputs
             */ 
-            void varToString(std::ofstream& _buf, std::string _name, std::string _var) {
+            void varToString(util::oFile& _buf, std::string _name, std::string _var) {
                 if (_var == toml::noString) return;
                 _buf << (_tab + _name + sep + "\""+_var+"\"" + "\n");
             }
 
-            void varToString(std::ofstream& _buf, std::string _name, double _var) {
+            void varToString(util::oFile& _buf, std::string _name, double _var) {
                 if (_var == toml::noDouble) return;
-                _buf << (_tab + _name + sep + util::dtos(_var) + "\n");
+                _buf << (_tab + _name + sep) << _var << "\n";
             }
 
-            void varToString(std::ofstream& _buf, std::string _name, int _var) {
+            void varToString(util::oFile& _buf, std::string _name, int _var) {
                 if (_var == toml::noInt) return;
-                _buf << (_tab + _name + sep + std::to_string(_var) + "\n");
+                _buf << (_tab + _name + sep) << _var << "\n";
             }
 
-            void varToString(std::ofstream& _buf, std::string _name, bool _var) {
+            void varToString(util::oFile& _buf, std::string _name, bool _var) {
                 if (_var == toml::noBool) return;
                 if (_var) _buf << (_tab + _name + sep + "True" + "\n");
                 else      _buf << (_tab + _name + sep + "False" + "\n");
@@ -73,13 +72,13 @@ namespace elmer {
 
             // for vectors
             template<typename T>
-            void varToString(std::ofstream& _buf, std::string _name, std::vector<T> _var, bool include_count = true) {
+            void varToString(util::oFile& _buf, std::string _name, std::vector<T> _var, bool include_count = true) {
 
                 if (_var.size() == 0) return;
 
                 std::string _temp;
                 if (include_count)
-                    _buf << (_tab + _name + "(" + std::to_string(_var.size()) + ")" + sep);
+                    _buf << (_tab + _name + "(") << _var.size() << (")" + sep);
                 else 
                     _buf << (_tab + _name + sep);
 
@@ -92,6 +91,8 @@ namespace elmer {
                 _buf << (_temp + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer header section
@@ -112,7 +113,7 @@ namespace elmer {
                 _h.get_at_path(Results_Directory, "elmer.header.Results_Directory", true);
             }
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 // false tells it to not put array length in array definition in file
                 varToString(_buf, "Mesh DB",           Mesh_DB, false);
@@ -121,6 +122,8 @@ namespace elmer {
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer constants section
@@ -146,7 +149,7 @@ namespace elmer {
             }
 
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Gravity",                Gravity);
                 varToString(_buf, "Stefan Boltzmann",       Stefan_Boltzmann);
@@ -157,6 +160,8 @@ namespace elmer {
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer simulation section
@@ -191,7 +196,7 @@ namespace elmer {
             }
 
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Max Output Level",              Max_Output_Level);
                 varToString(_buf, "Coordinate System",             Coordinate_System);
@@ -209,6 +214,8 @@ namespace elmer {
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer thermal_solver section
@@ -254,7 +261,7 @@ namespace elmer {
             }
 
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Equation",                                  Equation);
                 varToString(_buf, "Procedure",                                 Procedure, false);
@@ -280,6 +287,8 @@ namespace elmer {
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer thermal_solver section
@@ -328,7 +337,7 @@ namespace elmer {
             }
 
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Equation",                                  Equation);
                 varToString(_buf, "Procedure",                                 Procedure, false);
@@ -355,6 +364,8 @@ namespace elmer {
             }
     };
 
+    /* ---------------------------------------------------------------------- */
+
     /**
      * handles elmer equation section
     */
@@ -373,13 +384,15 @@ namespace elmer {
                 _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers", true);
             }
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Name",           this->name);
                 varToString(_buf, "Active Solvers", Active_Solvers);
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer material section
@@ -405,7 +418,7 @@ namespace elmer {
                 _h.get_at_path(Heat_Conductivity,           "elmer.material.Heat_Conductivity", true);
             }
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Name",                       this->name);
                 varToString(_buf, "Poisson ratio",              Poisson_ratio);
@@ -418,6 +431,8 @@ namespace elmer {
                 _buf<<(_end + "\n");
             }
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer body section
@@ -434,7 +449,7 @@ namespace elmer {
             std::vector<int> Target_Bodies;
             int Initial_condition, Equation, Material, Body_Force;
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Target Bodies",      this->Target_Bodies, true);
                 varToString(_buf, "Name",               this->name);
@@ -446,6 +461,7 @@ namespace elmer {
             }
     };
 
+    /* ---------------------------------------------------------------------- */
 
     class Body_Force : public Base {
         public:
@@ -457,18 +473,19 @@ namespace elmer {
             }
             double Stress_Bodyforce_2, Force_2, Density;
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Name",               this->name);
                 // custom line
                 if (Stress_Bodyforce_2 != toml::noDouble && Density != toml::noDouble) {
-                    _buf << _tab << "Stress Bodyforce 2" << sep << "$ " << util::dtos(Stress_Bodyforce_2) << "*" << util::dtos(Density) << "\n";
+                    _buf << _tab << "Stress Bodyforce 2" << sep << "$ " << Stress_Bodyforce_2 << "*" << Density << "\n";
                 }
                 varToString(_buf, "Force 2",            Force_2);
                 _buf<<(_end + "\n");
             }
     };
 
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer initial condition section
@@ -484,14 +501,15 @@ namespace elmer {
 
             double Temperature;
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Name",        this->name);
                 varToString(_buf, "Temperature", Temperature);
                 _buf<<(_end + "\n");
             }
-
     };
+
+    /* ---------------------------------------------------------------------- */
 
     /**
      * handles elmer boundary condition section
@@ -511,7 +529,7 @@ namespace elmer {
             double Heat_Flux;
             std::vector<double> stress_6_vector;
 
-            void join(std::ofstream& _buf) {
+            void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Target Boundaries",  Target_Boundaries);
                 varToString(_buf, "Name",               this->name);
@@ -520,9 +538,7 @@ namespace elmer {
                 varToString(_buf, "Stress",             stress_6_vector, true);
                 _buf<<(_end + "\n");
             }
-
     };
-
 } // namespace elmer 
 
 
