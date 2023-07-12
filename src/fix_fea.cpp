@@ -32,6 +32,7 @@
 #include "particle.h"
 #include "mixture.h"
 #include "update.h"
+#include "read_surf.h"
 
 #include "UTIL/elmer.hpp"
 
@@ -50,7 +51,7 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP}; // several files
 // THESE CAN CHANGE BUT BE VERY CAREFUL
 #define SERR(_msg) error->all(FLERR, _msg)
 #define START_TRY try {
-#define END_TRY } catch (std::string _msg) { SERR(_msg.c_str()); } catch (std::exception& e) { SERR(e.what()); } catch (...) { SERR("unidentified error occurred"); }
+#define END_TRY } catch (std::string _msg) { error->allNoFileAndLine(_msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -68,24 +69,14 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     util::_logfile = &*logfile;
     util::_me = comm->me;
 
-    ULOG("Setting up fix fea:");
+    ULOG("Setting up fix fea");
 
     // checking if the number of args is correct
     if (narg > 3)
         SERR("Illegal fix fea command, too many inputs");
     else if (narg < 3)
         SERR("Illegal fix fea command, too few inputs");
-
-    // making sure there is a surface to analyze
-    if (!surf->exist)
-        SERR("Illegal fix fea command, no surface to analyze");
-
-    // making sure the surface is the correct type
-    if (surf->implicit)
-        SERR("Cannot use fix fea with implicit surfs");
-    if (surf->distributed)
-        SERR("Cannot use fix fea with distributed surfs");
-    
+   
     // making sure the dimension is correct
     if (domain->dimension != elmer::dimension)
         SERR(("Invalid dimension detected, must be " + std::to_string(elmer::dimension) + " dimensional").c_str());
@@ -105,33 +96,48 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     toml::handler s(arg[2]);
 
     // getting the val at the path (second input) and setting the variable (first input) to that variable
-    s.get_at_path(this->run_every,          "sparta.run_every",         true);
-    s.get_at_path(this->nevery,             "sparta.nevery",            true);
-    s.get_at_path(this->energy_threshold,   "sparta.energy_threshold",  true);
-    s.get_at_path(this->pressure_threshold, "sparta.pressure_threshold",true);
-    s.get_at_path(this->shear_threshold,    "sparta.shear_threshold",   true);
-    s.get_at_path(this->connectflag,        "sparta.connect",           true);
-    s.get_at_path(groupID,                  "sparta.groupID",           true);
-    s.get_at_path(mixID,                    "sparta.mixID",             true);
-    s.get_at_path(customID,                 "sparta.customID",          true);
-    s.get_at_path(compute_args,             "sparta.compute",           true);
-    s.get_at_path(surf_collide_args,        "sparta.surf_collide",      true);
-    s.get_at_path(surf_modify_args,         "sparta.surf_modify",       true);  
+    s.getAtPath(this->run_every,          "sparta.run_every",         true);
+    s.getAtPath(this->nevery,             "sparta.nevery",            true);
+    s.getAtPath(this->energy_threshold,   "sparta.energy_threshold",  true);
+    s.getAtPath(this->pressure_threshold, "sparta.pressure_threshold",true);
+    s.getAtPath(this->shear_threshold,    "sparta.shear_threshold",   true);
+    s.getAtPath(this->connectflag,        "sparta.connect",           true);
+    s.getAtPath(groupID,                  "sparta.groupID",           true);
+    s.getAtPath(mixID,                    "sparta.mixID",             true);
+    s.getAtPath(customID,                 "sparta.customID",          true);
+    s.getAtPath(compute_args,             "sparta.compute",           true);
+    s.getAtPath(surf_collide_args,        "sparta.surf_collide",      true);
+    s.getAtPath(surf_modify_args,         "sparta.surf_modify",       true);  
 
     // letting fea handle its variable setting
     this->fea->set(s);
+    
+    // sets up elmer
+    this->fea->setup();
 
     END_TRY
+
+    // makes a surface file if none is provided
+    if (!(surf->exist))
+        this->loadSurf();
+    else
+        ULOG("using existing surface");
+
+    // making sure the surface is the correct type
+    if (surf->implicit)
+        SERR("Cannot use fix fea with implicit surfs");
+    if (surf->distributed)
+        SERR("Cannot use fix fea with distributed surfs");
     
     // getting the index of the surface variable added
     this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
     
     // adding surf collision model needed
-    size = util::vec_to_arr(surf_collide_args, arr);
+    size = util::vecToArr(surf_collide_args, arr);
     this->surf->add_collide(size, arr);
 
     // adding compute
-    size = util::vec_to_arr(compute_args, arr);
+    size = util::vecToArr(compute_args, arr);
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
@@ -188,7 +194,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     ULOG("nprocs = " + std::to_string(nprocs));
 
     // adding collision by modifying surf
-    size = util::vec_to_arr(surf_modify_args, arr);
+    size = util::vecToArr(surf_modify_args, arr);
     this->surf->modify_params(size, arr);
 
     // initing vars
@@ -209,9 +215,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // telling the compute surf etot to run
     modify->addstep_compute_all(1);
-
-    // initial output
-    this->ndeleted = 0;
 
     // deleting no longer needed var
     delete [] arr;
@@ -260,6 +263,7 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
  * allocates memory, loads the initial data, and performs some checks
  */
 void FixFea::init() {
+    ULOG("initing FixFea");
     // number of surface elements
     this->nsurf = surf->nlocal;
 
@@ -309,16 +313,12 @@ void FixFea::init() {
     memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
-    ULOG("done creating memory");
-
     // loading the boundary data
     if (comm->me == 0) {
         START_TRY
-        // setups elmer
-        this->fea->setup();
 
         // sets the temperatures of the surface elements
-        this->update_temperatures();
+        this->updateTemperatures();
         
         // no need to update surf here
         END_TRY
@@ -356,7 +356,7 @@ void FixFea::end_of_step() {
     for (i = comm->me; i < nsurf; i += nprocs) {
         if (!(surf->tris[i].mask & groupbit))
         this->qw_me[i] +=cqw->array_surf[m][energy_loc];
-        this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
+        this->px_me[i] +=cqw->array_surf[m][force_locs[0]];
         this->py_me[i] +=cqw->array_surf[m][force_locs[1]];
         this->pz_me[i] +=cqw->array_surf[m][force_locs[2]];
         this->shx_me[i]+=cqw->array_surf[m][shear_locs[0]];
@@ -366,8 +366,8 @@ void FixFea::end_of_step() {
     }
 
     // if should run fea
-    if (this->run_condition()) {
-        ULOG("running");
+    if (this->runCondition()) {
+        ULOG("got true run condition, running fea");
 
         // summing all of the per process arrays into shared arrays
         MPI_Allreduce(this->qw_me,  this->qw,  nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -378,6 +378,7 @@ void FixFea::end_of_step() {
         MPI_Allreduce(this->shy_me, this->shy, nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->shz_me, this->shz, nsurf, MPI_DOUBLE, MPI_SUM, world);
         
+        this->fea->dumpBefore(update->ntimestep);
 
         // only run on the main process
         if (comm->me == 0) {
@@ -387,7 +388,6 @@ void FixFea::end_of_step() {
             if (this->checkRun(var_name)) {
                 // messages
                 ULOG("got sum over threshold for variable: " + var_name);
-                ULOG("Setting up fea");
 
                 // wrapping in try to catch if exception is,
                 // fea throws exceptions if it encounters an error
@@ -402,11 +402,11 @@ void FixFea::end_of_step() {
                 );
 
                 // runs the fea solver
-                this->fea->run(update->ntimestep);
+                this->fea->run();
 
                 // loading new temperatures and surface points from the fea result
-                this->update_temperatures();
-                this->update_surf();
+                this->updateTemperatures();
+                this->updateSurf();
 
                 END_TRY
 
@@ -414,7 +414,7 @@ void FixFea::end_of_step() {
 
             START_TRY
             // dumps the data obtained from the fea solver
-            ULOG("dumping node temperatures and points");
+            
             this->fea->dump(update->ntimestep);
             END_TRY
 
@@ -435,16 +435,13 @@ void FixFea::end_of_step() {
 
 /* ---------------------------------------------------------------------- */
 
-// returns the number particles deleted
-double FixFea::compute_scalar() { return (double) this->ndeleted; }
-
-/* ---------------------------------------------------------------------- */
-
 /**
  * checks if the fea solver should be run
 */
 bool FixFea::checkRun(std::string& _name) {
     int i; double sum;
+
+    ULOG("checking if solver should be run");
 
     // summing all of the vars and checking if they are above the threshold
     // returns true if above the threshold
@@ -477,7 +474,7 @@ bool FixFea::checkRun(std::string& _name) {
 /**
  * Condition to run fea on
 */
-bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; }
+bool FixFea::runCondition() { return update->ntimestep % this->run_every == 0; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -485,13 +482,13 @@ bool FixFea::run_condition() { return update->ntimestep % this->run_every == 0; 
  * Loads temperature data from file and sets needed variables
  * Must only run on process 0 
 */
-void FixFea::update_temperatures() {
+void FixFea::updateTemperatures() {
     // the wall temperature variable
     double *tvector = surf->edvec[surf->ewhich[tindex]];
 
     START_TRY
     // loading per node temperature data
-    ULOG("loading temperatures");
+    ULOG("updating temperatures");
 
     // averages node temperatures on a per surface basis
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
@@ -509,12 +506,13 @@ void FixFea::update_temperatures() {
 /**
  * Updates the surface in sparta using the data from fea
 */
-void FixFea::update_surf() {
+void FixFea::updateSurf() {
+    ULOG("updating surface");
     // sort particles
     if (particle->exist) particle->sort();
 
     // connects the surfs, makes it water tight
-    if (this->connectflag && this->groupbit != 1) this->connect_3d_pre();
+    if (this->connectflag && this->groupbit != 1) this->connect3dPre();
 
     /**** this part does the moving */
     unsigned int i;
@@ -526,18 +524,18 @@ void FixFea::update_surf() {
     for (i = 0; i < (unsigned)this->nsurf; i++) {
         if (!(surf->tris[i].mask & this->groupbit)) continue;
 
-        this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p1);
+        this->fea->getNodePointAtIndex(i, 0, surf->tris[i].p1);
         this->pselect[3*i] = 1; // saying the first point of the triangle moved
 
-        this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p2);
+        this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p2);
         this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
 
-        this->fea->getNodePointAtIndex(i, 3, surf->tris[i].p3);
+        this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
     }
     
     // connects the surfs, makes it water tight
-    if (this->connectflag && this->groupbit != 1) this->connect_3d_post();
+    if (this->connectflag && this->groupbit != 1) this->connect3dPost();
 
     surf->compute_tri_normal(0);
 
@@ -577,7 +575,10 @@ void FixFea::update_surf() {
 
     // remove particles as needed due to surface move
     // set ndeleted for scalar output
-    if (particle->exist) this->ndeleted = this->remove_particles();
+    if (particle->exist) {
+        bigint ndeleted = this->removeParticles();
+        ULOG("number of particles deleted: " + std::to_string(ndeleted));
+    }
 
     // notify all classes that store per-grid data that grid may have changed
     grid->notify_changed();
@@ -585,7 +586,8 @@ void FixFea::update_surf() {
 
 /* ---------------------------------------------------------------------- */
 
-void FixFea::connect_3d_pre() {
+void FixFea::connect3dPre() {
+    ULOG("connecting surface before move");
     // hash for corner points of moved triangles
     // key = corner point
     // value = global index (0 to 3*Ntri-1) of the point
@@ -612,7 +614,8 @@ void FixFea::connect_3d_pre() {
 
 /* ---------------------------------------------------------------------- */
 
-void FixFea::connect_3d_post() {
+void FixFea::connect3dPost() {
+    ULOG("connecting surface after move");
     // check if non-moved points are in hash
     // if so, set their coords to matching point
     // set pselect for newly moved points so remove_particles() will work
@@ -653,7 +656,9 @@ void FixFea::connect_3d_post() {
 
 /* ---------------------------------------------------------------------- */
 
-bigint FixFea::remove_particles() {
+bigint FixFea::removeParticles() {
+    ULOG("removing particles");
+
     int isurf, cell_nsurf;
     surfint *csurfs;
 
@@ -707,4 +712,33 @@ bigint FixFea::remove_particles() {
     bigint ndeleted;
     MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
     return ndeleted;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/**
+ * makes surface using data from fea
+*/
+void FixFea::loadSurf() {
+    ULOG("no surface detected, making surface from fea object");
+    std::vector<std::string> args;
+    args.clear();
+
+    START_TRY
+    std::string file = this->fea->makeSpartaSurf();
+    args.push_back(file);
+
+    END_TRY
+
+    char** arr;
+    util::vecToArr(args, arr);
+
+    ULOG("running surface reader");
+    ReadSurf reader(sparta);
+    reader.command(1, arr);
+
+    if (!(surf->exist))
+        UERR("reading surf was unsuccessful");
+
+    delete [] arr;
 }

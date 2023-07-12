@@ -100,7 +100,7 @@ void Error::all(const char *file, int line, const char *str)
    close all output, screen, and log files in world
 ------------------------------------------------------------------------- */
 
-void Error::allNoFile(const char *str)
+void Error::allNoFileAndLine(const char *str)
 {
   MPI_Barrier(world);
 

@@ -108,9 +108,9 @@ namespace elmer {
             std::string Include_Path, Results_Directory;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Mesh_DB,           "elmer.header.Mesh_DB", true);
-                _h.get_at_path(Include_Path,      "elmer.header.Include_Path", true);
-                _h.get_at_path(Results_Directory, "elmer.header.Results_Directory", true);
+                _h.getAtPath(Mesh_DB,           "elmer.header.Mesh_DB", true);
+                _h.getAtPath(Include_Path,      "elmer.header.Include_Path", true);
+                _h.getAtPath(Results_Directory, "elmer.header.Results_Directory", true);
             }
 
             void join(util::oFile& _buf) {
@@ -140,12 +140,12 @@ namespace elmer {
 
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Gravity,                 "elmer.constants.Gravity", true);
-                _h.get_at_path(Stefan_Boltzmann,        "elmer.constants.Stefan_Boltzmann", true);
-                _h.get_at_path(Permittivity_of_Vacuum,  "elmer.constants.Permittivity_of_Vacuum", true);
-                _h.get_at_path(Permeability_of_Vacuum,  "elmer.constants.Permeability_of_Vacuum", true);
-                _h.get_at_path(Boltzmann_Constant,      "elmer.constants.Boltzmann_Constant", true);
-                _h.get_at_path(Unit_Charge,             "elmer.constants.Unit_Charge", true);
+                _h.getAtPath(Gravity,                 "elmer.constants.Gravity", true);
+                _h.getAtPath(Stefan_Boltzmann,        "elmer.constants.Stefan_Boltzmann", true);
+                _h.getAtPath(Permittivity_of_Vacuum,  "elmer.constants.Permittivity_of_Vacuum", true);
+                _h.getAtPath(Permeability_of_Vacuum,  "elmer.constants.Permeability_of_Vacuum", true);
+                _h.getAtPath(Boltzmann_Constant,      "elmer.constants.Boltzmann_Constant", true);
+                _h.getAtPath(Unit_Charge,             "elmer.constants.Unit_Charge", true);
             }
 
 
@@ -180,19 +180,19 @@ namespace elmer {
             
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Max_Output_Level,            "elmer.simulation.Max_Output_Level", true);
-                _h.get_at_path(Coordinate_System,           "elmer.simulation.Coordinate_System", true);
-                _h.get_at_path(Coordinate_Mapping,          "elmer.simulation.Coordinate_Mapping", true);
-                _h.get_at_path(Simulation_Type,             "elmer.simulation.Simulation_Type", true);
-                _h.get_at_path(Steady_State_Max_Iterations, "elmer.simulation.Steady_State_Max_Iterations", true);
-                _h.get_at_path(Output_Intervals,            "elmer.simulation.Output_Intervals", true);
-                _h.get_at_path(Timestep_intervals,          "elmer.simulation.Timestep_intervals", true);
-                _h.get_at_path(Timestep_Sizes,              "elmer.simulation.Timestep_Sizes", true);
-                _h.get_at_path(Timestepping_Method,         "elmer.simulation.Timestepping_Method", true);
-                _h.get_at_path(BDF_Order,                   "elmer.simulation.BDF_Order", true);
-                _h.get_at_path(Solver_Input_File,           "elmer.simulation.Solver_Input_File", true);
-                _h.get_at_path(Output_File,                 "elmer.simulation.Output_File", true);
-                _h.get_at_path(Post_File,                   "elmer.simulation.Post_File", false);
+                _h.getAtPath(Max_Output_Level,            "elmer.simulation.Max_Output_Level", true);
+                _h.getAtPath(Coordinate_System,           "elmer.simulation.Coordinate_System", true);
+                _h.getAtPath(Coordinate_Mapping,          "elmer.simulation.Coordinate_Mapping", true);
+                _h.getAtPath(Simulation_Type,             "elmer.simulation.Simulation_Type", true);
+                _h.getAtPath(Steady_State_Max_Iterations, "elmer.simulation.Steady_State_Max_Iterations", true);
+                _h.getAtPath(Output_Intervals,            "elmer.simulation.Output_Intervals", true);
+                _h.getAtPath(Timestep_intervals,          "elmer.simulation.Timestep_intervals", true);
+                _h.getAtPath(Timestep_Sizes,              "elmer.simulation.Timestep_Sizes", true);
+                _h.getAtPath(Timestepping_Method,         "elmer.simulation.Timestepping_Method", true);
+                _h.getAtPath(BDF_Order,                   "elmer.simulation.BDF_Order", true);
+                _h.getAtPath(Solver_Input_File,           "elmer.simulation.Solver_Input_File", true);
+                _h.getAtPath(Output_File,                 "elmer.simulation.Output_File", true);
+                _h.getAtPath(Post_File,                   "elmer.simulation.Post_File", false);
             }
 
 
@@ -237,27 +237,27 @@ namespace elmer {
 
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Equation,                                 "elmer.thermal_solver.Equation", true);
-                _h.get_at_path(Procedure,                                "elmer.thermal_solver.Procedure", true);
-                _h.get_at_path(Variable,                                 "elmer.thermal_solver.Variable", true);
-                _h.get_at_path(Exec_Solver,                              "elmer.thermal_solver.Exec_Solver", true);
-                _h.get_at_path(Stabilize,                                "elmer.thermal_solver.Stabilize", true);
-                _h.get_at_path(Optimize_Bandwidth,                       "elmer.thermal_solver.Optimize_Bandwidth", true);
-                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.thermal_solver.Steady_State_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.thermal_solver.Nonlinear_System_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.thermal_solver.Nonlinear_System_Max_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.thermal_solver.Nonlinear_System_Newton_After_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.thermal_solver.Nonlinear_System_Newton_After_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.thermal_solver.Nonlinear_System_Relaxation_Factor", true);
-                _h.get_at_path(Linear_System_Solver,                     "elmer.thermal_solver.Linear_System_Solver", true);
-                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.thermal_solver.Linear_System_Iterative_Method", true);
-                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.thermal_solver.Linear_System_Max_Iterations", true);
-                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.thermal_solver.Linear_System_Convergence_Tolerance", true);
-                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.thermal_solver.BiCGstabl_polynomial_degree", true);
-                _h.get_at_path(Linear_System_Preconditioning,            "elmer.thermal_solver.Linear_System_Preconditioning", true);
-                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.thermal_solver.Linear_System_ILUT_Tolerance", true);
-                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.thermal_solver.Linear_System_Abort_Not_Converged", true);
-                _h.get_at_path(Linear_System_Residual_Output,            "elmer.thermal_solver.Linear_System_Residual_Output", true);
+                _h.getAtPath(Equation,                                 "elmer.thermal_solver.Equation", true);
+                _h.getAtPath(Procedure,                                "elmer.thermal_solver.Procedure", true);
+                _h.getAtPath(Variable,                                 "elmer.thermal_solver.Variable", true);
+                _h.getAtPath(Exec_Solver,                              "elmer.thermal_solver.Exec_Solver", true);
+                _h.getAtPath(Stabilize,                                "elmer.thermal_solver.Stabilize", true);
+                _h.getAtPath(Optimize_Bandwidth,                       "elmer.thermal_solver.Optimize_Bandwidth", true);
+                _h.getAtPath(Steady_State_Convergence_Tolerance,       "elmer.thermal_solver.Steady_State_Convergence_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Convergence_Tolerance,   "elmer.thermal_solver.Nonlinear_System_Convergence_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Max_Iterations,          "elmer.thermal_solver.Nonlinear_System_Max_Iterations", true);
+                _h.getAtPath(Nonlinear_System_Newton_After_Iterations, "elmer.thermal_solver.Nonlinear_System_Newton_After_Iterations", true);
+                _h.getAtPath(Nonlinear_System_Newton_After_Tolerance,  "elmer.thermal_solver.Nonlinear_System_Newton_After_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Relaxation_Factor,       "elmer.thermal_solver.Nonlinear_System_Relaxation_Factor", true);
+                _h.getAtPath(Linear_System_Solver,                     "elmer.thermal_solver.Linear_System_Solver", true);
+                _h.getAtPath(Linear_System_Iterative_Method,           "elmer.thermal_solver.Linear_System_Iterative_Method", true);
+                _h.getAtPath(Linear_System_Max_Iterations,             "elmer.thermal_solver.Linear_System_Max_Iterations", true);
+                _h.getAtPath(Linear_System_Convergence_Tolerance,      "elmer.thermal_solver.Linear_System_Convergence_Tolerance", true);
+                _h.getAtPath(BiCGstabl_polynomial_degree,              "elmer.thermal_solver.BiCGstabl_polynomial_degree", true);
+                _h.getAtPath(Linear_System_Preconditioning,            "elmer.thermal_solver.Linear_System_Preconditioning", true);
+                _h.getAtPath(Linear_System_ILUT_Tolerance,             "elmer.thermal_solver.Linear_System_ILUT_Tolerance", true);
+                _h.getAtPath(Linear_System_Abort_Not_Converged,        "elmer.thermal_solver.Linear_System_Abort_Not_Converged", true);
+                _h.getAtPath(Linear_System_Residual_Output,            "elmer.thermal_solver.Linear_System_Residual_Output", true);
             }
 
 
@@ -310,30 +310,30 @@ namespace elmer {
 
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Equation,                                 "elmer.elastic_solver.Equation", true);
-                _h.get_at_path(Procedure,                                "elmer.elastic_solver.Procedure", true);
-                _h.get_at_path(Calculate_Principal,                      "elmer.elastic_solver.Calculate_Principal", true);
-                _h.get_at_path(Calculate_Stresses,                       "elmer.elastic_solver.Calculate_Stresses", true);
-                _h.get_at_path(Variable,                                 "elmer.elastic_solver.Variable", true);
-                _h.get_at_path(Exec_Solver,                              "elmer.elastic_solver.Exec_Solver", true);
-                _h.get_at_path(Stabilize,                                "elmer.elastic_solver.Stabilize", true);
-                _h.get_at_path(Optimize_Bandwidth,                       "elmer.elastic_solver.Optimize_Bandwidth", true);
-                _h.get_at_path(Steady_State_Convergence_Tolerance,       "elmer.elastic_solver.Steady_State_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Convergence_Tolerance,   "elmer.elastic_solver.Nonlinear_System_Convergence_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Max_Iterations,          "elmer.elastic_solver.Nonlinear_System_Max_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Iterations, "elmer.elastic_solver.Nonlinear_System_Newton_After_Iterations", true);
-                _h.get_at_path(Nonlinear_System_Newton_After_Tolerance,  "elmer.elastic_solver.Nonlinear_System_Newton_After_Tolerance", true);
-                _h.get_at_path(Nonlinear_System_Relaxation_Factor,       "elmer.elastic_solver.Nonlinear_System_Relaxation_Factor", true);
-                _h.get_at_path(Linear_System_Solver,                     "elmer.elastic_solver.Linear_System_Solver", true);
-                _h.get_at_path(Linear_System_Iterative_Method,           "elmer.elastic_solver.Linear_System_Iterative_Method", true);
-                _h.get_at_path(Linear_System_Max_Iterations,             "elmer.elastic_solver.Linear_System_Max_Iterations", true);
-                _h.get_at_path(Linear_System_Convergence_Tolerance,      "elmer.elastic_solver.Linear_System_Convergence_Tolerance", true);
-                _h.get_at_path(BiCGstabl_polynomial_degree,              "elmer.elastic_solver.BiCGstabl_polynomial_degree", true);
-                _h.get_at_path(Linear_System_Preconditioning,            "elmer.elastic_solver.Linear_System_Preconditioning", true);
-                _h.get_at_path(Linear_System_ILUT_Tolerance,             "elmer.elastic_solver.Linear_System_ILUT_Tolerance", true);
-                _h.get_at_path(Linear_System_Abort_Not_Converged,        "elmer.elastic_solver.Linear_System_Abort_Not_Converged", true);
-                _h.get_at_path(Linear_System_Residual_Output,            "elmer.elastic_solver.Linear_System_Residual_Output", true);
-                _h.get_at_path(Linear_System_Precondition_Recompute,     "elmer.elastic_solver.Linear_System_Precondition_Recompute", true);
+                _h.getAtPath(Equation,                                 "elmer.elastic_solver.Equation", true);
+                _h.getAtPath(Procedure,                                "elmer.elastic_solver.Procedure", true);
+                _h.getAtPath(Calculate_Principal,                      "elmer.elastic_solver.Calculate_Principal", true);
+                _h.getAtPath(Calculate_Stresses,                       "elmer.elastic_solver.Calculate_Stresses", true);
+                _h.getAtPath(Variable,                                 "elmer.elastic_solver.Variable", true);
+                _h.getAtPath(Exec_Solver,                              "elmer.elastic_solver.Exec_Solver", true);
+                _h.getAtPath(Stabilize,                                "elmer.elastic_solver.Stabilize", true);
+                _h.getAtPath(Optimize_Bandwidth,                       "elmer.elastic_solver.Optimize_Bandwidth", true);
+                _h.getAtPath(Steady_State_Convergence_Tolerance,       "elmer.elastic_solver.Steady_State_Convergence_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Convergence_Tolerance,   "elmer.elastic_solver.Nonlinear_System_Convergence_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Max_Iterations,          "elmer.elastic_solver.Nonlinear_System_Max_Iterations", true);
+                _h.getAtPath(Nonlinear_System_Newton_After_Iterations, "elmer.elastic_solver.Nonlinear_System_Newton_After_Iterations", true);
+                _h.getAtPath(Nonlinear_System_Newton_After_Tolerance,  "elmer.elastic_solver.Nonlinear_System_Newton_After_Tolerance", true);
+                _h.getAtPath(Nonlinear_System_Relaxation_Factor,       "elmer.elastic_solver.Nonlinear_System_Relaxation_Factor", true);
+                _h.getAtPath(Linear_System_Solver,                     "elmer.elastic_solver.Linear_System_Solver", true);
+                _h.getAtPath(Linear_System_Iterative_Method,           "elmer.elastic_solver.Linear_System_Iterative_Method", true);
+                _h.getAtPath(Linear_System_Max_Iterations,             "elmer.elastic_solver.Linear_System_Max_Iterations", true);
+                _h.getAtPath(Linear_System_Convergence_Tolerance,      "elmer.elastic_solver.Linear_System_Convergence_Tolerance", true);
+                _h.getAtPath(BiCGstabl_polynomial_degree,              "elmer.elastic_solver.BiCGstabl_polynomial_degree", true);
+                _h.getAtPath(Linear_System_Preconditioning,            "elmer.elastic_solver.Linear_System_Preconditioning", true);
+                _h.getAtPath(Linear_System_ILUT_Tolerance,             "elmer.elastic_solver.Linear_System_ILUT_Tolerance", true);
+                _h.getAtPath(Linear_System_Abort_Not_Converged,        "elmer.elastic_solver.Linear_System_Abort_Not_Converged", true);
+                _h.getAtPath(Linear_System_Residual_Output,            "elmer.elastic_solver.Linear_System_Residual_Output", true);
+                _h.getAtPath(Linear_System_Precondition_Recompute,     "elmer.elastic_solver.Linear_System_Precondition_Recompute", true);
             }
 
 
@@ -381,7 +381,7 @@ namespace elmer {
             std::vector<int> Active_Solvers;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Active_Solvers, "elmer.equation.Active_Solvers", true);
+                _h.getAtPath(Active_Solvers, "elmer.equation.Active_Solvers", true);
             }
 
             void join(util::oFile& _buf) {
@@ -409,13 +409,13 @@ namespace elmer {
             double Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
 
             void set(toml::handler& _h) {
-                _h.get_at_path(Poisson_ratio,               "elmer.material.Poisson_ratio", true);
-                _h.get_at_path(Heat_Capacity,               "elmer.material.Heat_Capacity", true);
-                _h.get_at_path(Density,                     "elmer.material.Density", true);
-                _h.get_at_path(Youngs_modulus,              "elmer.material.Youngs_modulus", true);
-                _h.get_at_path(Heat_expansion_Coefficient,  "elmer.material.Heat_expansion_Coefficient", true);
-                _h.get_at_path(Sound_speed,                 "elmer.material.Sound_speed", true);
-                _h.get_at_path(Heat_Conductivity,           "elmer.material.Heat_Conductivity", true);
+                _h.getAtPath(Poisson_ratio,               "elmer.material.Poisson_ratio", true);
+                _h.getAtPath(Heat_Capacity,               "elmer.material.Heat_Capacity", true);
+                _h.getAtPath(Density,                     "elmer.material.Density", true);
+                _h.getAtPath(Youngs_modulus,              "elmer.material.Youngs_modulus", true);
+                _h.getAtPath(Heat_expansion_Coefficient,  "elmer.material.Heat_expansion_Coefficient", true);
+                _h.getAtPath(Sound_speed,                 "elmer.material.Sound_speed", true);
+                _h.getAtPath(Heat_Conductivity,           "elmer.material.Heat_Conductivity", true);
             }
 
             void join(util::oFile& _buf) {
@@ -469,18 +469,40 @@ namespace elmer {
                 this->name = "Body Force " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
-                Stress_Bodyforce_2 = Force_2 = Density = toml::noDouble;
+                Stress_Bodyforce_1 = toml::noDouble;
+                Stress_Bodyforce_2 = toml::noDouble;
+                Stress_Bodyforce_3 = toml::noDouble;
+                Density = toml::noDouble;
             }
-            double Stress_Bodyforce_2, Force_2, Density;
+            double Stress_Bodyforce_1, Stress_Bodyforce_2, Stress_Bodyforce_3, Density;
 
             void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Name",               this->name);
-                // custom line
-                if (Stress_Bodyforce_2 != toml::noDouble && Density != toml::noDouble) {
-                    _buf << _tab << "Stress Bodyforce 2" << sep << "$ " << Stress_Bodyforce_2 << "*" << Density << "\n";
+                
+                // custom lines
+                if (Stress_Bodyforce_1 != toml::noDouble) {
+                    _buf << _tab << "Stress Bodyforce 1" << sep << "$ " << Stress_Bodyforce_1;
+                    if (Density != toml::noDouble)
+                        _buf << "*" << Density << "\n";
+                    else
+                        _buf << "*1.0" << "\n";
                 }
-                varToString(_buf, "Force 2",            Force_2);
+                if (Stress_Bodyforce_2 != toml::noDouble) {
+                    _buf << _tab << "Stress Bodyforce 2" << sep << "$ " << Stress_Bodyforce_2;
+                    if (Density != toml::noDouble)
+                        _buf << "*" << Density << "\n";
+                    else
+                        _buf << "*1.0" << "\n";
+                }
+                if (Stress_Bodyforce_3 != toml::noDouble) {
+                    _buf << _tab << "Stress Bodyforce 3" << sep << "$ " << Stress_Bodyforce_3;
+                    if (Density != toml::noDouble)
+                        _buf << "*" << Density << "\n";
+                    else
+                        _buf << "*1.0" << "\n";
+                }
+
                 _buf<<(_end + "\n");
             }
     };

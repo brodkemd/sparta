@@ -3,6 +3,8 @@
 
 #include "elmer_classes.hpp"
 
+/* ---------------------------------------------------------------------- */
+
 // defining the os path separator based on the detected os
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
     static const char SEP = '\\';
@@ -10,8 +12,10 @@
     static const char SEP = '/';
 #endif
 
+/* ---------------------------------------------------------------------- */
+
 namespace elmer {
-    const unsigned int boundary_size = 4; // number of elements in a boundary element including id
+    const unsigned int boundary_size = 3; // number of elements in a boundary element
     const unsigned int dimension     = 3; // the dimension
     const std::size_t node_element_size = 5;
 
@@ -23,6 +27,8 @@ namespace elmer {
             const std::string sep = "\n\n";
 
         public:
+            /* ---------------------------------------------------------------------- */
+
             std::vector<double> node_temperature_data;
             std::vector<std::array<int, elmer::boundary_size>> boundaries;
             // array format: x, y, z
@@ -59,21 +65,22 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void set(toml::handler& _h) {
+                ULOG("setting up elmer");
                 // setting needed variables
-                _h.get_at_path(this->meshDB,                    "elmer.meshDB",                     true);
-                _h.get_at_path(this->exe,                       "elmer.exe",                        true);
-                _h.get_at_path(this->sif,                       "elmer.sif",                        true);
-                _h.get_at_path(this->base_temp,                 "elmer.base_temp",                  true);
-                _h.get_at_path(this->simulation_directory,      "simulation_directory",             true);
-                _h.get_at_path(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
-                _h.get_at_path(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
-                _h.get_at_path(this->gravity_on,                "elmer.gravity_on",                 true);
-                _h.get_at_path(this->print_intensity,           "elmer.print_intensity",            false);
+                _h.getAtPath(this->meshDB,                    "elmer.meshDB",                     true);
+                _h.getAtPath(this->exe,                       "elmer.exe",                        true);
+                _h.getAtPath(this->sif,                       "elmer.sif",                        true);
+                _h.getAtPath(this->base_temp,                 "elmer.base_temp",                  true);
+                _h.getAtPath(this->simulation_directory,      "simulation_directory",             true);
+                _h.getAtPath(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
+                _h.getAtPath(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
+                _h.getAtPath(this->gravity_on,                "elmer.gravity_on",                 true);
+                _h.getAtPath(this->print_intensity,           "elmer.print_intensity",            false);
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
                 this->simulation.set(_h);
-                // this->constants.set(_h);
+                this->constants.set(_h);
                 this->equation.set(_h);
                 this->material.set(_h);
                 this->thermal_solver.set(_h);
@@ -85,6 +92,8 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void checks() {
+                ULOG("checking parameters");
+
                 struct stat sb;
                 // making sure the elmer exe 
                 if (!(stat(this->exe.c_str(),  &sb) == 0))
@@ -116,17 +125,21 @@ namespace elmer {
                 this->header.Include_Path = "";
                 this->header.Results_Directory = this->simulation_directory;
 
-                this->constants.Gravity = { 0.0, -1.0, 0.0, 9.80665 };
-                this->constants.Stefan_Boltzmann = 5.670374419e-8;
-                this->constants.Permittivity_of_Vacuum = 8.85418781e-12;
-                this->constants.Permeability_of_Vacuum = 1.25663706e-6;
-                this->constants.Boltzmann_Constant = 1.380649e-23;
-                this->constants.Unit_Charge = 1.6021766e-19;
-
                 if (this->gravity_on) {
                     elmer::Body_Force* bf = new elmer::Body_Force(1);
-                    bf->Stress_Bodyforce_2 = this->constants.Gravity[(int)this->constants.Gravity.size()-1];
-                    bf->Density            = this->material.Density;
+                    if (this->constants.Gravity[0] != 0.0) {
+                        bf->Stress_Bodyforce_1 = this->constants.Gravity[0]*this->constants.Gravity[(int)this->constants.Gravity.size()-1];
+                        ULOG("gravity acts (at least in part) in the x-direction");
+                    }
+                    if (this->constants.Gravity[1] != 0.0) {
+                        bf->Stress_Bodyforce_2 = this->constants.Gravity[1]*this->constants.Gravity[(int)this->constants.Gravity.size()-1];
+                        ULOG("gravity acts (at least in part) in the y-direction");
+                    }
+                    if (this->constants.Gravity[2] != 0.0) {
+                        bf->Stress_Bodyforce_3 = this->constants.Gravity[2]*this->constants.Gravity[(int)this->constants.Gravity.size()-1];
+                        ULOG("gravity acts (at least in part) in the z-direction");
+                    }
+                    bf->Density = this->material.Density;
                     this->body_forces.push_back(bf);
                 }
             }
@@ -134,6 +147,7 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void setupDumpDirectory() {
+                ULOG("setting up dump directory");
                 // making sure the mesh database is complete
                 std::string exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
                 for (int i = 0; i < 4; i++) {
@@ -148,9 +162,10 @@ namespace elmer {
 
             /* ---------------------------------------------------------------------- */
             
-            void setupNodeDataFileAndVectors() {
+            void setupVectors() {
+                ULOG("setting up vectors");
                 // getting the number of nodes
-                int count = util::count_lines_in_file(this->node_file);
+                int count = util::countLinesInFile(this->node_file);
 
                 // setting temperature vector to all base temperatures
                 std::string str = util::dtos(this->base_temp);
@@ -163,39 +178,37 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void setup() {
-                ULOG("setting up dump directory");
                 this->setupDumpDirectory();
-                ULOG("setting up node data file and vectors");
-                this->setupNodeDataFileAndVectors();
-                ULOG("loading boundaries");
+                this->setupVectors();
                 this->loadBoundaries();
-                ULOG("loading elements");
                 this->loadElements();
-                ULOG("loading nodes");
                 this->loadNodes();
             }
 
             /* ---------------------------------------------------------------------- */
 
-            void run(long _ntimestep) {
-                ULOG("running");
-                // making the sif file
+            void makeSif() {
                 util::oFile _buf(this->sif);
-                this->join(_buf);                
-                _buf.close();
+                this->join(_buf);
+            }
 
-                this->dump_before(_ntimestep);
+            /* ---------------------------------------------------------------------- */
 
+            void run() {
+                // making the sif file
+                this->makeSif();
+
+                ULOG("running");
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
                 int exit_status;
                 try {
                     if (this->print_intensity == "none")
-                        exit_status = util::quietEXEC(exe+" "+this->sif+" 2>&1");
+                        exit_status = util::quietExec(exe+" "+this->sif+" 2>&1");
                     else if (this->print_intensity == "limited")
-                        exit_status = util::limitedEXEC(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
+                        exit_status = util::limitedExec(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
                     else
-                        exit_status = util::verboseEXEC(exe+" "+this->sif+" 2>&1");
+                        exit_status = util::verboseExec(exe+" "+this->sif+" 2>&1");
                 } catch (std::exception& e) {
                     UERR(e.what());
                 }
@@ -306,12 +319,12 @@ namespace elmer {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
                     avg = 0;
-                    for (unsigned int j = 1; j < boundary_size; j++) {
+                    for (unsigned int j = 0; j < boundary_size; j++) {
                         // gets the data point corresponding to node id and adds it to the rolling sum
                         avg += this->node_temperature_data[this->boundaries[i][j]-1];
                     }
                     // computing the average by dividing the sum by the number of points and setting the surface element
-                    _temperatures[this->boundaries[i][0]-1] = avg/(boundary_size - 1);
+                    _temperatures[i] = avg/boundary_size;
                 }
             }
 
@@ -378,6 +391,39 @@ namespace elmer {
             }
 
             /* ---------------------------------------------------------------------- */
+            
+            /**
+             * makes sure file from elmer object data
+             * returns: the name of the surf file
+            */
+            std::string makeSpartaSurf() {
+                ULOG("making surface file for sparta");
+                std::size_t i;
+                unsigned int j;
+                std::string surf_file = this->simulation_directory + SEP + "mesh.surf";
+                
+                util::oFile f(surf_file);
+                f << "# Surface element file written by SPARTA fea interface\n\n" << this->nodes.size() << " points\n" << this->boundaries.size() << " triangles\n\nPoints\n\n";
+
+                for (i = 0; i < this->nodes.size(); i++) {
+                    f << i+1;
+                    for (j = 0; j < elmer::dimension; j++)
+                        f << " " << this->nodes[i][j];
+                    f << "\n";
+                }
+
+                f << "\nTriangles\n\n";
+                for (i = 0; i < this->boundaries.size(); i++) {
+                    f << i+1;
+                    for (j = 0; j < elmer::boundary_size; j++)
+                        f << " " << this->boundaries[i][j];
+                    f << "\n";
+                }
+
+                return surf_file;
+            }
+
+            /* ---------------------------------------------------------------------- */
 
             void loadNodes() {
                 ULOG("loading nodes");
@@ -415,6 +461,8 @@ namespace elmer {
 
                 util::readFile(this->boundary_file, lines);
 
+                int last_id = 0;
+                int cur_id;
                 int count = 1;
                 for (std::string it : lines) {
                     util::trim(it);
@@ -426,12 +474,17 @@ namespace elmer {
                     if (_split[4] != (std::string)"303") 
                         UERR("element is not a triangle in boundary file at line: " + std::to_string(count));
 
+                    cur_id = std::stoi(_split[0]);
+                    if ((cur_id - last_id) != 1)
+                        UERR("got unordered boundary elements at line: " + std::to_string(count));
+                    last_id = cur_id;
+
                     // getting rid of stuff I do not need
-                    _split.erase(_split.begin()+1, _split.begin() + 5);
+                    _split.erase(_split.begin(), _split.begin() + 5);
 
                     // catching errors
-                    if (_split.size() != boundary_size)
-                        UERR("too many boundary elements to assign at line: " + std::to_string(count));
+                    // if (_split.size() != boundary_size)
+                    //     UERR("too many boundary elements to assign at line: " + std::to_string(count));
 
                     // adding the data
                     for (unsigned int i = 0; i < boundary_size; i++)
@@ -502,12 +555,30 @@ namespace elmer {
 
             /* ---------------------------------------------------------------------- */
 
-            void dump_before(long _timestep) {
-                ULOG("dumping before");
+            void dumpBefore(long _timestep) {
+                this->dumpNodePositionsBefore(_timestep);
+                this->dumpNodeTemperaturesBefore(_timestep);
+            }
+
+            /* ---------------------------------------------------------------------- */
+
+            void dumpNodeTemperaturesBefore(long _timestep) {
+                ULOG("dumping node temperatures before");
+                std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + ".before_" + this->node_temperature_file_ext;
+                util::oFile out(filename);
+
+                for (double& it : this->node_temperature_data)
+                    out << it << "\n";
+            }
+
+            /* ---------------------------------------------------------------------- */
+
+            void dumpNodePositionsBefore(long _timestep) {
+                ULOG("dumping node positions before");
                 std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + ".before_" + this->node_position_file_ext;
                 util::oFile out(filename);
-    
-                for (std::size_t i = 0; i < this->nodes.size(); i++)    
+
+                for (std::size_t i = 0; i < this->nodes.size(); i++) 
                     out << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
             }
 
@@ -521,6 +592,7 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void dumpNodeTemperatures(long _timestep) {
+                ULOG("dumping node temperatures");
                 std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_temperature_file_ext;
                 util::oFile out(filename);
 
@@ -531,6 +603,7 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void dumpNodePositions(long _timestep) {
+                ULOG("dumping node positions");
                 std::string filename = this->simulation_directory + SEP + std::to_string(_timestep) + "." + this->node_position_file_ext;
                 util::oFile out(filename);
 

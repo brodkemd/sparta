@@ -8,13 +8,25 @@
 #include <string>
 #include "float.h"
 
+/* ---------------------------------------------------------------------- */
+
+#define STARTCOLOR "\033[0;32m"
+#define ENDCOLOR "\033[0m"
+
+/* ---------------------------------------------------------------------- */
+
 #define UERR(_msg) util::error("\n  FILE: " + std::string(__FILE__) + "\n  FUNCTION: " + std::string(__PRETTY_FUNCTION__) + "\n  LINE: " + std::to_string(__LINE__) + "\n  MESSAGE: " + _msg)
-#define ULOG(_msg) util::print("[" + util::getTime() + "] [" + util::formatFunc(__PRETTY_FUNCTION__) + "] " + _msg, 0)
+#define ULOG(_msg) util::printColor("[" + util::getTime() + "] [" + util::formatFunc(__PRETTY_FUNCTION__) + "]", std::string(" ") + _msg)
+
+/* ---------------------------------------------------------------------- */
 
 namespace util {
+    
+    /* ---------------------------------------------------------------------- */
+
     std::ostringstream makeDoubleConverter() {
         std::ostringstream __double_converter;
-        __double_converter << std::scientific<<std::setprecision(std::numeric_limits<double>::digits10+2);
+        __double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
         return __double_converter;
     }
 
@@ -61,6 +73,19 @@ namespace util {
             for (int i = 0; i < num_indent; i++) space += "  ";
             if (_screen)  fprintf(_screen,  "%s", (space+str+end).c_str());
             if (_logfile) fprintf(_logfile, "%s", (space+str+end).c_str());
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+
+    /**
+     * custom printing for this class
+    */
+    void printColor(std::string color_string, std::string str, std::string end = "\n") {
+        // only prints on the main process
+        if (_me == 0) {
+            if (_screen)  fprintf(_screen,  "%s%s%s%s", STARTCOLOR, color_string.c_str(), ENDCOLOR, (str+end).c_str());
+            if (_logfile) fprintf(_logfile, "%s", (color_string+str+end).c_str());
         }
     }
 
@@ -149,7 +174,7 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int verboseEXEC(const std::string &command) {
+    int verboseExec(const std::string &command) {
         std::array<char, 128> buffer {};
 
         FILE *pipe = popen(command.c_str(), "r");
@@ -178,7 +203,7 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int limitedEXEC(const std::string &command, std::string _start, std::string _end) {
+    int limitedExec(const std::string &command, std::string _start, std::string _end) {
         std::array<char, 128> buffer {};
         std::string result, data, temp;
         result = data = temp = "";
@@ -217,7 +242,7 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int quietEXEC(const std::string &command) {
+    int quietExec(const std::string &command) {
         std::array<char, 128> buffer {};
         std::string result = "";
         std::size_t bytesread;
@@ -248,7 +273,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+    int vecToArr(std::vector<std::string>& _vec, char**& _arr) {
         const int _size = _vec.size();
         _arr = new char*[_size];
         for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
@@ -318,10 +343,58 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
+    class iFile {
+        private:
+            std::ifstream _out;
+            std::string _f_name;
+        public:
+            iFile(std::string _file_name) {
+                _f_name = _file_name;
+                ULOG("opening: " + _f_name);
+                _out.open(_file_name);
+                if (!(_out.is_open())) {
+                    UERR("could not open: " + _f_name);
+                }
+            }
+
+            ~iFile() {
+                if (_out.is_open()) this->close();
+            }
+
+            void close() {
+                ULOG("closing: " + _f_name);
+                if (_out.is_open()) {
+                    _out.close();
+                    if (_out.is_open())
+                        UERR("could not close: " + _f_name);
+                }
+            }
+
+            bool getLine(std::string& _line) {
+                if (std::getline(_out, _line))
+                    return true;
+                return false;
+            }
+
+            bool getLines(std::vector<std::string>& _lines, bool clear = true, std::string end = "\n") {
+                std::string _line;
+                if (clear) _lines.clear();
+                while (std::getline(_out, _line)) {
+                    _lines.push_back(_line + end);
+                }
+                return false;
+            }
+    };
+
+    /* ---------------------------------------------------------------------- */
+
     void copyFile(std::string from, std::string to) {
         std::ifstream ini_file{from};
         std::ofstream out_file{to};
-        if (ini_file && out_file) out_file << ini_file.rdbuf();
+        if (ini_file && out_file) {
+            ULOG("Copying " + from + " to " + to);
+            out_file << ini_file.rdbuf();
+        }
         else error("can not copy "  + from + " to " + to);
         ini_file.close(); out_file.close();
     }
@@ -374,15 +447,6 @@ namespace util {
             if (_v[i] == _find) return (int)i;
         }
         return -1;
-    }
-
-    /* ---------------------------------------------------------------------- */
-
-    std::size_t find(std::string _buf, std::string _to_find) {
-        for (std::size_t i = 0; i < (_buf.length() - _to_find.length()); i++) {
-            if (_buf.substr(i, _to_find.length()) == _to_find) return i;
-        }
-        return std::string::npos;
     }
 
     /* ---------------------------------------------------------------------- */
@@ -452,12 +516,12 @@ namespace util {
     /**
      * counts the number of lines in the file at the path inputted
     */ 
-    int count_lines_in_file(std::string _file) {
+    int countLinesInFile(std::string _file) {
         int number_of_lines = 0;
         std::string line;
-        std::ifstream myfile(_file);
+        util::iFile myfile(_file);
 
-        while (std::getline(myfile, line)) ++number_of_lines;
+        while (myfile.getLine(line)) number_of_lines++;
         return number_of_lines;
     }
 
@@ -468,12 +532,8 @@ namespace util {
      * vector
     */ 
     void readFile(std::string fileName, std::vector<std::string>& lines) {
-        std::ifstream myfile(fileName);
-        if (!(myfile.is_open())) UERR(fileName + " did not open");
-        std::string line;
-        while (std::getline(myfile, line)) {
-            lines.push_back(line + "\n");
-        }
+        util::iFile myfile(fileName);
+        myfile.getLines(lines, true);
         myfile.close();
     }
 }

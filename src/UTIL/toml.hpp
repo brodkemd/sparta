@@ -52,13 +52,13 @@ namespace toml {
             /* ---------------------------------------------------------------------- */
 
             template<typename T>
-            void get_at_path(T& _var, std::string _path, bool _strict) {
+            void getAtPath(T& _var, std::string _path, bool _strict) {
                 this->pArgs = PyTuple_New(2);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
                 PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)_strict));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
-                this->_handle_var(_var, out, _path);
+                this->_handleVar(_var, out, _path);
                 Py_DECREF(out);
             }
 
@@ -78,7 +78,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(double& _var, PyObject *_src, std::string _path) {
+            void _handleVar(double& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
                     _var = noDouble;
                     return;
@@ -91,7 +91,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(std::string& _var, PyObject *_src, std::string _path) {
+            void _handleVar(std::string& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
                     _var = noString;
                     return;
@@ -104,7 +104,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(int& _var, PyObject *_src, std::string _path) {
+            void _handleVar(int& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
                     _var = noInt;
                     return;
@@ -117,7 +117,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(bool& _var, PyObject *_src, std::string _path) {
+            void _handleVar(bool& _var, PyObject *_src, std::string _path) {
                 if (Py_IsNone(_src)) {
                     _var = noBool;
                     return;
@@ -139,14 +139,14 @@ namespace toml {
                 _var.clear();
                 T _temp;
                 for (int i = 0; i < PyList_Size(_src); i++) {
-                    _handle_var(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
+                    _handleVar(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
                     _var.push_back(_temp);
                 }
             }
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(std::vector<std::string>& _var, PyObject *_src, std::string _path) {
+            void _handleVar(std::vector<std::string>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
                     UERR(_path + " is not the correct type, must be array of strings");
 
@@ -155,7 +155,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(std::vector<double>& _var, PyObject *_src, std::string _path) {
+            void _handleVar(std::vector<double>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
                     UERR(_path + " is not the correct type, must be array of floats");
                 
@@ -164,7 +164,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(std::vector<int>& _var, PyObject *_src, std::string _path) {
+            void _handleVar(std::vector<int>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
                     UERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
@@ -172,7 +172,7 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            void _handle_var(std::vector<bool>& _var, PyObject *_src, std::string _path) {
+            void _handleVar(std::vector<bool>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
                     UERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);

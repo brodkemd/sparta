@@ -41,16 +41,16 @@ namespace SPARTA_NS {
             int setmask();
             virtual void init();
             virtual void end_of_step();
-            virtual double compute_scalar();
 
         private:
-            void update_temperatures();
-            void update_surf();
-            bigint remove_particles();
-            void connect_3d_pre();
-            void connect_3d_post();
-            bool run_condition();
+            void updateTemperatures();
+            void updateSurf();
+            bigint removeParticles();
+            void connect3dPre();
+            void connect3dPost();
+            bool runCondition();
             bool checkRun(std::string& _name);
+            void loadSurf();
 
             #include "hash_options.h"
 
@@ -69,7 +69,6 @@ namespace SPARTA_NS {
             bool connectflag;
             int groupbit, nprocs, tindex, run_every, nsurf, dimension, *pselect, shear_locs[3], force_locs[3], energy_loc;
             double energy_threshold, pressure_threshold, shear_threshold, *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
-            bigint ndeleted;   
     };
 }
 
