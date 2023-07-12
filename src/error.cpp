@@ -94,6 +94,33 @@ void Error::all(const char *file, int line, const char *str)
   exit(1);
 }
 
+
+/* ----------------------------------------------------------------------
+   called by all procs in one world
+   close all output, screen, and log files in world
+------------------------------------------------------------------------- */
+
+void Error::allNoFile(const char *str)
+{
+  MPI_Barrier(world);
+
+  int me;
+  MPI_Comm_rank(world,&me);
+
+  if (me == 0) {
+    if (screen)  fprintf(screen,  "ERROR: %s\n", str);
+    if (logfile) fprintf(logfile, "ERROR: %s\n", str);
+  }
+
+  if (output) delete output;
+  if (screen && screen != stdout) fclose(screen);
+  if (logfile) fclose(logfile);
+
+  if (sparta->kokkos) Kokkos::finalize();
+  MPI_Finalize();
+  exit(1);
+}
+
 /* ----------------------------------------------------------------------
    called by one proc in world
    write to world screen only if non-NULL on this proc

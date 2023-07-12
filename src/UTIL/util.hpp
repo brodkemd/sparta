@@ -8,7 +8,8 @@
 #include <string>
 #include "float.h"
 
-#define ERR(_msg) util::error("\n  FILE: " + std::string(__FILE__) + "\n  FUNCTION: " + std::string(__PRETTY_FUNCTION__) + "\n  LINE: " + std::to_string(__LINE__) + "\n  MESSAGE: " + _msg)
+#define UERR(_msg) util::error("\n  FILE: " + std::string(__FILE__) + "\n  FUNCTION: " + std::string(__PRETTY_FUNCTION__) + "\n  LINE: " + std::to_string(__LINE__) + "\n  MESSAGE: " + _msg)
+#define ULOG(_msg) util::print("[" + util::getTime() + "] [" + util::formatFunc(__PRETTY_FUNCTION__) + "] " + _msg, 0)
 
 namespace util {
     std::ostringstream makeDoubleConverter() {
@@ -22,8 +23,6 @@ namespace util {
     FILE* _screen;
     FILE* _logfile;
     int _me;
-
-
     std::ostringstream _double_converter = makeDoubleConverter();
 
     /* ---------------------------------------------------------------------- */
@@ -35,6 +34,24 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     /**
+     * gets current time as a string
+    */
+    std::string getTime() {
+        timeval curTime;
+        gettimeofday(&curTime, NULL);
+        int milli = curTime.tv_usec / 1000;
+
+        char buffer [80];
+        strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
+
+        char currentTime[84] = "";
+        sprintf(currentTime, "%s:%03d", buffer, milli);
+        return std::string(currentTime);
+    }
+
+    /* ---------------------------------------------------------------------- */
+
+    /**
      * custom printing for this class
     */
     void print(std::string str, int num_indent=1, std::string end = "\n") {
@@ -42,9 +59,27 @@ namespace util {
         if (_me == 0) {
             std::string space = "";
             for (int i = 0; i < num_indent; i++) space += "  ";
-            if (_screen)  fprintf(_screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
-            if (_logfile) fprintf(_logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
+            if (_screen)  fprintf(_screen,  "%s", (space+str+end).c_str());
+            if (_logfile) fprintf(_logfile, "%s", (space+str+end).c_str());
         }
+    }
+
+    /* ---------------------------------------------------------------------- */
+
+    std::string formatFunc(std::string _func) {
+        if (_func.find("::") == std::string::npos) return std::string("");
+        std::size_t _start = _func.find(' ');
+        std::size_t _end   = _func.find('(');
+        if (_end <= _start || _start == std::string::npos)
+            _func = _func.substr(0, _end);
+        else {
+            if (_func.substr(0, _start) == "virtual")
+                _func = _func.substr(_start+1, _func.length()-_start-1);
+            _start = _func.find(' ');
+            _end   = _func.find('(');
+            _func = _func.substr(_start+1, _end-_start-1);
+        }
+        return _func;
     }
 
     /* ---------------------------------------------------------------------- */
@@ -163,7 +198,7 @@ namespace util {
                 _end_ind = result.find(_end, _start_ind+_start.length()+1);
                 if (_start_ind != std::string::npos && _end_ind != std::string::npos) {
                     // printing only the part wanted
-                    util::print(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()), 0);
+                    ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
                     result.clear();
                 }
             }
@@ -213,6 +248,15 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
+    int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
+        const int _size = _vec.size();
+        _arr = new char*[_size];
+        for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
+        return _size;
+    }
+
+    /* ---------------------------------------------------------------------- */
+
     class oFile {
         private:
             std::ofstream _out;
@@ -220,23 +264,25 @@ namespace util {
         public:
             oFile(std::string _file_name) {
                 _f_name = _file_name;
-                util::print("--> opening: " + _f_name);
+                ULOG("opening: " + _f_name);
                 _out.open(_file_name);
                 if (!(_out.is_open())) {
-                    ERR("could not open: " + _f_name);
+                    UERR("could not open: " + _f_name);
                 }
             }
 
             ~oFile() {
-                this->close();
+                if (_out.is_open()) this->close();
             }
 
             void close() {
-                util::print("--> closing: " + _f_name);
-                _out.close();
+                ULOG("closing: " + _f_name);
                 if (_out.is_open()) {
-                    ERR("could not close: " + _f_name);
+                    _out.close();
+                    if (_out.is_open())
+                        UERR("could not close: " + _f_name);
                 }
+                
             }
 
             friend oFile& operator<<(oFile& _f, const double& _val) { 
@@ -423,7 +469,7 @@ namespace util {
     */ 
     void readFile(std::string fileName, std::vector<std::string>& lines) {
         std::ifstream myfile(fileName);
-        if (!(myfile.is_open())) ERR(fileName + " did not open");
+        if (!(myfile.is_open())) UERR(fileName + " did not open");
         std::string line;
         while (std::getline(myfile, line)) {
             lines.push_back(line + "\n");

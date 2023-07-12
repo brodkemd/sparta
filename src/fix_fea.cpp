@@ -39,8 +39,8 @@ using namespace SPARTA_NS;
 
 
 // DO NOT CHANGE THESE
-enum{INT,DOUBLE};                      // several files
-enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
+enum{INT,DOUBLE};                     // several files
+enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP}; // several files
 
 /* ---------------------------------------------------------------------- */
 
@@ -48,8 +48,9 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP};           // several files
 #define INVOKED_PER_SURF 32
 
 // THESE CAN CHANGE BUT BE VERY CAREFUL
+#define SERR(_msg) error->all(FLERR, _msg)
 #define START_TRY try {
-#define END_TRY } catch (std::string _msg) { error->all(FLERR, _msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
+#define END_TRY } catch (std::string _msg) { SERR(_msg.c_str()); } catch (std::exception& e) { SERR(e.what()); } catch (...) { SERR("unidentified error occurred"); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -67,32 +68,32 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     util::_logfile = &*logfile;
     util::_me = comm->me;
 
-    util::print("Setting up fix fea:", 0);
+    ULOG("Setting up fix fea:");
 
     // checking if the number of args is correct
     if (narg > 3)
-        error->all(FLERR,"Illegal fix fea command, too many inputs");
+        SERR("Illegal fix fea command, too many inputs");
     else if (narg < 3)
-        error->all(FLERR,"Illegal fix fea command, too few inputs");
+        SERR("Illegal fix fea command, too few inputs");
 
     // making sure there is a surface to analyze
     if (!surf->exist)
-        error->all(FLERR,"Illegal fix fea command, no surface to analyze");
+        SERR("Illegal fix fea command, no surface to analyze");
 
     // making sure the surface is the correct type
     if (surf->implicit)
-        error->all(FLERR,"Cannot use fix fea with implicit surfs");
+        SERR("Cannot use fix fea with implicit surfs");
     if (surf->distributed)
-        error->all(FLERR,"Cannot use fix fea with distributed surfs");
+        SERR("Cannot use fix fea with distributed surfs");
     
     // making sure the dimension is correct
     if (domain->dimension != elmer::dimension)
-        error->all(FLERR, ("Invalid dimension detected, must be " + std::to_string(elmer::dimension) + " dimensional").c_str());
+        SERR(("Invalid dimension detected, must be " + std::to_string(elmer::dimension) + " dimensional").c_str());
 
     // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
-        error->all(FLERR,"Illegal fix fea command, toml config file does not exist");
-    util::print("Loading config from: " + std::string(arg[2]));
+        SERR("Illegal fix fea command, toml config file does not exist");
+    ULOG("Loading config from: " + std::string(arg[2]));
 
     // making new fea class
     this->fea = new elmer::Elmer();
@@ -126,11 +127,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
     
     // adding surf collision model needed
-    size = toml::vec_to_arr(surf_collide_args, arr);
+    size = util::vec_to_arr(surf_collide_args, arr);
     this->surf->add_collide(size, arr);
 
     // adding compute
-    size = toml::vec_to_arr(compute_args, arr);
+    size = util::vec_to_arr(compute_args, arr);
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
@@ -139,55 +140,55 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // error checks
     this->cqw = modify->compute[icompute];
     if (icompute < 0)
-        error->all(FLERR,"Could not find fix fea compute ID");
+        SERR("Could not find fix fea compute ID");
     if (cqw->per_surf_flag == 0)
-        error->all(FLERR,"Fix fea compute does not compute per-surf info");
+        SERR("Fix fea compute does not compute per-surf info");
 
     // getting the index in the compute of the energy value
     energy_loc = util::find(compute_args, (std::string)"etot")-4;
     if (energy_loc < 0)
-        error->all(FLERR, "etot is not provided as compute arg");
-    util::print("Energy flux index = " + std::to_string(energy_loc));
+        SERR("etot is not provided as compute arg");
+    ULOG("Energy flux index = " + std::to_string(energy_loc));
 
     // getting the indicies for the pressures (stresses) from the compute
     std::vector<std::string> opts = {"px", "py", "pz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
         force_locs[i] = util::find(compute_args, opts[i])-4;
         if (force_locs[i] < 0)
-            error->all(FLERR, (opts[i] + " is not provided as compute arg").c_str());
+            SERR((opts[i] + " is not provided as compute arg").c_str());
     }
 
-    util::print("px index = " + std::to_string(force_locs[0]));
-    util::print("py index = " + std::to_string(force_locs[1]));
-    util::print("pz index = " + std::to_string(force_locs[2]));
+    ULOG("px index = " + std::to_string(force_locs[0]));
+    ULOG("py index = " + std::to_string(force_locs[1]));
+    ULOG("pz index = " + std::to_string(force_locs[2]));
 
     // getting the indicies for the shear stresses from the compute
     opts = {"shx", "shy", "shz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
         shear_locs[i] = util::find(compute_args, opts[i])-4;
         if (shear_locs[i] < 0)
-            error->all(FLERR, (opts[i] + " is not provided as compute arg").c_str());
+            SERR((opts[i] + " is not provided as compute arg").c_str());
     }
     
-    util::print("shx index = " + std::to_string(shear_locs[0]));
-    util::print("shy index = " + std::to_string(shear_locs[1]));
-    util::print("shz index = " + std::to_string(shear_locs[2]));
+    ULOG("shx index = " + std::to_string(shear_locs[0]));
+    ULOG("shy index = " + std::to_string(shear_locs[1]));
+    ULOG("shz index = " + std::to_string(shear_locs[2]));
 
     // checking to make sure the indicies just detected do not go above the bounds of the compute array
     std::vector<int> _temp_indicies = {energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]};
     int max = util::max(_temp_indicies);
-    util::print("max = "+std::to_string(max));
+    ULOG("max = "+std::to_string(max));
     if (max > 0 && max > cqw->size_per_surf_cols)
-        error->all(FLERR,"Fix fea compute array is accessed out-of-range");
+        SERR("Fix fea compute array is accessed out-of-range");
 
-    util::print("added surf compute with id: " + std::string(modify->compute[icompute]->id));
+    ULOG("added surf compute with id: " + std::string(modify->compute[icompute]->id));
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
-    util::print("nprocs = " + std::to_string(nprocs));
+    ULOG("nprocs = " + std::to_string(nprocs));
 
     // adding collision by modifying surf
-    size = toml::vec_to_arr(surf_modify_args, arr);
+    size = util::vec_to_arr(surf_modify_args, arr);
     this->surf->modify_params(size, arr);
 
     // initing vars
@@ -262,6 +263,7 @@ void FixFea::init() {
     // number of surface elements
     this->nsurf = surf->nlocal;
 
+    // creating the memory
     memory->create(this->qw, this->nsurf, "fea:qw");
     memset(this->qw, 0, this->nsurf*sizeof(double));
 
@@ -307,7 +309,7 @@ void FixFea::init() {
     memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
-    util::print("done creating memory");
+    ULOG("done creating memory");
 
     // loading the boundary data
     if (comm->me == 0) {
@@ -324,7 +326,7 @@ void FixFea::init() {
 
     // waits for all processes to get here
     MPI_Barrier(world);
-    util::print("done initing");
+    ULOG("done initing");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -334,12 +336,12 @@ void FixFea::init() {
  * to elmer
  */
 void FixFea::end_of_step() {
-    //util::print("end of step");
+    //ULOG("end of step");
     int i,m;
     
     // number of surface elements
     if (this->nsurf != surf->nlocal)
-        error->all(FLERR, "detected surface change, this is not allowed with fix fea command");
+        SERR("detected surface change, this is not allowed with fix fea command");
 
     // required to run the compute
     modify->clearstep_compute();
@@ -365,7 +367,7 @@ void FixFea::end_of_step() {
 
     // if should run fea
     if (this->run_condition()) {
-        util::print("running");
+        ULOG("running");
 
         // summing all of the per process arrays into shared arrays
         MPI_Allreduce(this->qw_me,  this->qw,  nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -384,8 +386,8 @@ void FixFea::end_of_step() {
             // triggered the run
             if (this->checkRun(var_name)) {
                 // messages
-                util::print("got sum over threshold for variable: " + var_name);
-                util::print("Setting up fea");
+                ULOG("got sum over threshold for variable: " + var_name);
+                ULOG("Setting up fea");
 
                 // wrapping in try to catch if exception is,
                 // fea throws exceptions if it encounters an error
@@ -408,11 +410,11 @@ void FixFea::end_of_step() {
 
                 END_TRY
 
-            } else util::print("Skipping fea, no params detected");
+            } else ULOG("Skipping fea, no params detected");
 
             START_TRY
             // dumps the data obtained from the fea solver
-            util::print("dumping node temperatures and points");
+            ULOG("dumping node temperatures and points");
             this->fea->dump(update->ntimestep);
             END_TRY
 
@@ -442,8 +444,7 @@ double FixFea::compute_scalar() { return (double) this->ndeleted; }
  * checks if the fea solver should be run
 */
 bool FixFea::checkRun(std::string& _name) {
-    int i;
-    double sum;
+    int i; double sum;
 
     // summing all of the vars and checking if they are above the threshold
     // returns true if above the threshold
@@ -452,24 +453,26 @@ bool FixFea::checkRun(std::string& _name) {
     if (sum > this->energy_threshold)   { _name = "energy"; return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(px[i]);
-    if (sum > this->pressure_threshold) { _name = "px"; return true; }
+    if (sum > this->pressure_threshold) { _name = "px";     return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(py[i]);
-    if (sum > this->pressure_threshold) { _name = "py"; return true; }
+    if (sum > this->pressure_threshold) { _name = "py";     return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(pz[i]);
-    if (sum > this->pressure_threshold) { _name = "pz"; return true; }
+    if (sum > this->pressure_threshold) { _name = "pz";     return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shx[i]);
-    if (sum > this->shear_threshold)    { _name = "shx"; return true; }
+    if (sum > this->shear_threshold)    { _name = "shx";    return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shy[i]);
-    if (sum > this->shear_threshold)    { _name = "shy"; return true; }
+    if (sum > this->shear_threshold)    { _name = "shy";    return true; }
     sum = 0;
     for (i = 0; i < nsurf; i++) sum+=std::abs(shz[i]);
-    if (sum > this->shear_threshold)    { _name = "shz"; return true; }
+    if (sum > this->shear_threshold)    { _name = "shz";    return true; }
     return false;
 }
+
+/* ---------------------------------------------------------------------- */
 
 /**
  * Condition to run fea on
@@ -488,7 +491,7 @@ void FixFea::update_temperatures() {
 
     START_TRY
     // loading per node temperature data
-    util::print("loading temperatures");
+    ULOG("loading temperatures");
 
     // averages node temperatures on a per surface basis
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
@@ -497,8 +500,7 @@ void FixFea::update_temperatures() {
 
     // checking to make sure all values where set to something non zero
     for (int i = 0; i < this->nsurf; i++) {
-        if (tvector[i] == 0.0)
-            error->all(FLERR, "wall temperature not set correctly");
+        if (tvector[i] == 0.0) SERR("wall temperature not set correctly");
     }
 }
 

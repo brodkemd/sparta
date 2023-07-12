@@ -13,15 +13,6 @@ namespace toml {
 
     /* ---------------------------------------------------------------------- */
 
-    int vec_to_arr(std::vector<std::string>& _vec, char**& _arr) {
-        const int _size = _vec.size();
-        _arr = new char*[_size];
-        for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
-        return _size;
-    }
-
-    /* ---------------------------------------------------------------------- */
-
     class handler {
         public:
             handler(std::string _file) {
@@ -46,7 +37,7 @@ namespace toml {
                     this->_err();
 
                     if (!(this->get_at && PyCallable_Check(this->get_at))) {  
-                        ERR("get_at_path function does not exists or is not callable");
+                        UERR("get_at_path function does not exists or is not callable");
                     }
                 }
             }
@@ -81,7 +72,7 @@ namespace toml {
                 if (PyErr_Occurred()) {
                     PyErr_Fetch(&this->type, &this->value, &this->traceback);
                     std::string _value = _PyUnicode_AsString(PyObject_Repr(this->value));
-                    ERR(_value);
+                    UERR(_value);
                 }
             }
 
@@ -94,7 +85,7 @@ namespace toml {
                 }
 
                 if (!(PyFloat_Check(_src)))
-                    ERR(_path + " is not the correct type, must be float");
+                    UERR(_path + " is not the correct type, must be float");
                 _var = PyFloat_AsDouble(_src);
             }
 
@@ -107,7 +98,7 @@ namespace toml {
                 }
 
                 if (!(PyUnicode_Check(_src)))
-                    ERR(_path + " is not the correct type, must be string");
+                    UERR(_path + " is not the correct type, must be string");
                 _var = _PyUnicode_AsString(_src);
             }
 
@@ -120,7 +111,7 @@ namespace toml {
                 }
 
                 if (!(PyLong_Check(_src)))
-                    ERR(_path + " is not the correct type, must be int");
+                    UERR(_path + " is not the correct type, must be int");
                 _var = PyLong_AsLong(_src);
             }
 
@@ -133,7 +124,7 @@ namespace toml {
                 }
 
                 if (!(PyBool_Check(_src)))
-                    ERR(_path + " is not the correct type, must be bool");
+                    UERR(_path + " is not the correct type, must be bool");
                 
                 if (PyObject_IsTrue(_src))
                     _var = true;
@@ -157,7 +148,7 @@ namespace toml {
 
             void _handle_var(std::vector<std::string>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    ERR(_path + " is not the correct type, must be array of strings");
+                    UERR(_path + " is not the correct type, must be array of strings");
 
                 _list(_var, _src, _path);
             }
@@ -166,7 +157,7 @@ namespace toml {
 
             void _handle_var(std::vector<double>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    ERR(_path + " is not the correct type, must be array of floats");
+                    UERR(_path + " is not the correct type, must be array of floats");
                 
                 _list(_var, _src, _path);
             }
@@ -175,7 +166,7 @@ namespace toml {
 
             void _handle_var(std::vector<int>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    ERR(_path + " is not the correct type, must be array of ints");
+                    UERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
             }
 
@@ -183,7 +174,7 @@ namespace toml {
 
             void _handle_var(std::vector<bool>& _var, PyObject *_src, std::string _path) {
                 if (!(PyList_Check(_src)))
-                    ERR(_path + " is not the correct type, must be array of ints");
+                    UERR(_path + " is not the correct type, must be array of ints");
                 _list(_var, _src, _path);
             }            
     };

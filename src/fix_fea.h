@@ -55,11 +55,11 @@ namespace SPARTA_NS {
             #include "hash_options.h"
 
             #ifdef SPARTA_MAP
-              typedef std::map<OnePoint3d,int> MyHash;
+                typedef std::map<OnePoint3d,int> MyHash;
             #elif SPARTA_UNORDERED_MAP
-              typedef std::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
+                typedef std::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
             #else
-              typedef std::tr1::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
+                typedef std::tr1::unordered_map<OnePoint3d,int,OnePoint3dHash> MyHash;
             #endif
 
             MyHash *hash;
@@ -69,8 +69,7 @@ namespace SPARTA_NS {
             bool connectflag;
             int groupbit, nprocs, tindex, run_every, nsurf, dimension, *pselect, shear_locs[3], force_locs[3], energy_loc;
             double energy_threshold, pressure_threshold, shear_threshold, *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
-            bigint ndeleted;
-                   
+            bigint ndeleted;   
     };
 }
 

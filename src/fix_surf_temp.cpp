@@ -38,8 +38,8 @@ using namespace SPARTA_NS;
 #define SB_SI 5.670374419e-8
 #define SB_CGS 5.670374419e-5
 
-enum{INT,DOUBLE};                      // several files
-enum{COMPUTE,FIX};
+enum{INT,DOUBLE}; // several files
+enum{COMPUTE,FIX}; // several files
 
 /* ---------------------------------------------------------------------- */
 
