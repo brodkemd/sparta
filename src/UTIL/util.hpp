@@ -21,12 +21,16 @@
 /* ---------------------------------------------------------------------- */
 
 namespace util {
+    typedef long int_t;
+    typedef double double_t;
+    typedef std::string string_t;
+    typedef bool bool_t;
     
     /* ---------------------------------------------------------------------- */
 
     std::ostringstream makeDoubleConverter() {
         std::ostringstream __double_converter;
-        __double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
+        __double_converter << std::scientific << std::setprecision(std::numeric_limits<double_t>::digits10+2);
         return __double_converter;
     }
 
@@ -34,21 +38,22 @@ namespace util {
 
     FILE* _screen;
     FILE* _logfile;
-    int _me;
+    int_t _me;
+    int_t npos = -1;
     std::ostringstream _double_converter = makeDoubleConverter();
 
     /* ---------------------------------------------------------------------- */
 
     // error command
     // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
-    void error(std::string _msg) { throw _msg; }
+    void error(string_t _msg) { throw _msg; }
 
     /* ---------------------------------------------------------------------- */
 
     /**
      * gets current time as a string
     */
-    std::string getTime() {
+    string_t getTime() {
         timeval curTime;
         gettimeofday(&curTime, NULL);
         int milli = curTime.tv_usec / 1000;
@@ -58,7 +63,7 @@ namespace util {
 
         char currentTime[84] = "";
         sprintf(currentTime, "%s:%03d", buffer, milli);
-        return std::string(currentTime);
+        return string_t(currentTime);
     }
 
     /* ---------------------------------------------------------------------- */
@@ -66,11 +71,11 @@ namespace util {
     /**
      * custom printing for this class
     */
-    void print(std::string str, int num_indent=1, std::string end = "\n") {
+    void print(string_t str, int_t num_indent=1, string_t end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            std::string space = "";
-            for (int i = 0; i < num_indent; i++) space += "  ";
+            string_t space = "";
+            for (int_t i = 0; i < num_indent; i++) space += "  ";
             if (_screen)  fprintf(_screen,  "%s", (space+str+end).c_str());
             if (_logfile) fprintf(_logfile, "%s", (space+str+end).c_str());
         }
@@ -81,7 +86,7 @@ namespace util {
     /**
      * custom printing for this class
     */
-    void printColor(std::string color_string, std::string str, std::string end = "\n") {
+    void printColor(string_t color_string, string_t str, string_t end = "\n") {
         // only prints on the main process
         if (_me == 0) {
             if (_screen)  fprintf(_screen,  "%s%s%s%s", STARTCOLOR, color_string.c_str(), ENDCOLOR, (str+end).c_str());
@@ -91,11 +96,11 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    std::string formatFunc(std::string _func) {
-        if (_func.find("::") == std::string::npos) return std::string("");
+    string_t formatFunc(string_t _func) {
+        if (_func.find("::") == string_t::npos) return string_t("");
         std::size_t _start = _func.find(' ');
         std::size_t _end   = _func.find('(');
-        if (_end <= _start || _start == std::string::npos)
+        if (_end <= _start || _start == string_t::npos)
             _func = _func.substr(0, _end);
         else {
             if (_func.substr(0, _start) == "virtual")
@@ -109,22 +114,22 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    void printToFile(std::string str, int num_indent=0, std::string end = "\n") {
+    void printToFile(string_t str, int_t num_indent=0, string_t end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            std::string space = "";
-            for (int i = 0; i < num_indent; i++) space += "  ";
+            string_t space = "";
+            for (int_t i = 0; i < num_indent; i++) space += "  ";
             if (_logfile) fprintf(_logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
         }
     }
 
     /* ---------------------------------------------------------------------- */
 
-    void printToScreen(std::string str, int num_indent=1, std::string end = "\n") {
+    void printToScreen(string_t str, int_t num_indent=1, string_t end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            std::string space = "";
-            for (int i = 0; i < num_indent; i++) space += "  ";
+            string_t space = "";
+            for (int_t i = 0; i < num_indent; i++) space += "  ";
             if (_screen) fprintf(_screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
         }
     }
@@ -132,7 +137,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // // used in the EXEC function below, represents data returned from a system command
-    // struct CommandResult { std::string output; int exitstatus; };
+    // struct CommandResult { string_t output; int_t exitstatus; };
 
     // /**
     //  * Execute system command and get STDOUT result.
@@ -142,10 +147,10 @@ namespace util {
     //  * of command. Empty if command failed (or has no output). If you want stderr,
     //  * use shell redirection (2&>1).
     //  */
-    // static CommandResult EXEC(const std::string &command) {
-    //     int exitcode = 0;
+    // static CommandResult EXEC(const string_t &command) {
+    //     int_t exitcode = 0;
     //     std::array<char, 1048576> buffer {};
-    //     std::string result;
+    //     string_t result;
 
     //     FILE *pipe = popen(command.c_str(), "r");
     //     if (pipe == nullptr) {
@@ -154,7 +159,7 @@ namespace util {
     //     try {
     //         std::size_t bytesread;
     //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-    //             result += std::string(buffer.data(), bytesread);
+    //             result += string_t(buffer.data(), bytesread);
     //         }
     //     } catch (...) {
     //         pclose(pipe);
@@ -174,7 +179,7 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int verboseExec(const std::string &command) {
+    int_t verboseExec(const string_t &command) {
         std::array<char, 128> buffer {};
 
         FILE *pipe = popen(command.c_str(), "r");
@@ -184,7 +189,7 @@ namespace util {
         try {
             std::size_t bytesread;
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                print(std::string(buffer.data(), bytesread), 0, "");
+                print(string_t(buffer.data(), bytesread), 0, "");
             }
         } catch (...) {
             pclose(pipe);
@@ -203,9 +208,9 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int limitedExec(const std::string &command, std::string _start, std::string _end) {
+    int_t limitedExec(const string_t &command, string_t _start, string_t _end) {
         std::array<char, 128> buffer {};
-        std::string result, data, temp;
+        string_t result, data, temp;
         result = data = temp = "";
         std::size_t _start_ind, _end_ind;
 
@@ -216,12 +221,12 @@ namespace util {
         try {
             std::size_t bytesread;
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                temp    = std::string(buffer.data(), bytesread);
+                temp    = string_t(buffer.data(), bytesread);
                 data   += temp;
                 result += temp;
                 _start_ind = result.find(_start);
                 _end_ind = result.find(_end, _start_ind+_start.length()+1);
-                if (_start_ind != std::string::npos && _end_ind != std::string::npos) {
+                if (_start_ind != string_t::npos && _end_ind != string_t::npos) {
                     // printing only the part wanted
                     ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
                     result.clear();
@@ -242,9 +247,9 @@ namespace util {
      * of command. Empty if command failed (or has no output). If you want stderr,
      * use shell redirection (2&>1).
      */
-    int quietExec(const std::string &command) {
+    int_t quietExec(const string_t &command) {
         std::array<char, 128> buffer {};
-        std::string result = "";
+        string_t result = "";
         std::size_t bytesread;
 
         FILE *pipe = popen(command.c_str(), "r");
@@ -253,7 +258,7 @@ namespace util {
         }
         try {
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                result += std::string(buffer.data(), bytesread);
+                result += string_t(buffer.data(), bytesread);
             }
         } catch (...) {
             pclose(pipe);
@@ -265,7 +270,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    std::string dtos(double _val) {
+    string_t dtos(double_t _val) {
         _double_converter.str("");
         _double_converter << _val;
         return _double_converter.str();
@@ -273,10 +278,10 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int vecToArr(std::vector<std::string>& _vec, char**& _arr) {
-        const int _size = _vec.size();
+    int_t vecToArr(std::vector<string_t>& _vec, char**& _arr) {
+        const int_t _size = _vec.size();
         _arr = new char*[_size];
-        for (int i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
+        for (int_t i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
         return _size;
     }
 
@@ -285,9 +290,9 @@ namespace util {
     class oFile {
         private:
             std::ofstream _out;
-            std::string _f_name;
+            string_t _f_name;
         public:
-            oFile(std::string _file_name) {
+            oFile(string_t _file_name) {
                 _f_name = _file_name;
                 ULOG("opening: " + _f_name);
                 _out.open(_file_name);
@@ -310,8 +315,13 @@ namespace util {
                 
             }
 
-            friend oFile& operator<<(oFile& _f, const double& _val) { 
+            friend oFile& operator<<(oFile& _f, const double_t& _val) { 
                 _f._out << util::dtos(_val);
+                return _f;
+            }
+
+            friend oFile& operator<<(oFile& _f, const int_t& _val) { 
+                _f._out << _val;
                 return _f;
             }
 
@@ -325,7 +335,7 @@ namespace util {
                 return _f;
             }
 
-            friend oFile& operator<<(oFile& _f, const std::string& _val) { 
+            friend oFile& operator<<(oFile& _f, const string_t& _val) { 
                 _f._out << _val;
                 return _f;
             }
@@ -346,9 +356,9 @@ namespace util {
     class iFile {
         private:
             std::ifstream _out;
-            std::string _f_name;
+            string_t _f_name;
         public:
-            iFile(std::string _file_name) {
+            iFile(string_t _file_name) {
                 _f_name = _file_name;
                 ULOG("opening: " + _f_name);
                 _out.open(_file_name);
@@ -370,14 +380,14 @@ namespace util {
                 }
             }
 
-            bool getLine(std::string& _line) {
+            bool_t getLine(string_t& _line) {
                 if (std::getline(_out, _line))
                     return true;
                 return false;
             }
 
-            bool getLines(std::vector<std::string>& _lines, bool clear = true, std::string end = "\n") {
-                std::string _line;
+            bool_t getLines(std::vector<string_t>& _lines, bool_t clear = true, string_t end = "\n") {
+                string_t _line;
                 if (clear) _lines.clear();
                 while (std::getline(_out, _line)) {
                     _lines.push_back(_line + end);
@@ -388,21 +398,21 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    void copyFile(std::string from, std::string to) {
+    void copyFile(string_t from, string_t to) {
         std::ifstream ini_file{from};
         std::ofstream out_file{to};
         if (ini_file && out_file) {
-            ULOG("Copying " + from + " to " + to);
+            ULOG("Copying: " + from + " --> " + to);
             out_file << ini_file.rdbuf();
         }
-        else error("can not copy "  + from + " to " + to);
+        else error("can not copy:"  + from + " --> " + to);
         ini_file.close(); out_file.close();
     }
 
     /* ---------------------------------------------------------------------- */
 
     // left trims a string
-    void ltrim(std::string& _s) {
+    void ltrim(string_t& _s) {
         std::size_t j;
         for (j = 0; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(j, _s.length() - j);
@@ -411,7 +421,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // right trims a string
-    void rtrim(std::string& _s) {
+    void rtrim(string_t& _s) {
         std::size_t j;
         for (j = _s.length()-1; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(0,  j+1);
@@ -420,11 +430,11 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // trims a string from right and left
-    void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
+    void trim(string_t& _s) { rtrim(_s); ltrim(_s); }
 
     /* ---------------------------------------------------------------------- */
 
-    void split(std::string& _s, std::vector<std::string>& _v, char sep) {
+    void split(string_t& _s, std::vector<string_t>& _v, char sep) {
         _v.clear();
         std::size_t last, j;
         last = 0;
@@ -442,27 +452,17 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     template<typename T>
-    int find(std::vector<T> _v, T _find) {
+    int_t find(std::vector<T> _v, T _find) {
         for (std::size_t i = 0; i < _v.size(); i++) {
-            if (_v[i] == _find) return (int)i;
+            if (_v[i] == _find) return i;
         }
-        return -1;
+        return npos;
     }
 
     /* ---------------------------------------------------------------------- */
 
-    int max(std::vector<int> _v) {
-        int _max = INT_MIN;
-        for (std::size_t i = 0; i < _v.size(); i++) {
-            if (_v[i] > _max) _max = _v[i];
-        }
-        return _max;
-    }
-
-    /* ---------------------------------------------------------------------- */
-
-    double max(std::vector<double> _v) {
-        double _max = DBL_MIN;
+    int_t max(std::vector<int_t> _v) {
+        int_t _max = INT_MIN;
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];
         }
@@ -471,9 +471,9 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    double max(double* _v, int _size) {
-        double _max = DBL_MIN;
-        for (int i = 0; i < _size; i++) {
+    double_t max(std::vector<double_t> _v) {
+        double_t _max = DBL_MIN;
+        for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];
         }
         return _max;
@@ -481,20 +481,32 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int max(int* _v, int _size) {
-        int _max = INT_MIN;
-        for (int i = 0; i < _size; i++) {
+    double_t max(double_t* _v, int_t _size) {
+        double_t _max = DBL_MIN;
+        for (int_t i = 0; i < _size; i++) {
             if (_v[i] > _max) _max = _v[i];
         }
         return _max;
     }
+
+    /* ---------------------------------------------------------------------- */
+
+    int_t max(int_t* _v, int_t _size) {
+        int_t _max = INT_MIN;
+        for (int_t i = 0; i < _size; i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
+
+    
 
     /* ---------------------------------------------------------------------- */
 
     // /**
     //  * erases the file at the path inputted
     // */ 
-    // void eraseFile(std::string filename) {
+    // void eraseFile(string_t filename) {
     //     std::ofstream ofs;
     //     ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
     //     if (!(ofs.is_open())) error(filename + " did not open");
@@ -506,7 +518,7 @@ namespace util {
     /**
      * writes the inputted string to file at the path inputted
     */ 
-    void writeFile(std::string filename, std::string& lines) {
+    void writeFile(string_t filename, string_t& lines) {
         util::oFile out{filename};
         out << lines;
     }
@@ -516,9 +528,9 @@ namespace util {
     /**
      * counts the number of lines in the file at the path inputted
     */ 
-    int countLinesInFile(std::string _file) {
-        int number_of_lines = 0;
-        std::string line;
+    int_t countLinesInFile(string_t _file) {
+        int_t number_of_lines = 0;
+        string_t line;
         util::iFile myfile(_file);
 
         while (myfile.getLine(line)) number_of_lines++;
@@ -531,7 +543,7 @@ namespace util {
      * reads the contents of the file at the path inputted into the inputted
      * vector
     */ 
-    void readFile(std::string fileName, std::vector<std::string>& lines) {
+    void readFile(string_t fileName, std::vector<string_t>& lines) {
         util::iFile myfile(fileName);
         myfile.getLines(lines, true);
         myfile.close();

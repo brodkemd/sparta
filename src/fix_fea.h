@@ -49,7 +49,6 @@ namespace SPARTA_NS {
             void connect3dPre();
             void connect3dPost();
             bool runCondition();
-            bool checkRun(std::string& _name);
             void loadSurf();
 
             #include "hash_options.h"
@@ -64,11 +63,13 @@ namespace SPARTA_NS {
 
             MyHash *hash;
             class Compute *cqw;
+            friend class elmer::Elmer;
             class elmer::Elmer* fea;
 
             bool connectflag;
-            int groupbit, nprocs, tindex, run_every, nsurf, dimension, *pselect, shear_locs[3], force_locs[3], energy_loc;
-            double energy_threshold, pressure_threshold, shear_threshold, *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
+            long nsurf, *pselect;
+            int groupbit, nprocs, tindex, run_every, dimension, shear_locs[3], force_locs[3], energy_loc;
+            double *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
     };
 }
 

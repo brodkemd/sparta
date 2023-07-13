@@ -9,14 +9,14 @@ namespace elmer {
     */
     class Base {
         protected:
-            std::string name, sep;
+            util::string_t name, sep;
 
             // tab in the file
-            std::string _tab = "  ";
+            util::string_t _tab = "  ";
 
             // ends the section
-            std::string _end = "End";
-            int id;
+            util::string_t _end = "End";
+            util::int_t id;
 
             Base() {}
 
@@ -24,19 +24,19 @@ namespace elmer {
             /**
              * these functions convert the inputted var into a string
             */
-            void _varToString(std::string& _buf, std::string _var) {
+            void _varToString(util::string_t& _buf, util::string_t _var) {
                  _buf = "\""+_var+"\"";
             }
 
-            void _varToString(std::string& _buf, double _var) {
+            void _varToString(util::string_t& _buf, double_t _var) {
                 _buf = util::dtos(_var);
             }
 
-            void _varToString(std::string& _buf, int _var) {
+            void _varToString(util::string_t& _buf, util::int_t _var) {
                 _buf = std::to_string(_var);
             }
 
-            void _varToString(std::string& _buf, bool _var) {
+            void _varToString(util::string_t& _buf, util::bool_t _var) {
                 if (_var) _buf = "True";
                 else _buf = "False";
             }
@@ -49,22 +49,22 @@ namespace elmer {
              * these functions are outward facing and they build elmer file
              * lines from the inputs
             */ 
-            void varToString(util::oFile& _buf, std::string _name, std::string _var) {
+            void varToString(util::oFile& _buf, util::string_t _name, util::string_t _var) {
                 if (_var == toml::noString) return;
                 _buf << (_tab + _name + sep + "\""+_var+"\"" + "\n");
             }
 
-            void varToString(util::oFile& _buf, std::string _name, double _var) {
+            void varToString(util::oFile& _buf, util::string_t _name, double_t _var) {
                 if (_var == toml::noDouble) return;
                 _buf << (_tab + _name + sep) << _var << "\n";
             }
 
-            void varToString(util::oFile& _buf, std::string _name, int _var) {
+            void varToString(util::oFile& _buf, util::string_t _name, util::int_t _var) {
                 if (_var == toml::noInt) return;
                 _buf << (_tab + _name + sep) << _var << "\n";
             }
 
-            void varToString(util::oFile& _buf, std::string _name, bool _var) {
+            void varToString(util::oFile& _buf, util::string_t _name, util::bool_t _var) {
                 if (_var == toml::noBool) return;
                 if (_var) _buf << (_tab + _name + sep + "True" + "\n");
                 else      _buf << (_tab + _name + sep + "False" + "\n");
@@ -72,20 +72,25 @@ namespace elmer {
 
             // for vectors
             template<typename T>
-            void varToString(util::oFile& _buf, std::string _name, std::vector<T> _var, bool include_count = true) {
+            void varToString(util::oFile& _buf, util::string_t _name, std::vector<T> _var, util::bool_t include_count = true, util::int_t wrap_every = 1000) {
 
                 if (_var.size() == 0) return;
 
-                std::string _temp;
+                util::string_t _temp;
                 if (include_count)
                     _buf << (_tab + _name + "(") << _var.size() << (")" + sep);
                 else 
                     _buf << (_tab + _name + sep);
 
-
-                for (long unsigned int i = 0; i < (_var.size() - 1); i++){
+                util::int_t count = 1;
+                for (std::size_t i = 0; i < (_var.size() - 1); i++){
                     _varToString(_temp, _var[i]);
+                    if (count >= wrap_every) {
+                        _buf << "\n";
+                        count = 0;
+                    }
                     _buf<<(_temp + " ");
+                    count++;
                 }
                 _varToString(_temp, _var[_var.size() - 1]);
                 _buf << (_temp + "\n");
@@ -104,8 +109,8 @@ namespace elmer {
                 sep = " ";
             }
 
-            std::vector<std::string> Mesh_DB;
-            std::string Include_Path, Results_Directory;
+            std::vector<util::string_t> Mesh_DB;
+            util::string_t Include_Path, Results_Directory;
 
             void set(toml::handler& _h) {
                 _h.getAtPath(Mesh_DB,           "elmer.header.Mesh_DB", true);
@@ -135,8 +140,8 @@ namespace elmer {
                 sep = " = ";
             }
 
-            std::vector<double> Gravity;
-            double Stefan_Boltzmann, Permittivity_of_Vacuum, Permeability_of_Vacuum, Boltzmann_Constant, Unit_Charge;
+            std::vector<double_t> Gravity;
+            double_t Stefan_Boltzmann, Permittivity_of_Vacuum, Permeability_of_Vacuum, Boltzmann_Constant, Unit_Charge;
 
 
             void set(toml::handler& _h) {
@@ -173,10 +178,10 @@ namespace elmer {
                 sep = " = ";
             }
 
-            int Max_Output_Level, Steady_State_Max_Iterations, BDF_Order;
-            std::string Coordinate_System, Simulation_Type, Timestepping_Method, Solver_Input_File, Output_File,Post_File;
-            std::vector<int> Coordinate_Mapping, Output_Intervals, Timestep_intervals;
-            std::vector<double> Timestep_Sizes;
+            util::int_t Max_Output_Level, Steady_State_Max_Iterations, BDF_Order;
+            util::string_t Coordinate_System, Simulation_Type, Timestepping_Method, Solver_Input_File, Output_File,Post_File;
+            std::vector<util::int_t> Coordinate_Mapping, Output_Intervals, Timestep_intervals;
+            std::vector<double_t> Timestep_Sizes;
             
 
             void set(toml::handler& _h) {
@@ -229,11 +234,11 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            std::vector<std::string> Procedure;
-            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
-            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
-            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
-            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
+            std::vector<util::string_t> Procedure;
+            util::string_t Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
+            util::int_t Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
+            util::bool_t Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
+            double_t Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
 
 
             void set(toml::handler& _h) {
@@ -302,11 +307,11 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            std::vector<std::string> Procedure;
-            std::string Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
-            int Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
-            bool Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
-            double Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
+            std::vector<util::string_t> Procedure;
+            util::string_t Equation, Variable, Exec_Solver, Linear_System_Solver, Linear_System_Iterative_Method, Linear_System_Preconditioning;
+            util::int_t Linear_System_Residual_Output, Nonlinear_System_Max_Iterations, Nonlinear_System_Newton_After_Iterations, Linear_System_Max_Iterations, BiCGstabl_polynomial_degree, Nonlinear_System_Relaxation_Factor, Linear_System_Precondition_Recompute;
+            util::bool_t Stabilize, Optimize_Bandwidth, Linear_System_Abort_Not_Converged, Calculate_Principal, Calculate_Stresses;
+            double_t Steady_State_Convergence_Tolerance, Nonlinear_System_Convergence_Tolerance, Nonlinear_System_Newton_After_Tolerance, Linear_System_Convergence_Tolerance, Linear_System_ILUT_Tolerance;
 
 
             void set(toml::handler& _h) {
@@ -378,7 +383,7 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            std::vector<int> Active_Solvers;
+            std::vector<util::int_t> Active_Solvers;
 
             void set(toml::handler& _h) {
                 _h.getAtPath(Active_Solvers, "elmer.equation.Active_Solvers", true);
@@ -406,7 +411,7 @@ namespace elmer {
                 this->name += (" " + std::to_string(id));
             }
 
-            double Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
+            double_t Poisson_ratio, Heat_Capacity, Density, Youngs_modulus, Heat_expansion_Coefficient, Sound_speed, Heat_Conductivity;
 
             void set(toml::handler& _h) {
                 _h.getAtPath(Poisson_ratio,               "elmer.material.Poisson_ratio", true);
@@ -439,20 +444,20 @@ namespace elmer {
     */
     class Body : public Base {
         public:
-            Body(int _id) : Base() {
+            Body(util::int_t _id) : Base() {
                 this->name = "Body " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
                 Equation = Material = 1;
                 Initial_condition = Body_Force = toml::noInt;
             }
-            std::vector<int> Target_Bodies;
-            int Initial_condition, Equation, Material, Body_Force;
+            std::vector<util::int_t> Target_Bodies;
+            util::int_t Initial_condition, Equation, Material, Body_Force;
 
             void join(util::oFile& _buf) {
                 _buf << (name + "\n");
                 varToString(_buf, "Target Bodies",      this->Target_Bodies, true);
-                varToString(_buf, "Name",               this->name);
+                // varToString(_buf, "Name",               this->name);
                 varToString(_buf, "Equation",           Equation);
                 varToString(_buf, "Material",           Material);
                 varToString(_buf, "Initial condition",  Initial_condition);
@@ -465,7 +470,7 @@ namespace elmer {
 
     class Body_Force : public Base {
         public:
-            Body_Force(int _id) {
+            Body_Force(util::int_t _id) {
                 this->name = "Body Force " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
@@ -474,7 +479,7 @@ namespace elmer {
                 Stress_Bodyforce_3 = toml::noDouble;
                 Density = toml::noDouble;
             }
-            double Stress_Bodyforce_1, Stress_Bodyforce_2, Stress_Bodyforce_3, Density;
+            double_t Stress_Bodyforce_1, Stress_Bodyforce_2, Stress_Bodyforce_3, Density;
 
             void join(util::oFile& _buf) {
                 _buf << (name + "\n");
@@ -514,14 +519,14 @@ namespace elmer {
     */
     class Initial_Condition : public Base {
         public:
-            Initial_Condition(int _id) : Base() {
+            Initial_Condition(util::int_t _id) : Base() {
                 this->name = "Initial Condition " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
                 Temperature = toml::noDouble;
             }
 
-            double Temperature;
+            double_t Temperature;
 
             void join(util::oFile& _buf) {
                 _buf << (name + "\n");
@@ -538,7 +543,7 @@ namespace elmer {
     */
     class Boundary_Condition : public Base {
         public:
-            Boundary_Condition(int _id) : Base() {
+            Boundary_Condition(util::int_t _id) : Base() {
                 this->name = "Boundary Condition " + std::to_string(_id);
                 sep = " = ";
                 id = _id;
@@ -546,14 +551,14 @@ namespace elmer {
                 Heat_Flux    = toml::noDouble;
             }
 
-            std::vector<int> Target_Boundaries;
-            bool Heat_Flux_BC;
-            double Heat_Flux;
-            std::vector<double> stress_6_vector;
+            std::vector<util::int_t> Target_Boundaries;
+            util::bool_t Heat_Flux_BC;
+            double_t Heat_Flux;
+            std::vector<double_t> stress_6_vector;
 
             void join(util::oFile& _buf) {
                 _buf << (name + "\n");
-                varToString(_buf, "Target Boundaries",  Target_Boundaries);
+                varToString(_buf, "Target Boundaries",  Target_Boundaries, true);
                 varToString(_buf, "Name",               this->name);
                 varToString(_buf, "Heat Flux BC",       Heat_Flux_BC);
                 varToString(_buf, "Heat Flux",          Heat_Flux);
