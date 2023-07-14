@@ -34,13 +34,13 @@ namespace elmer {
             const util::string_t sep = "\n\n";
             SPARTA_NS::FixFea* sparta;
             std::vector<util::string_t> run_these;
-            std::vector<double_t> node_temperature_data;
+            std::vector<util::double_t> node_temperature_data;
             std::vector<std::array<util::int_t, elmer::boundary_size>> boundaries;
             // array format: x, y, z
-            std::vector<std::array<double_t, elmer::dimension>>  nodes;
+            std::vector<std::array<util::double_t, elmer::dimension>>  nodes, node_velocity_data;
             std::vector<std::vector<util::int_t>> elements;
-            util::string_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, print_intensity;
-            double_t base_temp, energy_threshold, pressure_threshold, shear_threshold;
+            util::string_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, node_velocity_file_ext, print_intensity;
+            util::double_t base_temp, energy_threshold, pressure_threshold, shear_threshold;
             util::bool_t gravity_on;
 
             /* ---------------------------------------------------------------------- */
@@ -50,6 +50,7 @@ namespace elmer {
             Constants       constants;
             Thermal_Solver  thermal_solver;
             Elastic_Solver  elastic_solver;
+            Elastic_Solver  velocity_solver;
             Equation        equation;
             Material        material;
             std::vector<Body_Force*>         body_forces;
@@ -65,13 +66,13 @@ namespace elmer {
                 this->sparta         = &*_sparta;
 
                 // initing class variables
-                this->header         = Header();
-                this->simulation     = Simulation();
-                this->constants      = Constants();
-                this->equation       = Equation();
-                this->material       = Material();
-                this->thermal_solver = Thermal_Solver();
-                this->elastic_solver = Elastic_Solver();
+                this->header          = Header();
+                this->simulation      = Simulation();
+                this->constants       = Constants();
+                this->equation        = Equation();
+                this->material        = Material();
+                this->thermal_solver  = Thermal_Solver();
+                this->elastic_solver  = Elastic_Solver();
             }
 
             /* ---------------------------------------------------------------------- */
@@ -86,6 +87,7 @@ namespace elmer {
                 _h.getAtPath(this->simulation_directory,      "simulation_directory",             true);
                 _h.getAtPath(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
                 _h.getAtPath(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
+                _h.getAtPath(this->node_velocity_file_ext,    "elmer.node_velocity_file_ext",     true);
                 _h.getAtPath(this->gravity_on,                "elmer.gravity_on",                 true);
                 _h.getAtPath(this->energy_threshold,          "sparta.energy_threshold",          true);
                 _h.getAtPath(this->pressure_threshold,        "sparta.pressure_threshold",        true);
@@ -96,10 +98,11 @@ namespace elmer {
                 // this->header.set(_h);
                 this->simulation.set(_h);
                 this->constants.set(_h);
-                this->equation.set(_h);
+                // this->equation.set(_h);
                 this->material.set(_h);
                 this->thermal_solver.set(_h);
                 this->elastic_solver.set(_h);
+                this->velocity_solver = this->elastic_solver;
 
                 this->checks();
             }
@@ -189,6 +192,7 @@ namespace elmer {
                 this->makeSif();
 
                 ULOG("running");
+                
                 // running the command
                 // must have " 2>&1" at end to pipe stderr to stdout
                 int exit_status = 0;
@@ -205,6 +209,7 @@ namespace elmer {
                 // if the command did not succeed
                 if (exit_status)
                     UERR("check elmer output");
+                UERR("DONE");
                 // else
                 //     util::printToFile(command_result.output, 0);
                 
@@ -214,7 +219,7 @@ namespace elmer {
             }
 
             bool shouldRun() {
-                util::int_t i; double_t sum;
+                util::int_t i; util::double_t sum;
 
                 ULOG("checking if solver should be run");
                 this->run_these.clear();
@@ -258,11 +263,19 @@ namespace elmer {
 
             /* ---------------------------------------------------------------------- */
 
-            void dumpBefore() { this->dumpNodePositionsBefore(); this->dumpNodeTemperaturesBefore(); }
+            void dumpBefore() { 
+                this->dumpNodePositionsBefore();
+                this->dumpNodeTemperaturesBefore(); 
+                this->dumpNodeVelocitiesBefore();
+            }
             
             /* ---------------------------------------------------------------------- */
 
-            void dump() { this->dumpNodeTemperatures(); this->dumpNodePositions(); }
+            void dump() {
+                this->dumpNodeTemperatures();
+                this->dumpNodePositions();
+                this->dumpNodeVelocities();
+            }
 
         /* ---------------------------------------------------------------------- */
 
@@ -300,9 +313,15 @@ namespace elmer {
                 // setting vars from provided values
                 this->node_data_file = this->simulation_directory + SEP + this->simulation.Output_File;
                 this->simulation.Output_File = this->node_data_file;
+
+                this->velocity_solver.Equation = "Velocity equation";
+                this->velocity_solver.Variable = "-dofs 3 Velocity";
+                this->velocity_solver.id = 3;
+                this->velocity_solver.name = "Solver " + std::to_string(this->velocity_solver.id);
+
+                this->equation.Active_Solvers = {1, 2, 3}; // id for each solver of the class
                 
                 this->header.Mesh_DB = { this->simulation_directory, "." };
-                this->header.Include_Path = "";
                 this->header.Results_Directory = this->simulation_directory;
 
                 if (this->gravity_on) {
@@ -351,9 +370,14 @@ namespace elmer {
                 // setting temperature vector to all base temperatures
                 util::string_t str = util::dtos(this->base_temp);
 
+                std::array<util::double_t, elmer::dimension> temp;
+                temp.fill((util::double_t)0);
+
                 // writing base temperature to file for each node
-                for (long i = 0; i < count; i++)
+                for (long i = 0; i < count; i++) {
                     this->node_temperature_data.push_back(this->base_temp);
+                    this->node_velocity_data.push_back(temp);
+                }
             }
 
             /* ---------------------------------------------------------------------- */
@@ -369,8 +393,8 @@ namespace elmer {
                 std::vector<std::vector<util::int_t>> ids;
                 std::vector<util::int_t> _temp_vec, indicies;
                 std::size_t _size, size;
-                util::int_t index, j, _body_force;
-                double_t avg;
+                util::int_t index, j, k, _body_force;
+                const util::int_t numDataPoints = 7;
                 ids.clear(); _temp_vec.clear(); indicies.clear();
 
                 util::int_t bc_count = 1;
@@ -387,40 +411,11 @@ namespace elmer {
                 /***
                  * boundary conditions
                 */
-                // starting with the heat flux
-                if (util::find(run_these, std::string("qw")) != util::npos) {
-                    ULOG("adding heat flux boundary conditions");
-                    // detecting unique values and saving them to the qw vector and
-                    // their corresponding ids to the ids vector, this condenses the
-                    // number of boundary conditions (removes boundary conditions with
-                    // the same values)
-                    std::vector<double_t> qw;
-                    for (util::int_t i = 0; i < this->sparta->nsurf; i++) {
-                        index = util::find(qw, this->sparta->qw[i]);
-                        if (index == util::npos) {
-                            _temp_vec.clear();
-                            _temp_vec = {i+1};
-                            ids.push_back(_temp_vec);
-                            qw.push_back(this->sparta->qw[i]);
-                        } else {
-                            ids[index].push_back(i+1);
-                        }
-                    }
-
-                    // adding the necessary boundary conditions
-                    for (std::size_t i = 0; i < qw.size(); i++) {
-                        elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(bc_count++);
-                        bc->Heat_Flux_BC = true;
-                        bc->Target_Boundaries = ids[i];
-                        bc->Heat_Flux = qw[i]/((double_t)this->sparta->run_every);
-                        this->boundary_conditions.push_back(bc);
-                    }
-                }
-                
-
                 // this part is for the stresses
                 // first determines which stress should be accounted for
                 index = 0;
+                if (util::find(run_these, std::string("qw"))  != util::npos)
+                    indicies.push_back(index++);
                 if (util::find(run_these, std::string("px"))  != util::npos)
                     indicies.push_back(index++);
                 if (util::find(run_these, std::string("py"))  != util::npos)
@@ -437,42 +432,42 @@ namespace elmer {
                 // if stress should be accounted for
                 if (indicies.size() > 0) {
                     // get the stress values from sparta
-                    double* arr[6] = { &*this->sparta->px, &*this->sparta->py, &*this->sparta->pz, &*this->sparta->shx, &*this->sparta->shy, &*this->sparta->shz };
-                    ULOG("adding stress boundary conditions");
+                    double* arr[numDataPoints] = { &*this->sparta->qw, &*this->sparta->px, &*this->sparta->py, &*this->sparta->pz, &*this->sparta->shx, &*this->sparta->shy, &*this->sparta->shz };
+                    // ULOG("adding stress boundary conditions");
 
-                    std::vector<std::array<double_t, 6>> stresses;
-                    std::array<double_t, 6> temp_stresses;
-                    stresses.clear();
+                    std::vector<std::array<util::double_t, numDataPoints>> data;
+                    std::array<util::double_t, numDataPoints> temp_data;
+                    data.clear();
                     
                     // detecting unique values and saving them to the stress vector and
                     // their corresponding ids to the ids vector, this condenses the
                     // number of boundary conditions (removes boundary conditions with
                     // the same values)
                     for (util::int_t i = 0; i < this->sparta->nsurf; i++) {
-                        for (j = 0; j < 6; j++) {
-                            if (util::find(indicies, j))
-                                temp_stresses[j] = arr[j][i]/((double_t)this->sparta->run_every);
-                            else
-                                temp_stresses[j] = 0.0;
+                        temp_data.fill(0.0);
+                        for (util::int_t& it : indicies) {
+                            temp_data[it] = arr[it][i]/((util::double_t)this->sparta->run_every);
                         }
-                        index = util::find(stresses, temp_stresses);
+
+                        index = util::find(data, temp_data);
                         if (index == util::npos) {
                             _temp_vec.clear();
                             _temp_vec = {i+1};
                             ids.push_back(_temp_vec);
-                            stresses.push_back(temp_stresses);
+                            data.push_back(temp_data);
                         } else {
                             ids[index].push_back(i+1);
                         }
                     }
 
                     // adding the necessary boundary conditions
-                    for (std::size_t i = 0; i < stresses.size(); i++) {
+                    for (std::size_t i = 0; i < data.size(); i++) {
                         elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(bc_count++);
                         bc->Target_Boundaries = ids[i];
+                        bc->Heat_Flux = data[i][0];
                         bc->stress_6_vector.clear();
-                        for (j = 0; j < 6; j++)
-                            bc->stress_6_vector.push_back(stresses[i][j]);
+                        for (j = 1; j < numDataPoints; j++)
+                            bc->stress_6_vector.push_back(data[i][j]);
                 
                         this->boundary_conditions.push_back(bc);
                     }
@@ -488,7 +483,8 @@ namespace elmer {
                 if (this->gravity_on) _body_force = 1;
                 else                  _body_force = toml::noInt;
 
-                std::vector<double_t> init_conds;
+                std::vector<std::array<util::double_t, (elmer::dimension+1)>> init_conds;
+                std::array<util::double_t, (elmer::dimension+1)> init_cond;
                 init_conds.clear();
 
                 // averages values for the nodes of a surface element and sets this average to the 
@@ -496,20 +492,22 @@ namespace elmer {
                 for (std::size_t i = 0; i < this->elements.size(); i++) {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
-                    avg = 0;
+                    init_cond.fill(0.0);
                     _size = this->elements[i].size();
                     for (j = 0; j < (signed)_size; j++) {
                         // gets the data point corresponding to node id and adds it to the rolling sum
                         if ((unsigned)this->elements[i][j]-1 >= size)
                             UERR("index out of bounds in creating initial conditions");
-                        avg += (this->node_temperature_data[this->elements[i][j]-1]/((double_t)_size));
+                        init_cond[0] += (this->node_temperature_data[this->elements[i][j]-1]/((util::double_t)_size));
+                        for (k = 0; k < elmer::dimension; k++)
+                            init_cond[k+1] += (this->node_velocity_data[this->elements[i][j]-1][k]/((util::double_t)_size));
                     }
-                    index = util::find(init_conds, avg);
+                    index = util::find(init_conds, init_cond);
                     if (index == util::npos) {
                         _temp_vec.clear();
                         _temp_vec = {(long)i+1};
                         ids.push_back(_temp_vec);
-                        init_conds.push_back(avg);
+                        init_conds.push_back(init_cond);
                     } else {
                         ids[index].push_back(i+1);
                     }
@@ -521,7 +519,10 @@ namespace elmer {
                     _body->Target_Bodies = ids[i];
                     _body->Body_Force = _body_force;
                     Initial_Condition* _ic = new Initial_Condition(i+1);
-                    _ic->Temperature = init_conds[i];
+                    _ic->Temperature = init_conds[i][0];
+                    _ic->Velocity_1 = init_conds[i][1];
+                    _ic->Velocity_2 = init_conds[i][2];
+                    _ic->Velocity_3 = init_conds[i][3];
 
                     this->initial_conditions.push_back(_ic);
                     this->bodies.push_back(_body);
@@ -541,7 +542,6 @@ namespace elmer {
                     util::split(lines[i], split_line, ' ');
                     if (split_line[0] == (util::string_t)"Time:") start = i;
                 }
-                std::vector<std::array<double_t, 3>> temp_nodes = this->nodes;
 
                 util::int_t cur_index = 0;
                 for (i = start+1; i < lines.size(); i++) {
@@ -557,6 +557,12 @@ namespace elmer {
                             this->nodes[cur_index][1] += std::stod(line);
                         } else if (cur_key == (util::string_t)"displacement 3") {
                             this->nodes[cur_index][2] += std::stod(line);
+                        } else if (cur_key == (util::string_t)"velocity 1") {
+                            this->node_velocity_data[cur_index][0] = std::stod(line);
+                        } else if (cur_key == (util::string_t)"velocity 2") {
+                            this->node_velocity_data[cur_index][1] = std::stod(line);
+                        } else if (cur_key == (util::string_t)"velocity 3") {
+                            this->node_velocity_data[cur_index][2] = std::stod(line);
                         } else
                             UERR("got unknown key in data file: " + cur_key);
                         cur_index++;
@@ -586,7 +592,7 @@ namespace elmer {
             void loadNodes() {
                 ULOG("loading nodes");
                 std::vector<util::string_t> lines, split_line;
-                std::array<double_t, 3> data_item;
+                std::array<util::double_t, 3> data_item;
 
                 util::readFile(node_file, lines);
                 util::int_t count = 0;
@@ -695,6 +701,7 @@ namespace elmer {
                 constants.join(_buf);
                 thermal_solver.join(_buf);
                 elastic_solver.join(_buf);
+                velocity_solver.join(_buf);
                 equation.join(_buf);
                 material.join(_buf);
 
@@ -718,8 +725,19 @@ namespace elmer {
                 util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_temperature_file_ext;
                 util::oFile out(filename);
 
-                for (double_t& it : this->node_temperature_data)
+                for (util::double_t& it : this->node_temperature_data)
                     out << it << "\n";
+            }
+
+            /* ---------------------------------------------------------------------- */
+
+            void dumpNodeVelocitiesBefore() {
+                ULOG("dumping node velocities before");
+                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_velocity_file_ext;
+                util::oFile out(filename);
+
+                for (auto& it : this->node_velocity_data)
+                    out << it[0] << " " << it[1] << " " << it[2] << "\n";
             }
 
             /* ---------------------------------------------------------------------- */
@@ -740,7 +758,7 @@ namespace elmer {
                 util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_temperature_file_ext;
                 util::oFile out(filename);
 
-                for (double_t& it : this->node_temperature_data)
+                for (util::double_t& it : this->node_temperature_data)
                     out << it << "\n";
             }
 
@@ -753,6 +771,17 @@ namespace elmer {
 
                 for (std::size_t i = 0; i < this->nodes.size(); i++) 
                     out << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
+            }
+
+            /* ---------------------------------------------------------------------- */
+
+            void dumpNodeVelocities() {
+                ULOG("dumping node velocities");
+                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_velocity_file_ext;
+                util::oFile out(filename);
+
+                for (auto& it : this->node_velocity_data)
+                    out << it[0] << " " << it[1] << " " << it[2] << "\n";
             }
     };
 }

@@ -210,8 +210,8 @@ namespace util {
      */
     int_t limitedExec(const string_t &command, string_t _start, string_t _end) {
         std::array<char, 128> buffer {};
-        string_t result, data, temp;
-        result = data = temp = "";
+        string_t result, temp;
+        result = temp = "";
         std::size_t _start_ind, _end_ind;
 
         FILE *pipe = popen(command.c_str(), "r");
@@ -222,7 +222,7 @@ namespace util {
             std::size_t bytesread;
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
                 temp    = string_t(buffer.data(), bytesread);
-                data   += temp;
+                //data   += temp;
                 result += temp;
                 _start_ind = result.find(_start);
                 _end_ind = result.find(_end, _start_ind+_start.length()+1);
@@ -231,9 +231,9 @@ namespace util {
                     ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
                     result.clear();
                 }
+                printToFile(temp, 0, "");
             }
         } catch (...) { pclose(pipe); error("unhandled exception occured"); }
-        printToFile(data, 0, "");
         return pclose(pipe);
     }
 

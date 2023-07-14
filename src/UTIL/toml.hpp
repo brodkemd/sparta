@@ -62,6 +62,17 @@ namespace toml {
                 Py_DECREF(out);
             }
 
+            // template<typename T>
+            // void getAtPathOrRef(T& _var, T& _ref, util::string_t _path) {
+            //     this->pArgs = PyTuple_New(2);
+            //     PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
+            //     PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)_strict));
+            //     PyObject* out = PyObject_CallObject(this->get_at, pArgs);
+            //     this->_err();
+            //     this->_handleVar(_var, out, _path);
+            //     Py_DECREF(out);
+            // }
+
 
         private:
             PyObject *get_at, *pValue, *pArgs, *type, *value, *traceback;
@@ -144,6 +155,75 @@ namespace toml {
                 else
                     _var = false;
             }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVarOr(util::double_t& _var, util::double_t& _or, PyObject *_src, util::string_t _path) {
+            //     if (Py_IsNone(_src)) {
+            //         _var = &_or;
+            //         return;
+            //     }
+
+            //     if (!(PyFloat_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be float");
+            //     _var = PyFloat_AsDouble(_src);
+            // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVarOr(util::string_t& _var, PyObject *_src, util::string_t _path) {
+            //     if (Py_IsNone(_src)) {
+            //         _var = noString;
+            //         return;
+            //     }
+
+            //     if (!(PyUnicode_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be string");
+            //     _var = _PyUnicode_AsString(_src);
+            // }
+
+            // // /* ---------------------------------------------------------------------- */
+
+            // void _handleVarOr(int& _var, PyObject *_src, util::string_t _path) {
+            //     if (Py_IsNone(_src)) {
+            //         _var = noInt;
+            //         return;
+            //     }
+
+            //     if (!(PyLong_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be int");
+            //     _var = PyLong_AsLong(_src);
+            // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVarOr(util::int_t& _var, PyObject *_src, util::string_t _path) {
+            //     if (Py_IsNone(_src)) {
+            //         _var = noInt;
+            //         return;
+            //     }
+
+            //     if (!(PyLong_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be int");
+            //     _var = PyLong_AsLong(_src);
+            // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVarOr(util::bool_t& _var, PyObject *_src, util::string_t _path) {
+            //     if (Py_IsNone(_src)) {
+            //         _var = noBool;
+            //         return;
+            //     }
+
+            //     if (!(PyBool_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be bool");
+                
+            //     if (PyObject_IsTrue(_src))
+            //         _var = true;
+            //     else
+            //         _var = false;
+            // }
 
             /* ---------------------------------------------------------------------- */
 
