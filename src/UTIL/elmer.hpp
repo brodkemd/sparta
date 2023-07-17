@@ -45,18 +45,8 @@ namespace elmer {
 
             /* ---------------------------------------------------------------------- */
 
-            Header          header;
-            Simulation      simulation;
-            Constants       constants;
-            Thermal_Solver  thermal_solver;
-            Elastic_Solver  elastic_solver;
-            Elastic_Solver  velocity_solver;
-            Equation        equation;
-            Material        material;
-            std::vector<Body_Force*>         body_forces;
-            std::vector<Body*>               bodies;
-            std::vector<Initial_Condition*>  initial_conditions;
-            std::vector<Boundary_Condition*> boundary_conditions;
+            Section header, simulation, constants, material;
+            std::vector<Section*> equations, body_forces, bodies, initial_conditions, boundary_conditions;
 
             /* ---------------------------------------------------------------------- */
 
@@ -66,13 +56,13 @@ namespace elmer {
                 this->sparta         = &*_sparta;
 
                 // initing class variables
-                this->header          = Header();
-                this->simulation      = Simulation();
-                this->constants       = Constants();
-                this->equation        = Equation();
-                this->material        = Material();
-                this->thermal_solver  = Thermal_Solver();
-                this->elastic_solver  = Elastic_Solver();
+                this->header          = Section("Header");
+                this->simulation      = Section("Simulation");
+                this->constants       = Section("Constants");
+                this->equations.clear(); // this->materials.clear();
+                this->body_forces.clear();  this->bodies.clear();
+                this->initial_conditions.clear();
+                this->boundary_conditions.clear();
             }
 
             /* ---------------------------------------------------------------------- */
@@ -96,13 +86,8 @@ namespace elmer {
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
-                this->simulation.set(_h);
-                this->constants.set(_h);
-                // this->equation.set(_h);
-                this->material.set(_h);
-                this->thermal_solver.set(_h);
-                this->elastic_solver.set(_h);
-                this->velocity_solver = this->elastic_solver;
+                _h.getDictAtPath(this->simulation.getContents(), "elmer.simulation");
+                _h.getDictAtPath(this->constants.getContents(), "elmer.constants");
 
                 this->checks();
             }
@@ -182,11 +167,11 @@ namespace elmer {
                 ULOG("# of initial conditions and bodies: " + std::to_string(this->initial_conditions.size()));
 
                 // setting the timestep size
-                this->simulation.Timestep_Sizes     = { this->sparta->update->dt };
+                this->simulation["Timestep Sizes"]     = { (util::double_t)this->sparta->update->dt };
 
                 // setting number of timesteps to run
-                this->simulation.Timestep_intervals = { this->sparta->run_every };
-                this->simulation.Output_Intervals   = { this->sparta->run_every };
+                this->simulation["Timestep intervals"] = { (util::int_t)this->sparta->run_every };
+                this->simulation["Output Intervals"]   = { (util::int_t)this->sparta->run_every };
 
                 // making the sif file
                 this->makeSif();
@@ -311,35 +296,35 @@ namespace elmer {
                     UERR("invalid print intensity for elmer");
                 
                 // setting vars from provided values
-                this->node_data_file = this->simulation_directory + SEP + this->simulation.Output_File;
-                this->simulation.Output_File = this->node_data_file;
+                this->node_data_file = this->simulation_directory + SEP + this->simulation["Output File"].toString();
+                this->simulation["Output File"] = this->node_data_file;
 
-                this->velocity_solver.Equation = "Velocity equation";
-                this->velocity_solver.Variable = "-dofs 3 Velocity";
-                this->velocity_solver.id = 3;
-                this->velocity_solver.name = "Solver " + std::to_string(this->velocity_solver.id);
+                // this->velocity_solver["equation = "Velocity equation";
+                // this->velocity_solver.Variable = "-dofs 3 Velocity";
+                // this->velocity_solver.id = 3;
+                // this->velocity_solver.name = "Solver " + std::to_string(this->velocity_solver.id);
 
-                this->equation.Active_Solvers = {1, 2, 3}; // id for each solver of the class
+                // this->equation.Active_Solvers = {1, 2, 3}; // id for each solver of the class
                 
-                this->header.Mesh_DB = { this->simulation_directory, "." };
-                this->header.Results_Directory = this->simulation_directory;
+                this->header["Mesh DB"] = std::vector<util::string_t>({ this->simulation_directory, "." });
+                this->header["Results Directory"] = this->simulation_directory;
 
                 if (this->gravity_on) {
-                    elmer::Body_Force* bf = new elmer::Body_Force(1);
-                    ULOG("gravity acts along the direction: " + std::to_string(this->constants.Gravity[0]) + " " + std::to_string(this->constants.Gravity[1])+ " " + std::to_string(this->constants.Gravity[2]));
-                    if (this->constants.Gravity[0] != 0.0) {
-                        bf->Stress_Bodyforce_1 = this->constants.Gravity[0]*this->constants.Gravity.back();
+                    elmer::Section* bf = new elmer::Section("Body Force", 1);
+                    ULOG("gravity acts along the direction: " + this->constants["Gravity"].toString());
+                    if (this->constants["Gravity"][0].toDouble() != 0.0) {
+                        (*bf)["Stress Bodyforce 1"] = this->constants["Gravity"][0].toDouble()*this->constants["Gravity"][3].toDouble();
                         //ULOG("gravity acts (at least in part) in the x-direction");
                     }
-                    if (this->constants.Gravity[1] != 0.0) {
-                        bf->Stress_Bodyforce_2 = this->constants.Gravity[1]*this->constants.Gravity.back();
+                    if (this->constants["Gravity"][1].toDouble() != 0.0) {
+                        (*bf)["Stress Bodyforce 2"] = this->constants["Gravity"][1].toDouble()*this->constants["Gravity"][3].toDouble();
                         //ULOG("gravity acts (at least in part) in the y-direction");
                     }
-                    if (this->constants.Gravity[2] != 0.0) {
-                        bf->Stress_Bodyforce_3 = this->constants.Gravity[2]*this->constants.Gravity.back();
+                    if (this->constants["Gravity"][2].toDouble() != 0.0) {
+                        (*bf)["Stress Bodyforce 3"] = this->constants["Gravity"][2].toDouble()*this->constants["Gravity"][3].toDouble();
                         //ULOG("gravity acts (at least in part) in the z-direction");
                     }
-                    bf->Density = this->material.Density;
+                    (*bf)["Density"] = this->material["Density"];
                     this->body_forces.push_back(bf);
                 }
             }
@@ -461,13 +446,15 @@ namespace elmer {
                     }
 
                     // adding the necessary boundary conditions
+                    std::vector<util::double_t> _temp_vec;
                     for (std::size_t i = 0; i < data.size(); i++) {
-                        elmer::Boundary_Condition* bc = new elmer::Boundary_Condition(bc_count++);
-                        bc->Target_Boundaries = ids[i];
-                        bc->Heat_Flux = data[i][0];
-                        bc->stress_6_vector.clear();
+                        elmer::Section* bc = new elmer::Section("Boundary Condition" ,bc_count++);
+                        (*bc)["Target Boundaries"] = ids[i];
+                        (*bc)["Heat Flux"] = data[i][0];
+                        _temp_vec.clear();
                         for (j = 1; j < numDataPoints; j++)
-                            bc->stress_6_vector.push_back(data[i][j]);
+                            _temp_vec.push_back(data[i][j]);
+                        (*bc)["Stress"] = _temp_vec;
                 
                         this->boundary_conditions.push_back(bc);
                     }
@@ -514,15 +501,15 @@ namespace elmer {
                 }
                 
                 for (std::size_t i = 0; i < init_conds.size(); i++) {
-                    Body* _body = new Body(i+1);
-                    _body->Initial_condition = i+1;
-                    _body->Target_Bodies = ids[i];
-                    _body->Body_Force = _body_force;
-                    Initial_Condition* _ic = new Initial_Condition(i+1);
-                    _ic->Temperature = init_conds[i][0];
-                    _ic->Velocity_1 = init_conds[i][1];
-                    _ic->Velocity_2 = init_conds[i][2];
-                    _ic->Velocity_3 = init_conds[i][3];
+                    Section* _body = new Section("Body", i+1);
+                    (*_body)["Initial Condition"] = (util::int_t)(i+1);
+                    (*_body)["Target Bodies"] = ids[i];
+                    (*_body)["Body Force"] = _body_force;
+                    Section* _ic = new Section("Initial Condition", i+1);
+                    (*_ic)["Temperature"] = init_conds[i][0];
+                    (*_ic)["Velocity 1"] = init_conds[i][1];
+                    (*_ic)["Velocity 2"] = init_conds[i][2];
+                    (*_ic)["Velocity 3"] = init_conds[i][3];
 
                     this->initial_conditions.push_back(_ic);
                     this->bodies.push_back(_body);
@@ -699,22 +686,22 @@ namespace elmer {
                 header.join(_buf);
                 simulation.join(_buf);
                 constants.join(_buf);
-                thermal_solver.join(_buf);
-                elastic_solver.join(_buf);
-                velocity_solver.join(_buf);
-                equation.join(_buf);
                 material.join(_buf);
 
-                for (std::size_t i = 0; i < this->bodies.size(); i++)
+                std::size_t i;
+                for (i = 0; i < this->equations.size(); i++)
+                    this->equations[i]->join(_buf);
+
+                for (i = 0; i < this->bodies.size(); i++)
                     this->bodies[i]->join(_buf);
 
-                for (std::size_t i = 0; i < this->body_forces.size(); i++)
+                for (i = 0; i < this->body_forces.size(); i++)
                     this->body_forces[i]->join(_buf);
 
-                for (std::size_t i = 0; i < this->initial_conditions.size(); i++)
+                for (i = 0; i < this->initial_conditions.size(); i++)
                     this->initial_conditions[i]->join(_buf);
 
-                for (std::size_t i = 0; i < this->boundary_conditions.size(); i++)
+                for (i = 0; i < this->boundary_conditions.size(); i++)
                     this->boundary_conditions[i]->join(_buf);
             }
 
