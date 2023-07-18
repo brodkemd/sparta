@@ -90,6 +90,7 @@ namespace elmer {
                 _h.getDictAtPath(this->constants.getContents(), "elmer.constants");
 
                 this->checks();
+                UERR("done");
             }
 
             /* ---------------------------------------------------------------------- */

@@ -32,32 +32,32 @@ namespace toml {
             Item_t(std::vector<util::bool_t> _key)   { *this = _key; }
             Item_t(char* _key)       { *this = _key; }
             
-            Item_t& operator+(const Item_t& other) {
-                if (this->type != other.type)
-                    UERR("Can not add types that are not the same");
+            // Item_t& operator+(const Item_t& other) {
+            //     if (this->type != other.type)
+            //         UERR("Can not add types that are not the same");
                 
-                switch (this->type) {
-                    case INT:
-                        this->_src = std::to_string(std::stoi(this->_src) + std::stoi(other._src));
-                        break;
+            //     switch (this->type) {
+            //         case INT:
+            //             this->_src = std::to_string(std::stoi(this->_src) + std::stoi(other._src));
+            //             break;
                     
-                    case DOUBLE:
-                        this->_src = util::dtos(std::stod(this->_src) + std::stod(other._src));
-                        break;
+            //         case DOUBLE:
+            //             this->_src = util::dtos(std::stod(this->_src) + std::stod(other._src));
+            //             break;
                     
-                    case STRING:
-                        this->_src = this->_src + other._src;
-                        break;
+            //         case STRING:
+            //             this->_src = this->_src + other._src;
+            //             break;
                     
-                    case BOOL:
-                        UERR("Can not add boolean values");
-                        break;
+            //         case BOOL:
+            //             UERR("Can not add boolean values");
+            //             break;
                     
-                    case LIST:
-                        for (auto it : other._list) this->_list.push_back(it);
-                        break;
-                }
-            } 
+            //         case LIST:
+            //             for (auto it : other._list) this->_list.push_back(it);
+            //             break;
+            //     }
+            // } 
 
             void operator = (const util::double_t _val) { type = toml::DOUBLE; this->_list.clear(); _src = util::dtos(_val); }
             void operator = (const util::int_t _val)    { type = toml::INT;    this->_list.clear(); _src = std::to_string(_val); }
@@ -78,16 +78,21 @@ namespace toml {
             }
 
             bool operator==(const Item_t& other) { 
-                bool to_return = (this->type == other.type);
-                if (this->type == toml::LIST)
-                    return (to_return && this->_list == other._list);
-                else
-                    return (this->_src == other._src && to_return); 
+                if (this->type != other.type) return false;
+                if (this->type == toml::LIST) {
+                    if (this->_list.size() != other._list.size())
+                        return false;
+                    for (std::size_t i = 0; i < this->_list.size(); i++) {
+                        if (!(this->_list[i] == other._list[i])) return false;
+                    }
+                }
+
+                return false; 
             }
 
             Item_t& operator[](util::int_t _index) {
                 if (this->type != LIST) UERR("Can not index non list object");
-                if (_index >= this->_list.size()) UERR("Index out of bounds for indexing object");
+                if (_index >= (util::int_t)this->_list.size()) UERR("Index out of bounds for indexing object");
                 return this->_list[_index];
             }
 
@@ -127,7 +132,7 @@ namespace toml {
             OrderedDict_t() { keys.clear(); vals.clear(); }
 
             Item_t& operator[](Item_t _key) {
-                for (long i = 0; i < this->keys.size(); i++) {
+                for (std::size_t  i = 0; i < this->keys.size(); i++) {
                     if (keys[i] == _key) return vals[i];
                 }
                 keys.push_back(_key);
@@ -137,13 +142,13 @@ namespace toml {
             }
 
             void toString(std::string& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
-                for (long i = 0; i < this->keys.size(); i++) {
+                for (std::size_t  i = 0; i < this->keys.size(); i++) {
                     _buf += (_start_entry + keys[i]._src + _sep_entry + vals[i]._src + _end_entry);
                 }
             }
 
             void toFile(util::oFile& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
-                for (long i = 0; i < this->keys.size(); i++) {
+                for (std::size_t i = 0; i < this->keys.size(); i++) {
                     _buf << (_start_entry + keys[i]._src + _sep_entry + vals[i]._src + _end_entry);
                 }
             }
@@ -228,7 +233,14 @@ namespace toml {
                         if (PyObject_IsTrue(value)) _value = true;
                         else _value = false;
                     }
-                    else UERR("got invalid type for the value of:" + _key.toString());
+                    else if (PyList_Check(value)) {
+                        if (PyObject_Length(value)){
+                            PyList_As
+                        } else {
+                            _value = std::vector<util::int_t>({});
+                        }
+                    }
+                    else UERR("got invalid type for the value of: " + _key.toString());
                     _d[_key] = _value;
                 }
             }
