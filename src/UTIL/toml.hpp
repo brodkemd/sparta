@@ -4,12 +4,15 @@
 #include "python_config.h"
 #include "util.hpp"
 
+#define TERR(_msg) UERR(_msg + ", while handling key: " + toml::cur_path)
+#define TLOG(_msg) ULOG(_msg + ", handling key: " + toml::cur_path)
 
 namespace toml {
     const util::double_t noDouble       = std::numeric_limits<util::double_t>::min();
-    const util::int_t noInt             = std::numeric_limits<int>::min();
+    const util::int_t noInt             = std::numeric_limits<util::int_t>::min();
     const util::string_t noString       = std::to_string((char)std::char_traits<char>::eof());
     const util::bool_t noBool           = 2;
+    static std::string cur_path         = "";
 
     /* ---------------------------------------------------------------------- */
     enum{NONE,INT,DOUBLE,STRING,BOOL,LIST};
@@ -22,48 +25,63 @@ namespace toml {
             util::double_t _d_src;
             util::int_t _i_src;
             util::string_t _s_src;
-            util::bool_t _b_src;
+            util::bool_t _b_src = 0;
         public:
-            Item_t() {}
+            Item_t() { this->type = NONE; }
             Item_t(util::double_t _key) { *this = _key; }
             // Item_t(int _key)         { *this = _key; }
             Item_t(util::int_t _key)    { *this = _key; }
+            // Item_t(Item_t _key)         { *this = _key; }
             Item_t(util::string_t _key) { *this = _key; }
             Item_t(util::bool_t _key)   { *this = _key; }
             Item_t(char* _key)          { *this = _key; }
+            Item_t(const char* _key)    { *this = _key; }
             Item_t(std::vector<util::double_t> _key) { *this = _key; }
             Item_t(std::vector<util::int_t> _key)    { *this = _key; }
             Item_t(std::vector<util::string_t> _key) { *this = _key; }
             Item_t(std::vector<util::bool_t> _key)   { *this = _key; }
+            Item_t(std::vector<Item_t> _key)         { *this = _key; }
 
             void operator = (util::double_t _val) {
+                //ULOG("In double equal");
                 type = toml::DOUBLE;
                 _d_src = _val;
             }
 
             void operator = (util::int_t _val) {
+                //ULOG("In int equal");
                 type = toml::INT;
                 _i_src = _val;
             }
 
             // void operator = (const long _val)        { type = toml::LONG; _src = std::to_string(_val); }
             void operator = (util::string_t _val) {
+                //ULOG("In string equal");
                 type = toml::STRING;
                 _s_src = _val;
             }
 
             void operator = (util::bool_t _val) {
+                //ULOG("In bool equal");
                 type = toml::BOOL;
                 _b_src = _val;
             }
 
             void operator = (char* _val) {
+                //ULOG("In char* equal");
+                type = toml::STRING;
+                _s_src = std::string(_val);
+            }
+
+            void operator = (const char* _val) {
+                //ULOG("In const char* equal");
                 type = toml::STRING;
                 _s_src = std::string(_val);
             }
 
             template<typename T>
             void operator = (std::vector<T> _val) {
+                //ULOG("In list equal");
                 type = toml::LIST;
                 this->_list.clear();
                 Item_t _temp = Item_t();
@@ -75,24 +93,64 @@ namespace toml {
 
             bool operator==(const Item_t& other) { 
                 if (this->type != other.type) return false;
-                if (this->type == toml::LIST) {
-                    if (this->_list.size() != other._list.size())
-                        return false;
-                    for (std::size_t i = 0; i < this->_list.size(); i++) {
-                        if (!(this->_list[i] == other._list[i])) return false;
-                    }
-                }
+                switch (this->type) {
+                    case NONE:
+                        return true;
+                    
+                    case INT:
+                        return this->_i_src == other._i_src;
+                    
+                    case DOUBLE:
+                        return this->_d_src == other._d_src;
+                    
+                    case STRING:
+                        return this->_s_src == other._s_src;
+                    
+                    case BOOL:
+                        return this->_b_src == other._b_src;
 
+                    case LIST:
+                        if (this->_list.size() != other._list.size())
+                            return false;
+                        for (std::size_t i = 0; i < this->_list.size(); i++) {
+                            if (!(this->_list[i] == other._list[i])) return false;
+                        }
+                        break;
+                }
                 return false; 
             }
 
-            Item_t& operator[](util::int_t _index) {
-                if (this->type != LIST) UERR("Can not index non list object");
-                if (_index >= (util::int_t)this->_list.size()) UERR("Index out of bounds for indexing object");
-                return this->_list[_index];
+            Item_t operator[](util::int_t _index) {
+                Item_t to_return = Item_t(0.0);
+                switch (this->type) {
+                    case NONE:
+                        UERR("can not index none object");
+                    
+                    case INT:
+                        UERR("can not index int object");
+                    
+                    case DOUBLE:
+                        UERR("can not index double object");
+                    
+                    case STRING:
+                        if (_index >= (util::int_t)this->_s_src.length() || _index < 0)
+                            TERR("Index out of bounds for indexing object");
+                        return this->_list[_index];
+                    
+                    case BOOL:
+                        UERR("can not index bool object");
+
+                    case LIST:
+                        if (_index >= (util::int_t)this->_list.size() || _index < 0)
+                            TERR("Index out of bounds for indexing object");
+                        return this->_list[_index];
+                }
+
+                return to_return;
+                
             }
 
-            util::string_t toString(std::string _sep = " ") {
+            util::string_t toString(std::string _sep = " ", bool _include_string_parenthesis = false, util::int_t wrap_every = toml::noInt) {
                 switch (this->type) {
                     case NONE:
                         return std::string("");
@@ -104,16 +162,32 @@ namespace toml {
                         return util::dtos(this->_d_src);
                     
                     case STRING:
-                        return _s_src;
+                        if (_include_string_parenthesis)
+                            return "\"" + _s_src + "\"";
+                        else
+                            return _s_src;
                     
                     case BOOL:
                         if (_b_src) return "True";
                         else return "False";
 
                     case LIST:
-                        util::string_t to_return;
-                        for (auto it : this->_list) to_return+=(it.toString() + _sep);
-                        return to_return;
+                        util::string_t to_return = "";
+                        if (wrap_every == toml::noInt) {
+                            for (auto it : this->_list)
+                                to_return+=(it.toString(_sep, _include_string_parenthesis) + _sep);
+                        } else {
+                            util::int_t count = 1;
+                            for (auto it : this->_list) {
+                                if (count >= wrap_every) {
+                                    to_return += "\n";
+                                    count = 0;
+                                }
+                                to_return+=(it.toString(_sep, _include_string_parenthesis) + _sep);
+                                count++;
+                            }
+                        }
+                        return to_return ;
                 }
                 return std::string("");
             }
@@ -122,7 +196,7 @@ namespace toml {
             util::double_t toDouble() {
                 switch (this->type) {
                     case NONE:
-                        UERR("Can not convert None to double");
+                        TERR("Can not convert None to double");
                     
                     case INT:
                         return (util::double_t)this->_i_src;
@@ -131,13 +205,13 @@ namespace toml {
                         return this->_d_src;
                     
                     case STRING:
-                        UERR("Can not convert string to double");
+                        TERR("Can not convert string to double");
                     
                     case BOOL:
-                        UERR("Can not convert Bool to double");
+                        TERR("Can not convert Bool to double");
 
                     case LIST:
-                        UERR("Can not convert List to double");
+                        TERR("Can not convert List to double");
                 }
                 return 0.0;
             }
@@ -146,22 +220,22 @@ namespace toml {
             util::int_t toInt() {
                 switch (this->type) {
                     case NONE:
-                        UERR("Can not convert None to int");
+                        TERR("Can not convert None to int");
                     
                     case INT:
                         return this->_i_src;
                     
                     case DOUBLE:
-                        UERR("Can not convert double to int");
+                        TERR("Can not convert double to int");
                     
                     case STRING:
-                        UERR("Can not convert string to int");
+                        TERR("Can not convert string to int");
                     
                     case BOOL:
-                        UERR("Can not convert bool to int");
+                        TERR("Can not convert bool to int");
 
                     case LIST:
-                        UERR("Can not convert list to int");
+                        TERR("Can not convert list to int");
                 }
                 return 0;
             }
@@ -170,22 +244,22 @@ namespace toml {
             util::bool_t toBool() {
                 switch (this->type) {
                     case NONE:
-                        UERR("Can not convert None to bool");
+                        TERR("Can not convert None to bool");
                     
                     case INT:
-                        UERR("Can not convert int to bool");
+                        TERR("Can not convert int to bool");
                     
                     case DOUBLE:
-                        UERR("Can not convert double to bool");
+                        TERR("Can not convert double to bool");
                     
                     case STRING:
-                        UERR("Can not convert string to bool");
+                        TERR("Can not convert string to bool");
                     
                     case BOOL:
                         return this->_b_src;
 
                     case LIST:
-                        UERR("Can not convert list to bool");
+                        TERR("Can not convert list to bool");
                 }
                 return false;
             }
@@ -194,19 +268,19 @@ namespace toml {
             void append(Item_t _to_add) {
                 switch (this->type) {
                     case NONE:
-                        UERR("can not append anything to None type");
+                        TERR("can not append anything to None type");
                     
                     case INT:
-                        UERR("can not append anything to int type");
+                        TERR("can not append anything to int type");
                     
                     case DOUBLE:
-                        UERR("can not append anything to double type");
+                        TERR("can not append anything to double type");
                     
                     case STRING:
-                        UERR("can not append anything to string type");
+                        TERR("can not append anything to string type");
                     
                     case BOOL:
-                        UERR("can not append anything to bool type");
+                        TERR("can not append anything to bool type");
 
                     case LIST:
                         this->_list.push_back(_to_add);
@@ -221,22 +295,28 @@ namespace toml {
                 _b_src = false;
             }
 
+            void setType(int _type) {
+                if (_type != this->type)
+                    this->clear();
+                this->type = _type;
+            }
+
             util::int_t length() {
                 switch (this->type) {
                     case NONE:
-                        UERR("None does not have length");
+                        TERR("None does not have length");
                     
                     case INT:
-                        UERR("int does not have length");
+                        TERR("int does not have length");
                     
                     case DOUBLE:
-                        UERR("double does not have length");
+                        TERR("double does not have length");
                     
                     case STRING:
                         return (util::int_t)this->_s_src.length();
                     
                     case BOOL:
-                        UERR("bool does not have length");
+                        TERR("bool does not have length");
 
                     case LIST:
                         return (util::int_t)this->_list.size();
@@ -254,26 +334,55 @@ namespace toml {
         public:
             OrderedDict_t() { keys.clear(); vals.clear(); }
 
-            Item_t& operator[](Item_t _key) {
+            // Item_t& operator[](Item_t _key) {
+            //     for (std::size_t  i = 0; i < this->keys.size(); i++) {
+            //         if (keys[i] == _key) return vals.at(i);
+            //     }
+            //     keys.push_back(_key);
+            //     Item_t temp = Item_t();
+            //     vals.push_back(temp);
+            //     return vals.at(vals.size()-1);
+            // }
+
+            Item_t getItem(Item_t key) {
                 for (std::size_t  i = 0; i < this->keys.size(); i++) {
-                    if (keys[i] == _key) return vals[i];
+                    if (keys[i] == key) return vals.at(i);
                 }
-                keys.push_back(_key);
-                Item_t temp = Item_t();
-                vals.push_back(temp);
-                return vals[vals.size()-1];
+                UERR(key.toString() + " is not a valid key");
+                return vals.at(0);
             }
 
-            void toString(std::string& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
+            void setItem(Item_t key, Item_t val) {
                 for (std::size_t  i = 0; i < this->keys.size(); i++) {
-                    _buf += (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
+                    if (keys[i] == key) {
+                        vals[i] == val;
+                        return;
+                    }
                 }
+                keys.push_back(key);
+                vals.push_back(val);
             }
 
-            void toFile(util::oFile& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
-                for (std::size_t i = 0; i < this->keys.size(); i++) {
-                    _buf << (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
-                }
+            // void toString(std::string& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
+            //     for (std::size_t  i = 0; i < this->keys.size(); i++) {
+            //         _buf += (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
+            //     }
+            // }
+
+            // void toFile(util::oFile& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
+            //     for (std::size_t i = 0; i < this->keys.size(); i++) {
+            //         _buf << (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
+            //     }
+            // }
+
+            Item_t getKeys() {
+                Item_t to_return = this->keys;
+                return to_return;
+            }
+
+            Item_t getValues() {
+                Item_t to_return = this->vals;
+                return to_return;
             }
 
             void clear() { this->keys.clear(); this->vals.clear(); }
@@ -337,20 +446,69 @@ namespace toml {
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
 
-                if (!(PyDict_Check(out))) {
-                    UERR("Did not get dictionary at path: " + _path);
-                }
-                
-                PyObject *key, *value;
+                cur_path = _path;
+                if (!(PyDict_Check(out)))
+                    TERR("Did not get dictionary");
+
+                PyObject *key, *value;// , *_temp;
                 Item_t _key, _value;
                 Py_ssize_t pos = 0;
                 while (PyDict_Next(out, &pos, &key, &value)) {
                     // ULOG(_PyUnicode_AsString(key));
-                    this->_setVar(key, _key, _key);
-                    this->_setVar(value, _value, _key);
-                    _d[_key] = _value;
+                    // _temp = PyObject_Type(key);
+                    // _temp = PyObject_Str(key);
+                    // char* _out = (char*)_PyUnicode_AsString(_temp);
+                    // ULOG(_out);
+                    // _temp = PyObject_Type(value);
+                    // _temp = PyObject_Str(_temp);
+                    // _out = (char*)_PyUnicode_AsString(_temp);
+                    // ULOG(_out);
+                    //ULOG("Key");
+                    this->_setVar(key, _key);
+                    //ULOG("Get type: " + std::to_string(_key.getType()));
+                    cur_path = (_path + "." + _key.toString());
+                    
+                    //ULOG("Value");
+                    this->_setVar(value, _value);
+                    //ULOG("Get type: " + std::to_string(_value.getType()));
+                    //ULOG("setting");
+                    _d.setItem(_key, _value);
                 }
-                Py_DecRef(key); Py_DecRef(value);
+                // Py_DecRef(key); Py_DecRef(value);
+            }
+
+            void getDictKeysAtPath(std::vector<Item_t>& _d, util::string_t _path) {
+                _d.clear();
+                this->pArgs = PyTuple_New(2);
+                PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
+                PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)(true)));
+                PyObject* out = PyObject_CallObject(this->get_at, pArgs);
+                this->_err();
+
+                cur_path = _path;
+                if (!(PyDict_Check(out)))
+                    TERR("Did not get dictionary keys");
+
+                PyObject *key, *value;// , *_temp;
+                Item_t _key;
+                Py_ssize_t pos = 0;
+                while (PyDict_Next(out, &pos, &key, &value)) {
+                    // ULOG(_PyUnicode_AsString(key));
+                    // _temp = PyObject_Type(key);
+                    // _temp = PyObject_Str(key);
+                    // char* _out = (char*)_PyUnicode_AsString(_temp);
+                    // ULOG(_out);
+                    // _temp = PyObject_Type(value);
+                    // _temp = PyObject_Str(_temp);
+                    // _out = (char*)_PyUnicode_AsString(_temp);
+                    // ULOG(_out);
+                    //ULOG("Key");
+                    this->_setVar(key, _key);
+                    _d.push_back(_key);
+                    //ULOG("Get type: " + std::to_string(_key.getType()));
+                    // cur_path = (_path + "." + _key.toString());
+                }
+                // Py_DecRef(key); Py_DecRef(value);
             }
 
             // template<typename T>
@@ -378,33 +536,35 @@ namespace toml {
                 }
             }
 
-            void _setVar(PyObject*& _in, Item_t& _out, Item_t& _key) {
-                if (PyUnicode_Check(_in)) _out = _PyUnicode_AsString(_in);
-                else if (PyLong_Check(_in)) _out = PyLong_AsLong(_in);
-                else if (PyFloat_Check(_in)) _out = PyFloat_AsDouble(_in);
-                else if (PyBool_Check(_in)) {
+            void _setVar(PyObject*& _in, Item_t& _out) {
+                if (PyUnicode_Check(_in)) {
+                    // ULOG("In string");
+                    _out = _PyUnicode_AsString(_in);
+                } else if (PyLong_Check(_in)) {
+                    // ULOG("In int");
+                    _out = PyLong_AsLong(_in);
+                } else if (PyFloat_Check(_in)) {
+                    // ULOG("In float");
+                    _out = PyFloat_AsDouble(_in);
+                } else if (PyBool_Check(_in)) {
+                    // ULOG("In bool");
                     if (PyObject_IsTrue(_in)) _out = true;
                     else _out = false;
-                }
-                else if (PyList_Check(_in)) {
-                    if (PyObject_Length(_in)){
+                } else if (PyList_Check(_in)) {
+                    // ULOG("In list");
+                    _out = std::vector<Item_t>({});
+                    // _out.clear();
+                    if (PyObject_Length(_in)) {
                         Item_t _temp;
                         PyObject* _py_temp;
                         for (Py_ssize_t i = 0; i < PyList_Size(_in); i++) {
                             _py_temp = PyList_GetItem(_in, i);
-                            this->_setVar(_py_temp, _temp, _key);
+                            this->_setVar(_py_temp, _temp);
                             _out.append(_temp);
                         }
-                    } else {
-                        _out = std::vector<util::int_t>({});
                     }
-                }
-                else {
-                    if (_key.getType() != NONE)
-                        UERR("got invalid type for the value of: " + _key.toString());
-                    else
-                        UERR("got invalid type for a key");
-                }
+                } else { TERR("got invalid type"); }
+                //ULOG("Return type:" + std::to_string(_out.getType()));
             }
 
             /* ---------------------------------------------------------------------- */

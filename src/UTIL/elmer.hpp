@@ -38,15 +38,15 @@ namespace elmer {
             std::vector<std::array<util::int_t, elmer::boundary_size>> boundaries;
             // array format: x, y, z
             std::vector<std::array<util::double_t, elmer::dimension>>  nodes, node_velocity_data;
-            std::vector<std::vector<util::int_t>> elements;
+            std::vector<std::pair<util::int_t, std::vector<util::int_t>>> elements;
             util::string_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, node_velocity_file_ext, print_intensity;
             util::double_t base_temp, energy_threshold, pressure_threshold, shear_threshold;
             util::bool_t gravity_on;
 
             /* ---------------------------------------------------------------------- */
 
-            Section header, simulation, constants, material;
-            std::vector<Section*> equations, body_forces, bodies, initial_conditions, boundary_conditions;
+            Section header, simulation, constants;
+            std::vector<Section*> solvers, materials, equations, body_forces, bodies, initial_conditions, boundary_conditions;
 
             /* ---------------------------------------------------------------------- */
 
@@ -56,11 +56,12 @@ namespace elmer {
                 this->sparta         = &*_sparta;
 
                 // initing class variables
-                this->header          = Section("Header");
+                this->header          = Section("Header", toml::noInt, " ", false);
                 this->simulation      = Section("Simulation");
                 this->constants       = Section("Constants");
-                this->equations.clear(); // this->materials.clear();
+                this->equations.clear(); this->materials.clear();
                 this->body_forces.clear();  this->bodies.clear();
+                this->solvers.clear();
                 this->initial_conditions.clear();
                 this->boundary_conditions.clear();
             }
@@ -86,15 +87,31 @@ namespace elmer {
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
-                // UERR("done");
                 _h.getDictAtPath(this->simulation.contents, "elmer.simulation");
-                ULOG(std::to_string(this->simulation.contents.length()));
-                // ULOG(this->simulation["Max Output Level"].toString());
-                // _h.getDictAtPath(this->constants.contents, "elmer.constants");
-                ULOG(this->constants["Stefan_Boltzmann"].toString());
-                UERR("done");
-                this->checks();
+                _h.getDictAtPath(this->constants.contents, "elmer.constants");
+
+                std::vector<toml::Item_t> keys;
+
+                _h.getDictKeysAtPath(keys, "elmer.material");
+                for (auto key : keys) {
+                    Section* material = new Section("Material", std::stoi(key.toString()));
+                    _h.getDictAtPath(material->contents, "elmer.material." + key.toString());
+                    this->materials.push_back(material);
+                }
                 
+                _h.getDictKeysAtPath(keys, "elmer.solver");
+                for (auto key : keys) {
+                    Section* solver = new Section("Solver", std::stoi(key.toString()));
+                    _h.getDictAtPath(solver->contents, "elmer.solver." + key.toString());
+                    this->solvers.push_back(solver);
+                }
+
+                // _h.getDictAtPath(this->material.contents, "elmer.material");
+                // ULOG(this->constants.getItem("Stefan_Boltzmann").toString());
+                ULOG("# of materials input: " + std::to_string(this->materials.size()));
+                ULOG("# of solvers input: " + std::to_string(this->solvers.size()));
+
+                this->checks();
             }
 
             /* ---------------------------------------------------------------------- */
@@ -172,11 +189,11 @@ namespace elmer {
                 ULOG("# of initial conditions and bodies: " + std::to_string(this->initial_conditions.size()));
 
                 // setting the timestep size
-                this->simulation["Timestep Sizes"]     = { (util::double_t)this->sparta->update->dt };
+                this->simulation.setItem( "Timestep Sizes",    (std::vector<util::double_t>){ (util::double_t)this->sparta->update->dt });
 
                 // setting number of timesteps to run
-                this->simulation["Timestep intervals"] = { (util::int_t)this->sparta->run_every };
-                this->simulation["Output Intervals"]   = { (util::int_t)this->sparta->run_every };
+                this->simulation.setItem("Timestep intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
+                this->simulation.setItem("Output Intervals",   (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
 
                 // making the sif file
                 this->makeSif();
@@ -301,8 +318,8 @@ namespace elmer {
                     UERR("invalid print intensity for elmer");
                 
                 // setting vars from provided values
-                this->node_data_file = this->simulation_directory + SEP + this->simulation["Output File"].toString();
-                this->simulation["Output File"] = this->node_data_file;
+                this->node_data_file = this->simulation_directory + SEP + this->simulation.getItem("Output_File").toString();
+                this->simulation.setItem("Output File", this->node_data_file);
 
                 // this->velocity_solver["equation = "Velocity equation";
                 // this->velocity_solver.Variable = "-dofs 3 Velocity";
@@ -311,30 +328,36 @@ namespace elmer {
 
                 // this->equation.Active_Solvers = {1, 2, 3}; // id for each solver of the class
                 
-                this->header["Mesh DB"] = std::vector<util::string_t>({ this->simulation_directory, "." });
-                this->header["Results Directory"] = this->simulation_directory;
+                this->header.setItem("Mesh DB", std::vector<util::string_t>({ this->simulation_directory, "." }));
+                this->header.setItem("Results Directory", this->simulation_directory);
 
                 if (this->gravity_on) {
-                    elmer::Section* bf = new elmer::Section("Body Force", 1);
-                    ULOG("gravity acts along the direction: " + this->constants["Gravity"].toString());
-                    if (this->constants["Gravity"][0].toDouble() != 0.0) {
-                        (*bf)["Stress Bodyforce 1"] = this->constants["Gravity"][0].toDouble()*this->constants["Gravity"][3].toDouble();
-                        //ULOG("gravity acts (at least in part) in the x-direction");
+                    util::int_t count = 1;
+                    for (auto it : this->materials) {
+                        elmer::Section* bf = new elmer::Section("Body Force", it->getId());
+                        ULOG("gravity acts as: " + this->constants.getItem("Gravity").toString());
+                        if (this->constants.getItem("Gravity")[0].toDouble() != 0.0) {
+                            (*bf).setItem("Stress Bodyforce 1", this->constants.getItem("Gravity")[0].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            //ULOG("gravity acts (at least in part) in the x-direction");
+                        }
+                        if (this->constants.getItem("Gravity")[1].toDouble() != 0.0) {
+                            (*bf).setItem("Stress Bodyforce 2", this->constants.getItem("Gravity")[1].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            //ULOG("gravity acts (at least in part) in the y-direction");
+                        }
+                        if (this->constants.getItem("Gravity")[2].toDouble() != 0.0) {
+                            (*bf).setItem("Stress Bodyforce 3", this->constants.getItem("Gravity")[2].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            //ULOG("gravity acts (at least in part) in the z-direction");
+                        }
+                        this->body_forces.push_back(bf);
+                        count++;
                     }
-                    if (this->constants["Gravity"][1].toDouble() != 0.0) {
-                        (*bf)["Stress Bodyforce 2"] = this->constants["Gravity"][1].toDouble()*this->constants["Gravity"][3].toDouble();
-                        //ULOG("gravity acts (at least in part) in the y-direction");
-                    }
-                    if (this->constants["Gravity"][2].toDouble() != 0.0) {
-                        (*bf)["Stress Bodyforce 3"] = this->constants["Gravity"][2].toDouble()*this->constants["Gravity"][3].toDouble();
-                        //ULOG("gravity acts (at least in part) in the z-direction");
-                    }
-                    (*bf)["Density"] = this->material["Density"];
-                    this->body_forces.push_back(bf);
                 }
+                // UERR("done");
             }
 
             /* ---------------------------------------------------------------------- */
+
+            
 
             void setupDumpDirectory() {
                 ULOG("setting up dump directory");
@@ -454,12 +477,12 @@ namespace elmer {
                     std::vector<util::double_t> _temp_vec;
                     for (std::size_t i = 0; i < data.size(); i++) {
                         elmer::Section* bc = new elmer::Section("Boundary Condition" ,bc_count++);
-                        (*bc)["Target Boundaries"] = ids[i];
-                        (*bc)["Heat Flux"] = data[i][0];
+                        (*bc).setItem("Target Boundaries", ids[i]);
+                        (*bc).setItem("Heat Flux", data[i][0]);
                         _temp_vec.clear();
                         for (j = 1; j < numDataPoints; j++)
                             _temp_vec.push_back(data[i][j]);
-                        (*bc)["Stress"] = _temp_vec;
+                        (*bc).setItem("Stress", _temp_vec);
                 
                         this->boundary_conditions.push_back(bc);
                     }
@@ -475,8 +498,9 @@ namespace elmer {
                 if (this->gravity_on) _body_force = 1;
                 else                  _body_force = toml::noInt;
 
-                std::vector<std::array<util::double_t, (elmer::dimension+1)>> init_conds;
-                std::array<util::double_t, (elmer::dimension+1)> init_cond;
+                const util::int_t arr_size = elmer::dimension+2;
+                std::vector<std::array<util::double_t, arr_size>> init_conds;
+                std::array<util::double_t, arr_size> init_cond;
                 init_conds.clear();
 
                 // averages values for the nodes of a surface element and sets this average to the 
@@ -485,14 +509,16 @@ namespace elmer {
                     // computes the average temperature of the nodes that make up the surface element
                     // this value is used to set the surface element temperature
                     init_cond.fill(0.0);
-                    _size = this->elements[i].size();
+                    _size = this->elements[i].second.size();
+                    init_cond[0] = this->elements[i].first;
                     for (j = 0; j < (signed)_size; j++) {
                         // gets the data point corresponding to node id and adds it to the rolling sum
-                        if ((unsigned)this->elements[i][j]-1 >= size)
+                        if ((unsigned)this->elements[i].second[j]-1 >= size)
                             UERR("index out of bounds in creating initial conditions");
-                        init_cond[0] += (this->node_temperature_data[this->elements[i][j]-1]/((util::double_t)_size));
+                        
+                        init_cond[1] += (this->node_temperature_data[this->elements[i].second[j]-1]/((util::double_t)_size));
                         for (k = 0; k < elmer::dimension; k++)
-                            init_cond[k+1] += (this->node_velocity_data[this->elements[i][j]-1][k]/((util::double_t)_size));
+                            init_cond[k+2] += (this->node_velocity_data[this->elements[i].second[j]-1][k]/((util::double_t)_size));
                     }
                     index = util::find(init_conds, init_cond);
                     if (index == util::npos) {
@@ -507,14 +533,15 @@ namespace elmer {
                 
                 for (std::size_t i = 0; i < init_conds.size(); i++) {
                     Section* _body = new Section("Body", i+1);
-                    (*_body)["Initial Condition"] = (util::int_t)(i+1);
-                    (*_body)["Target Bodies"] = ids[i];
-                    (*_body)["Body Force"] = _body_force;
+                    (*_body).setItem("Initial Condition", (util::int_t)(i+1));
+                    (*_body).setItem("Body Force", _body_force);
+                    (*_body).setItem("Material", (util::int_t)init_conds[i][0]);
+                    (*_body).setItem("Target Bodies", ids[i]);
                     Section* _ic = new Section("Initial Condition", i+1);
-                    (*_ic)["Temperature"] = init_conds[i][0];
-                    (*_ic)["Velocity 1"] = init_conds[i][1];
-                    (*_ic)["Velocity 2"] = init_conds[i][2];
-                    (*_ic)["Velocity 3"] = init_conds[i][3];
+                    (*_ic).setItem("Temperature", init_conds[i][1]);
+                    (*_ic).setItem("Velocity 1", init_conds[i][2]);
+                    (*_ic).setItem("Velocity 2", init_conds[i][3]);
+                    (*_ic).setItem("Velocity 3", init_conds[i][4]);
 
                     this->initial_conditions.push_back(_ic);
                     this->bodies.push_back(_body);
@@ -616,6 +643,7 @@ namespace elmer {
                 this->boundaries.clear();
 
                 util::readFile(this->boundary_file, lines);
+                util::oFile out(this->boundary_file);
 
                 util::int_t last_id = 0;
                 util::int_t cur_id;
@@ -635,12 +663,12 @@ namespace elmer {
                         UERR("got unordered boundary elements at line: " + std::to_string(count));
                     last_id = cur_id;
 
+                    _split[1] = _split[0];
+                    for (util::string_t it : _split) out << it + " ";
+                    out << "\n";
+
                     // getting rid of stuff I do not need
                     _split.erase(_split.begin(), _split.begin() + 5);
-
-                    // catching errors
-                    // if (_split.size() != boundary_size)
-                    //     UERR("too many boundary elements to assign at line: " + std::to_string(count));
 
                     // adding the data
                     for (unsigned int i = 0; i < boundary_size; i++)
@@ -657,15 +685,18 @@ namespace elmer {
             void loadElements() {
                 ULOG("loading elements");
                 std::vector<util::string_t> _temp_data, _split;
-                std::vector<util::int_t> arr;
+                std::pair<util::int_t, std::vector<util::int_t>> arr;
                 this->elements.clear();
 
                 util::readFile(this->element_file, _temp_data);
+                util::oFile out(this->element_file);
+                //this->elements.resize(_temp_data.size());
 
-                this->elements.resize(_temp_data.size());
-
+                util::int_t last_id = 0;
+                util::int_t cur_id;
+                util::int_t count = 1;
                 for (util::string_t it : _temp_data) {
-                    arr.clear();
+                    arr.second.clear();
 
                     util::trim(it);
                     if (it.length() == 0) continue;
@@ -674,14 +705,27 @@ namespace elmer {
                     util::split(it, _split, ' ');
 
                     // getting rid of stuff I do not need
-                    _split.erase(_split.begin() + 1, _split.begin() + 3);
+                    
+                    arr.first = std::stoi(_split[1]);
 
+                    cur_id = std::stoi(_split[0]);
+                    if ((cur_id - last_id) != 1)
+                        UERR("got unordered boundary elements at line: " + std::to_string(count));
+                    
+                    last_id = cur_id;
+
+                    _split[1] = _split[0];
+                    for (util::string_t it : _split) out << it + " ";
+                    out << "\n";
+
+                    _split.erase(_split.begin(), _split.begin() + 3);
+                    
                     // adding the data
-                    for (std::size_t i = 1; i < _split.size(); i++)
-                        arr.push_back(std::stoi(_split[i]));
+                    for (std::size_t i = 0; i < _split.size(); i++)
+                        arr.second.push_back(std::stoi(_split[i]));
 
                     // adding the data to the class vector
-                    this->elements[std::stoi(_split[0]) - 1] = arr;
+                    this->elements.push_back(arr);
                 }
             }
 
@@ -691,11 +735,16 @@ namespace elmer {
                 header.join(_buf);
                 simulation.join(_buf);
                 constants.join(_buf);
-                material.join(_buf);
 
                 std::size_t i;
+                for (i = 0; i < this->solvers.size(); i++)
+                    this->solvers[i]->join(_buf);
+
                 for (i = 0; i < this->equations.size(); i++)
                     this->equations[i]->join(_buf);
+                    
+                for (i = 0; i < this->materials.size(); i++)
+                    this->materials[i]->join(_buf);
 
                 for (i = 0; i < this->bodies.size(); i++)
                     this->bodies[i]->join(_buf);

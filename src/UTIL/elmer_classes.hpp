@@ -6,8 +6,9 @@
 #include "toml.hpp"
 
 namespace elmer {
-    void makeVarName(std::string& _var_name) {
+    util::string_t makeVarName(util::string_t _var_name) {
         std::replace(_var_name.begin(), _var_name.end(), '_', ' ');
+        return _var_name;
     }
 
     /**
@@ -24,14 +25,17 @@ namespace elmer {
             // ends the section
             util::string_t _end = "End";
             util::int_t _id;
-        
+            util::bool_t _include_count;
+
         public:
             toml::OrderedDict_t contents;
             Section() {}
-            Section(util::string_t name, util::int_t id = toml::noInt, util::string_t sep = " = ") {
+            Section(util::string_t name, util::int_t id = toml::noInt, util::string_t sep = " = ", util::bool_t include_count = true) {
                 this->_name = name;
                 this->_sep = sep;
+                this->_id = id;
                 this->contents = toml::OrderedDict_t();
+                this->_include_count = include_count;
             }
 
             void join(util::oFile& _buf) {
@@ -39,18 +43,37 @@ namespace elmer {
                     _buf << this->_name << "\n";
                 else
                     _buf << this->_name << " " << _id << "\n";
-                this->contents.toFile(_buf, _tab, this->_sep);
+                
+                toml::Item_t keys = this->contents.getKeys();
+                toml::Item_t vals = this->contents.getValues();
+                for (util::int_t i = 0; i < keys.length(); i++) {
+                    _buf << (_tab + makeVarName(keys[i].toString()));
+                    if (vals[i].getType() == toml::LIST) {
+                        if (this->_include_count)
+                            _buf << "(" << std::to_string(vals[i].length()) << ")";
+                        _buf << _sep << vals[i].toString(" ", true, 1000);
+                    } else {
+                        _buf << _sep << vals[i].toString(" ", true);
+                    }
+                    _buf << "\n";
+                }
+                // this->contents.toFile(_buf, _tab, this->_sep);
                 _buf << this->_end << "\n";
             }
 
-            toml::Item_t& operator[](util::string_t _key) {
-                makeVarName(_key);
-                return this->contents[_key];
+            util::int_t getId() {
+                return this->_id;
             }
 
-            // toml::OrderedDict_t& getContents() {
-            //     return this->contents;
-            // }
+            toml::Item_t getItem(toml::Item_t key) {
+                return this->contents.getItem(key);
+            }
+
+            void setItem(toml::Item_t key, toml::Item_t val) {
+                this->contents.setItem(key, val);
+            }
+            void clear() { this->contents.clear(); }
+            util::int_t length() { return this->contents.length(); }
     };
         // private:
         //     /**
