@@ -86,11 +86,15 @@ namespace elmer {
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
-                _h.getDictAtPath(this->simulation.getContents(), "elmer.simulation");
-                _h.getDictAtPath(this->constants.getContents(), "elmer.constants");
-
-                this->checks();
+                // UERR("done");
+                _h.getDictAtPath(this->simulation.contents, "elmer.simulation");
+                ULOG(std::to_string(this->simulation.contents.length()));
+                // ULOG(this->simulation["Max Output Level"].toString());
+                // _h.getDictAtPath(this->constants.contents, "elmer.constants");
+                ULOG(this->constants["Stefan_Boltzmann"].toString());
                 UERR("done");
+                this->checks();
+                
             }
 
             /* ---------------------------------------------------------------------- */

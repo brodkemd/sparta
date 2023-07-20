@@ -15,7 +15,7 @@ namespace elmer {
     */
     class Section {
         private:
-            toml::OrderedDict_t contents;
+            
             util::string_t _name, _sep;
 
             // tab in the file
@@ -26,6 +26,7 @@ namespace elmer {
             util::int_t _id;
         
         public:
+            toml::OrderedDict_t contents;
             Section() {}
             Section(util::string_t name, util::int_t id = toml::noInt, util::string_t sep = " = ") {
                 this->_name = name;
@@ -47,9 +48,9 @@ namespace elmer {
                 return this->contents[_key];
             }
 
-            toml::OrderedDict_t& getContents() {
-                return this->contents;
-            }
+            // toml::OrderedDict_t& getContents() {
+            //     return this->contents;
+            // }
     };
         // private:
         //     /**
