@@ -63,8 +63,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     char** arr;
     util::int_t size;
     struct stat sb;
-    util::string_t groupID, mixID, customID;
-    std::vector<util::string_t> compute_args, surf_collide_args, surf_modify_args;
+    toml::Item_t customID, temp_run_every, temp_nevery, temp_connectflag;
+    toml::Item_t compute_args, surf_collide_args, surf_modify_args;
     // making new fea class
     this->fea = new elmer::Elmer(this);
 
@@ -92,15 +92,20 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     toml::handler s(arg[2]);
 
     // getting the val at the path (second input) and setting the variable (first input) to that variable
-    s.getAtPath(this->run_every,          "sparta.run_every",         true);
-    s.getAtPath(this->nevery,             "sparta.nevery",            true);
-    s.getAtPath(this->connectflag,        "sparta.connect",           true);
-    s.getAtPath(groupID,                  "sparta.groupID",           true);
-    s.getAtPath(mixID,                    "sparta.mixID",             true);
-    s.getAtPath(customID,                 "sparta.customID",          true);
-    s.getAtPath(compute_args,             "sparta.compute",           true);
-    s.getAtPath(surf_collide_args,        "sparta.surf_collide",      true);
-    s.getAtPath(surf_modify_args,         "sparta.surf_modify",       true);  
+
+    s.getAtPath(temp_run_every,           "sparta.run_every",         toml::INT);
+    s.getAtPath(temp_nevery,              "sparta.nevery",            toml::INT);
+    s.getAtPath(temp_connectflag,         "sparta.connect",           toml::BOOL);
+    // s.getAtPath(groupID,                  "sparta.groupID",           toml::STRING);
+    //s.getAtPath(mixID,                    "sparta.mixID",             toml::STRING);
+    s.getAtPath(customID,                 "sparta.customID",          toml::STRING);
+    s.getAtPath(compute_args,             "sparta.compute",           toml::LIST);
+    s.getAtPath(surf_collide_args,        "sparta.surf_collide",      toml::LIST);
+    s.getAtPath(surf_modify_args,         "sparta.surf_modify",       toml::LIST);  
+
+    this->run_every = temp_run_every.toInt();
+    this->nevery = temp_run_every.toInt();
+    this->connectflag = temp_connectflag.toBool();
 
     // letting fea handle its variable setting
     this->fea->set(s);
@@ -109,6 +114,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->fea->setup();
 
     END_TRY
+
+    
 
     // makes a surface file if none is provided
     if (!(surf->exist))
@@ -123,16 +130,16 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         SERR("Cannot use fix fea with distributed surfs");
     
     // getting the index of the surface variable added
-    this->tindex = surf->add_custom((char*)customID.c_str(),DOUBLE,0);
-    ULOG("Add surface variable with name: " + customID);
+    this->tindex = surf->add_custom((char*)customID.toString().c_str(),DOUBLE,0);
+    ULOG("Add surface variable with name: " + customID.toString());
     
     // adding surf collision model needed
-    size = util::vecToArr(surf_collide_args, arr);
+    size = toml::listToCharArray(surf_collide_args, arr);
     this->surf->add_collide(size, arr);
     ULOG("added surface collision model");
 
     // adding compute
-    size = util::vecToArr(compute_args, arr);
+    size = toml::listToCharArray(compute_args, arr);
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
@@ -146,7 +153,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         SERR("Fix fea compute does not compute per-surf info");
 
     // getting the index in the compute of the energy value
-    energy_loc = util::find(compute_args, (util::string_t)"etot")-4;
+    energy_loc = util::find(compute_args.toVector(), (toml::Item_t)"etot")-4;
     if (energy_loc == util::npos)
         SERR("etot is not provided as compute arg");
     // ULOG("Energy flux index = " + std::to_string(energy_loc));
@@ -154,7 +161,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // getting the indicies for the pressures (stresses) from the compute
     std::vector<util::string_t> opts = {"px", "py", "pz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
-        force_locs[i] = util::find(compute_args, opts[i])-4;
+        force_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
         if (force_locs[i] == util::npos)
             SERR((opts[i] + " is not provided as compute arg").c_str());
     }
@@ -166,7 +173,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     // getting the indicies for the shear stresses from the compute
     opts = {"shx", "shy", "shz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
-        shear_locs[i] = util::find(compute_args, opts[i])-4;
+        shear_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
         if (shear_locs[i] == util::npos)
             SERR((opts[i] + " is not provided as compute arg").c_str());
     }
@@ -189,7 +196,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     ULOG("running on: " + std::to_string(nprocs) + " processes");
 
     // adding collision by modifying surf
-    size = util::vecToArr(surf_modify_args, arr);
+    size = toml::listToCharArray(surf_modify_args, arr);
     this->surf->modify_params(size, arr);
     ULOG("modified surface");
 

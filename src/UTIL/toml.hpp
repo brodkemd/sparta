@@ -21,17 +21,16 @@ namespace toml {
         private:
             int type = NONE;
 
-            std::vector<Item_t> _list;
-            util::double_t _d_src;
-            util::int_t _i_src;
-            util::string_t _s_src;
+            std::vector<Item_t> _list = {};
+            util::double_t _d_src = 0.0;
+            util::int_t _i_src = 0;
+            util::string_t _s_src = "";
             util::bool_t _b_src = 0;
+
         public:
             Item_t() { this->type = NONE; }
             Item_t(util::double_t _key) { *this = _key; }
-            // Item_t(int _key)         { *this = _key; }
             Item_t(util::int_t _key)    { *this = _key; }
-            // Item_t(Item_t _key)         { *this = _key; }
             Item_t(util::string_t _key) { *this = _key; }
             Item_t(util::bool_t _key)   { *this = _key; }
             Item_t(char* _key)          { *this = _key; }
@@ -42,46 +41,15 @@ namespace toml {
             Item_t(std::vector<util::bool_t> _key)   { *this = _key; }
             Item_t(std::vector<Item_t> _key)         { *this = _key; }
 
-            void operator = (util::double_t _val) {
-                //ULOG("In double equal");
-                type = toml::DOUBLE;
-                _d_src = _val;
-            }
-
-            void operator = (util::int_t _val) {
-                //ULOG("In int equal");
-                type = toml::INT;
-                _i_src = _val;
-            }
-
-            // void operator = (const long _val)        { type = toml::LONG; _src = std::to_string(_val); }
-            void operator = (util::string_t _val) {
-                //ULOG("In string equal");
-                type = toml::STRING;
-                _s_src = _val;
-            }
-
-            void operator = (util::bool_t _val) {
-                //ULOG("In bool equal");
-                type = toml::BOOL;
-                _b_src = _val;
-            }
-
-            void operator = (char* _val) {
-                //ULOG("In char* equal");
-                type = toml::STRING;
-                _s_src = std::string(_val);
-            }
-
-            void operator = (const char* _val) {
-                //ULOG("In const char* equal");
-                type = toml::STRING;
-                _s_src = std::string(_val);
-            }
+            void operator = (util::double_t _val) { type = toml::DOUBLE; _d_src = _val; }
+            void operator = (util::int_t _val)    { type = toml::INT; _i_src = _val; }
+            void operator = (util::string_t _val) { type = toml::STRING; _s_src = _val; }
+            void operator = (util::bool_t _val)   { type = toml::BOOL; _b_src = _val; }
+            void operator = (char* _val)          { type = toml::STRING; _s_src = std::string(_val); }
+            void operator = (const char* _val)    { type = toml::STRING; _s_src = std::string(_val); }
 
             template<typename T>
             void operator = (std::vector<T> _val) {
-                //ULOG("In list equal");
                 type = toml::LIST;
                 this->_list.clear();
                 Item_t _temp = Item_t();
@@ -90,6 +58,7 @@ namespace toml {
                     _list.push_back(_temp);
                 }
             }
+
 
             bool operator==(const Item_t& other) { 
                 if (this->type != other.type) return false;
@@ -120,6 +89,7 @@ namespace toml {
                 return false; 
             }
 
+
             Item_t operator[](util::int_t _index) {
                 Item_t to_return = Item_t(0.0);
                 switch (this->type) {
@@ -145,10 +115,9 @@ namespace toml {
                             TERR("Index out of bounds for indexing object");
                         return this->_list[_index];
                 }
-
                 return to_return;
-                
             }
+
 
             util::string_t toString(std::string _sep = " ", bool _include_string_parenthesis = false, util::int_t wrap_every = toml::noInt) {
                 switch (this->type) {
@@ -265,6 +234,30 @@ namespace toml {
             }
 
 
+            std::vector<Item_t> toVector() {
+                switch (this->type) {
+                    case NONE:
+                        TERR("Can not convert None to vector");
+                    
+                    case INT:
+                        TERR("Can not convert None to vector");
+                    
+                    case DOUBLE:
+                        TERR("Can not convert None to vector");
+                    
+                    case STRING:
+                        TERR("Can not convert None to vector");
+                    
+                    case BOOL:
+                        TERR("Can not convert None to vector");
+
+                    case LIST:
+                        return this->_list;
+                }
+                return this->_list;
+            }
+
+
             void append(Item_t _to_add) {
                 switch (this->type) {
                     case NONE:
@@ -287,13 +280,8 @@ namespace toml {
                 }
             }
 
-            void clear() {
-                _list.clear();
-                _d_src = 0.0;
-                _i_src = 0;
-                _s_src.clear();
-                _b_src = false;
-            }
+
+            void clear() { _list.clear(); _d_src = 0.0;  _i_src = 0; _s_src.clear(); _b_src = false; }
 
             void setType(int _type) {
                 if (_type != this->type)
@@ -328,21 +316,21 @@ namespace toml {
             friend class OrderedDict_t;
     };
 
+
+    util::int_t listToCharArray(Item_t _list, char**& _arr) {
+        std::vector<util::string_t> _temp;
+        _temp.clear();
+        for (auto it : _list.toVector())
+            _temp.push_back(it.toString());
+        return util::vecToArr(_temp, _arr);
+    }
+
+
     class OrderedDict_t {
         private:
             std::vector<Item_t> keys, vals;
         public:
             OrderedDict_t() { keys.clear(); vals.clear(); }
-
-            // Item_t& operator[](Item_t _key) {
-            //     for (std::size_t  i = 0; i < this->keys.size(); i++) {
-            //         if (keys[i] == _key) return vals.at(i);
-            //     }
-            //     keys.push_back(_key);
-            //     Item_t temp = Item_t();
-            //     vals.push_back(temp);
-            //     return vals.at(vals.size()-1);
-            // }
 
             Item_t getItem(Item_t key) {
                 for (std::size_t  i = 0; i < this->keys.size(); i++) {
@@ -363,17 +351,7 @@ namespace toml {
                 vals.push_back(val);
             }
 
-            // void toString(std::string& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
-            //     for (std::size_t  i = 0; i < this->keys.size(); i++) {
-            //         _buf += (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
-            //     }
-            // }
-
-            // void toFile(util::oFile& _buf, std::string _start_entry="", std::string _sep_entry=" : ", std::string _end_entry="\n") {
-            //     for (std::size_t i = 0; i < this->keys.size(); i++) {
-            //         _buf << (_start_entry + keys[i].toString() + _sep_entry + vals[i].toString() + _end_entry);
-            //     }
-            // }
+            util::bool_t hasKey(Item_t key) { return util::find(this->keys, key) != util::npos; }
 
             Item_t getKeys() {
                 Item_t to_return = this->keys;
@@ -420,64 +398,50 @@ namespace toml {
 
             /* ---------------------------------------------------------------------- */
 
-            ~handler() {
-                Py_Finalize();
-                Py_DECREF(pValue);
-            }
+            ~handler() { Py_Finalize(); Py_DECREF(pValue); }
 
             /* ---------------------------------------------------------------------- */
 
-            template<typename T>
-            void getAtPath(T& _var, util::string_t _path, util::bool_t _strict) {
-                this->pArgs = PyTuple_New(2);
+            void getAtPath(Item_t& _var, util::string_t _path, util::int_t _type) {
+                cur_path = _path;
+                this->pArgs = PyTuple_New(1);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-                PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)_strict));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
-                this->_handleVar(_var, out, _path);
+            
+                this->_setVar(out, _var);
+                if (_var.getType() != _type)
+                    TERR("Invalid type");
+
                 Py_DECREF(out);
             }
 
 
             void getDictAtPath(OrderedDict_t& _d, util::string_t _path) {
+                cur_path = _path;
                 this->pArgs = PyTuple_New(2);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
                 PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)(true)));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
 
-                cur_path = _path;
                 if (!(PyDict_Check(out)))
                     TERR("Did not get dictionary");
 
-                PyObject *key, *value;// , *_temp;
+                PyObject *key, *value;
                 Item_t _key, _value;
                 Py_ssize_t pos = 0;
                 while (PyDict_Next(out, &pos, &key, &value)) {
-                    // ULOG(_PyUnicode_AsString(key));
-                    // _temp = PyObject_Type(key);
-                    // _temp = PyObject_Str(key);
-                    // char* _out = (char*)_PyUnicode_AsString(_temp);
-                    // ULOG(_out);
-                    // _temp = PyObject_Type(value);
-                    // _temp = PyObject_Str(_temp);
-                    // _out = (char*)_PyUnicode_AsString(_temp);
-                    // ULOG(_out);
-                    //ULOG("Key");
                     this->_setVar(key, _key);
-                    //ULOG("Get type: " + std::to_string(_key.getType()));
                     cur_path = (_path + "." + _key.toString());
                     
-                    //ULOG("Value");
                     this->_setVar(value, _value);
-                    //ULOG("Get type: " + std::to_string(_value.getType()));
-                    //ULOG("setting");
                     _d.setItem(_key, _value);
                 }
-                // Py_DecRef(key); Py_DecRef(value);
             }
 
             void getDictKeysAtPath(std::vector<Item_t>& _d, util::string_t _path) {
+                cur_path = _path;
                 _d.clear();
                 this->pArgs = PyTuple_New(2);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
@@ -489,38 +453,15 @@ namespace toml {
                 if (!(PyDict_Check(out)))
                     TERR("Did not get dictionary keys");
 
-                PyObject *key, *value;// , *_temp;
+                PyObject *key, *value;
                 Item_t _key;
                 Py_ssize_t pos = 0;
                 while (PyDict_Next(out, &pos, &key, &value)) {
-                    // ULOG(_PyUnicode_AsString(key));
-                    // _temp = PyObject_Type(key);
-                    // _temp = PyObject_Str(key);
-                    // char* _out = (char*)_PyUnicode_AsString(_temp);
-                    // ULOG(_out);
-                    // _temp = PyObject_Type(value);
-                    // _temp = PyObject_Str(_temp);
-                    // _out = (char*)_PyUnicode_AsString(_temp);
-                    // ULOG(_out);
-                    //ULOG("Key");
                     this->_setVar(key, _key);
                     _d.push_back(_key);
-                    //ULOG("Get type: " + std::to_string(_key.getType()));
-                    // cur_path = (_path + "." + _key.toString());
                 }
                 // Py_DecRef(key); Py_DecRef(value);
             }
-
-            // template<typename T>
-            // void getAtPathOrRef(T& _var, T& _ref, util::string_t _path) {
-            //     this->pArgs = PyTuple_New(2);
-            //     PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-            //     PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)_strict));
-            //     PyObject* out = PyObject_CallObject(this->get_at, pArgs);
-            //     this->_err();
-            //     this->_handleVar(_var, out, _path);
-            //     Py_DECREF(out);
-            // }
 
 
         private:
@@ -532,28 +473,23 @@ namespace toml {
                 if (PyErr_Occurred()) {
                     PyErr_Fetch(&this->type, &this->value, &this->traceback);
                     util::string_t _value = _PyUnicode_AsString(PyObject_Repr(this->value));
-                    UERR(_value);
+                    TERR(_value);
                 }
             }
 
             void _setVar(PyObject*& _in, Item_t& _out) {
                 if (PyUnicode_Check(_in)) {
-                    // ULOG("In string");
                     _out = _PyUnicode_AsString(_in);
                 } else if (PyLong_Check(_in)) {
-                    // ULOG("In int");
                     _out = PyLong_AsLong(_in);
                 } else if (PyFloat_Check(_in)) {
-                    // ULOG("In float");
                     _out = PyFloat_AsDouble(_in);
                 } else if (PyBool_Check(_in)) {
-                    // ULOG("In bool");
                     if (PyObject_IsTrue(_in)) _out = true;
                     else _out = false;
                 } else if (PyList_Check(_in)) {
-                    // ULOG("In list");
                     _out = std::vector<Item_t>({});
-                    // _out.clear();
+
                     if (PyObject_Length(_in)) {
                         Item_t _temp;
                         PyObject* _py_temp;
@@ -564,83 +500,13 @@ namespace toml {
                         }
                     }
                 } else { TERR("got invalid type"); }
-                //ULOG("Return type:" + std::to_string(_out.getType()));
-            }
-
-            /* ---------------------------------------------------------------------- */
-
-            void _handleVar(util::double_t& _var, PyObject *_src, util::string_t _path) {
-                if (Py_IsNone(_src)) {
-                    _var = noDouble;
-                    return;
-                }
-
-                if (!(PyFloat_Check(_src)))
-                    UERR(_path + " is not the correct type, must be float");
-                _var = PyFloat_AsDouble(_src);
-            }
-
-            /* ---------------------------------------------------------------------- */
-
-            void _handleVar(util::string_t& _var, PyObject *_src, util::string_t _path) {
-                if (Py_IsNone(_src)) {
-                    _var = noString;
-                    return;
-                }
-
-                if (!(PyUnicode_Check(_src)))
-                    UERR(_path + " is not the correct type, must be string");
-                _var = _PyUnicode_AsString(_src);
             }
 
             // /* ---------------------------------------------------------------------- */
 
-            void _handleVar(int& _var, PyObject *_src, util::string_t _path) {
-                if (Py_IsNone(_src)) {
-                    _var = noInt;
-                    return;
-                }
-
-                if (!(PyLong_Check(_src)))
-                    UERR(_path + " is not the correct type, must be int");
-                _var = PyLong_AsLong(_src);
-            }
-
-            /* ---------------------------------------------------------------------- */
-
-            void _handleVar(util::int_t& _var, PyObject *_src, util::string_t _path) {
-                if (Py_IsNone(_src)) {
-                    _var = noInt;
-                    return;
-                }
-
-                if (!(PyLong_Check(_src)))
-                    UERR(_path + " is not the correct type, must be int");
-                _var = PyLong_AsLong(_src);
-            }
-
-            /* ---------------------------------------------------------------------- */
-
-            void _handleVar(util::bool_t& _var, PyObject *_src, util::string_t _path) {
-                if (Py_IsNone(_src)) {
-                    _var = noBool;
-                    return;
-                }
-
-                if (!(PyBool_Check(_src)))
-                    UERR(_path + " is not the correct type, must be bool");
-                
-                if (PyObject_IsTrue(_src))
-                    _var = true;
-                else
-                    _var = false;
-            }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVarOr(util::double_t& _var, util::double_t& _or, PyObject *_src, util::string_t _path) {
+            // void _handleVar(util::double_t& _var, PyObject *_src, util::string_t _path) {
             //     if (Py_IsNone(_src)) {
-            //         _var = &_or;
+            //         _var = noDouble;
             //         return;
             //     }
 
@@ -651,7 +517,7 @@ namespace toml {
 
             // /* ---------------------------------------------------------------------- */
 
-            // void _handleVarOr(util::string_t& _var, PyObject *_src, util::string_t _path) {
+            // void _handleVar(util::string_t& _var, PyObject *_src, util::string_t _path) {
             //     if (Py_IsNone(_src)) {
             //         _var = noString;
             //         return;
@@ -664,7 +530,7 @@ namespace toml {
 
             // // /* ---------------------------------------------------------------------- */
 
-            // void _handleVarOr(int& _var, PyObject *_src, util::string_t _path) {
+            // void _handleVar(int& _var, PyObject *_src, util::string_t _path) {
             //     if (Py_IsNone(_src)) {
             //         _var = noInt;
             //         return;
@@ -677,7 +543,7 @@ namespace toml {
 
             // /* ---------------------------------------------------------------------- */
 
-            // void _handleVarOr(util::int_t& _var, PyObject *_src, util::string_t _path) {
+            // void _handleVar(util::int_t& _var, PyObject *_src, util::string_t _path) {
             //     if (Py_IsNone(_src)) {
             //         _var = noInt;
             //         return;
@@ -690,7 +556,7 @@ namespace toml {
 
             // /* ---------------------------------------------------------------------- */
 
-            // void _handleVarOr(util::bool_t& _var, PyObject *_src, util::string_t _path) {
+            // void _handleVar(util::bool_t& _var, PyObject *_src, util::string_t _path) {
             //     if (Py_IsNone(_src)) {
             //         _var = noBool;
             //         return;
@@ -705,60 +571,129 @@ namespace toml {
             //         _var = false;
             // }
 
-            /* ---------------------------------------------------------------------- */
+            // // /* ---------------------------------------------------------------------- */
 
-            template<typename T>
-            void _list(std::vector<T>& _var, PyObject *_src, util::string_t _path) {
-                _var.clear();
-                T _temp;
-                for (util::int_t i = 0; i < PyList_Size(_src); i++) {
-                    _handleVar(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
-                    _var.push_back(_temp);
-                }
-            }
+            // // void _handleVarOr(util::double_t& _var, util::double_t& _or, PyObject *_src, util::string_t _path) {
+            // //     if (Py_IsNone(_src)) {
+            // //         _var = &_or;
+            // //         return;
+            // //     }
 
-            /* ---------------------------------------------------------------------- */
+            // //     if (!(PyFloat_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be float");
+            // //     _var = PyFloat_AsDouble(_src);
+            // // }
 
-            void _handleVar(std::vector<util::string_t>& _var, PyObject *_src, util::string_t _path) {
-                if (!(PyList_Check(_src)))
-                    UERR(_path + " is not the correct type, must be array of strings");
+            // // /* ---------------------------------------------------------------------- */
 
-                _list(_var, _src, _path);
-            }
+            // // void _handleVarOr(util::string_t& _var, PyObject *_src, util::string_t _path) {
+            // //     if (Py_IsNone(_src)) {
+            // //         _var = noString;
+            // //         return;
+            // //     }
 
-            /* ---------------------------------------------------------------------- */
+            // //     if (!(PyUnicode_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be string");
+            // //     _var = _PyUnicode_AsString(_src);
+            // // }
 
-            void _handleVar(std::vector<util::double_t>& _var, PyObject *_src, util::string_t _path) {
-                if (!(PyList_Check(_src)))
-                    UERR(_path + " is not the correct type, must be array of floats");
+            // // // /* ---------------------------------------------------------------------- */
+
+            // // void _handleVarOr(int& _var, PyObject *_src, util::string_t _path) {
+            // //     if (Py_IsNone(_src)) {
+            // //         _var = noInt;
+            // //         return;
+            // //     }
+
+            // //     if (!(PyLong_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be int");
+            // //     _var = PyLong_AsLong(_src);
+            // // }
+
+            // // /* ---------------------------------------------------------------------- */
+
+            // // void _handleVarOr(util::int_t& _var, PyObject *_src, util::string_t _path) {
+            // //     if (Py_IsNone(_src)) {
+            // //         _var = noInt;
+            // //         return;
+            // //     }
+
+            // //     if (!(PyLong_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be int");
+            // //     _var = PyLong_AsLong(_src);
+            // // }
+
+            // // /* ---------------------------------------------------------------------- */
+
+            // // void _handleVarOr(util::bool_t& _var, PyObject *_src, util::string_t _path) {
+            // //     if (Py_IsNone(_src)) {
+            // //         _var = noBool;
+            // //         return;
+            // //     }
+
+            // //     if (!(PyBool_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be bool");
                 
-                _list(_var, _src, _path);
-            }
-
-            /* ---------------------------------------------------------------------- */
-
-            void _handleVar(std::vector<util::int_t>& _var, PyObject *_src, util::string_t _path) {
-                if (!(PyList_Check(_src)))
-                    UERR(_path + " is not the correct type, must be array of ints");
-                
-                _list(_var, _src, _path);
-            }
+            // //     if (PyObject_IsTrue(_src))
+            // //         _var = true;
+            // //     else
+            // //         _var = false;
+            // // }
 
             // /* ---------------------------------------------------------------------- */
 
-            // void _handleVar(std::vector<long>& _var, PyObject *_src, util::string_t _path) {
+            // template<typename T>
+            // void _list(std::vector<T>& _var, PyObject *_src, util::string_t _path) {
+            //     _var.clear();
+            //     T _temp;
+            //     for (util::int_t i = 0; i < PyList_Size(_src); i++) {
+            //         _handleVar(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
+            //         _var.push_back(_temp);
+            //     }
+            // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVar(std::vector<util::string_t>& _var, PyObject *_src, util::string_t _path) {
             //     if (!(PyList_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be array of ints");
+            //         UERR(_path + " is not the correct type, must be array of strings");
+
             //     _list(_var, _src, _path);
             // }
 
-            /* ---------------------------------------------------------------------- */
+            // /* ---------------------------------------------------------------------- */
 
-            void _handleVar(std::vector<util::bool_t>& _var, PyObject *_src, util::string_t _path) {
-                if (!(PyList_Check(_src)))
-                    UERR(_path + " is not the correct type, must be array of ints");
-                _list(_var, _src, _path);
-            }            
+            // void _handleVar(std::vector<util::double_t>& _var, PyObject *_src, util::string_t _path) {
+            //     if (!(PyList_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be array of floats");
+                
+            //     _list(_var, _src, _path);
+            // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVar(std::vector<util::int_t>& _var, PyObject *_src, util::string_t _path) {
+            //     if (!(PyList_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be array of ints");
+                
+            //     _list(_var, _src, _path);
+            // }
+
+            // // /* ---------------------------------------------------------------------- */
+
+            // // void _handleVar(std::vector<long>& _var, PyObject *_src, util::string_t _path) {
+            // //     if (!(PyList_Check(_src)))
+            // //         UERR(_path + " is not the correct type, must be array of ints");
+            // //     _list(_var, _src, _path);
+            // // }
+
+            // /* ---------------------------------------------------------------------- */
+
+            // void _handleVar(std::vector<util::bool_t>& _var, PyObject *_src, util::string_t _path) {
+            //     if (!(PyList_Check(_src)))
+            //         UERR(_path + " is not the correct type, must be array of ints");
+            //     _list(_var, _src, _path);
+            // }            
     };
 }
 

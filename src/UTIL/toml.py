@@ -86,12 +86,9 @@ def iter(_data):
                     for i, val in enumerate(_data[item]): _data[item][i] = str(val)
             elif isinstance(_data[item], str): _data[item] = resolve_name(_data[item])
 
-def get_at_path(_path, _strict):
-    global data, strict
-    strict = _strict
-    _to_return = get_from(data, _path)
-    strict = True
-    return _to_return
+def get_at_path(_path):
+    global data
+    return get_from(data, _path)
 
 def Main(_file):
     global data

@@ -68,7 +68,7 @@ namespace SPARTA_NS {
 
             bool connectflag;
             long nsurf, *pselect;
-            int groupbit, nprocs, tindex, run_every, dimension, shear_locs[3], force_locs[3], energy_loc;
+            int run_every, groupbit, nprocs, tindex, dimension, shear_locs[3], force_locs[3], energy_loc;
             double *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
     };
 }

@@ -15,9 +15,7 @@
 /* ---------------------------------------------------------------------- */
 
 // dummy class to allow the use of a pointer later
-namespace SPARTA_NS {
-    class FixFea;
-}
+namespace SPARTA_NS { class FixFea; }
 
 /* ---------------------------------------------------------------------- */
 
@@ -31,7 +29,6 @@ namespace elmer {
     */
     class Elmer {
         private:
-            const util::string_t sep = "\n\n";
             SPARTA_NS::FixFea* sparta;
             std::vector<util::string_t> run_these;
             std::vector<util::double_t> node_temperature_data;
@@ -39,9 +36,7 @@ namespace elmer {
             // array format: x, y, z
             std::vector<std::array<util::double_t, elmer::dimension>>  nodes, node_velocity_data;
             std::vector<std::pair<util::int_t, std::vector<util::int_t>>> elements;
-            util::string_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, node_velocity_file_ext, print_intensity;
-            util::double_t base_temp, energy_threshold, pressure_threshold, shear_threshold;
-            util::bool_t gravity_on;
+            toml::Item_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, node_velocity_file_ext, print_intensity, gravity_on, base_temp, energy_threshold, pressure_threshold, shear_threshold;
 
             /* ---------------------------------------------------------------------- */
 
@@ -71,19 +66,19 @@ namespace elmer {
             void set(toml::handler& _h) {
                 ULOG("setting elmer class parameters");
                 // setting needed variables
-                _h.getAtPath(this->meshDB,                    "elmer.meshDB",                     true);
-                _h.getAtPath(this->exe,                       "elmer.exe",                        true);
-                _h.getAtPath(this->sif,                       "elmer.sif",                        true);
-                _h.getAtPath(this->base_temp,                 "elmer.base_temp",                  true);
-                _h.getAtPath(this->simulation_directory,      "simulation_directory",             true);
-                _h.getAtPath(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  true);
-                _h.getAtPath(this->node_position_file_ext,    "elmer.node_position_file_ext",     true);
-                _h.getAtPath(this->node_velocity_file_ext,    "elmer.node_velocity_file_ext",     true);
-                _h.getAtPath(this->gravity_on,                "elmer.gravity_on",                 true);
-                _h.getAtPath(this->energy_threshold,          "sparta.energy_threshold",          true);
-                _h.getAtPath(this->pressure_threshold,        "sparta.pressure_threshold",        true);
-                _h.getAtPath(this->shear_threshold,           "sparta.shear_threshold",           true);
-                _h.getAtPath(this->print_intensity,           "elmer.print_intensity",            false);
+                _h.getAtPath(this->meshDB,                    "elmer.meshDB",                     toml::STRING);
+                _h.getAtPath(this->exe,                       "elmer.exe",                        toml::STRING);
+                _h.getAtPath(this->sif,                       "elmer.sif",                        toml::STRING);
+                _h.getAtPath(this->base_temp,                 "elmer.base_temp",                  toml::DOUBLE);
+                _h.getAtPath(this->simulation_directory,      "simulation_directory",             toml::STRING);
+                _h.getAtPath(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  toml::STRING);
+                _h.getAtPath(this->node_position_file_ext,    "elmer.node_position_file_ext",     toml::STRING);
+                _h.getAtPath(this->node_velocity_file_ext,    "elmer.node_velocity_file_ext",     toml::STRING);
+                _h.getAtPath(this->gravity_on,                "elmer.gravity_on",                 toml::BOOL);
+                _h.getAtPath(this->energy_threshold,          "sparta.energy_threshold",          toml::DOUBLE);
+                _h.getAtPath(this->pressure_threshold,        "sparta.pressure_threshold",        toml::DOUBLE);
+                _h.getAtPath(this->shear_threshold,           "sparta.shear_threshold",           toml::DOUBLE);
+                _h.getAtPath(this->print_intensity,           "elmer.print_intensity",            toml::STRING);
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
@@ -98,6 +93,7 @@ namespace elmer {
                     _h.getDictAtPath(material->contents, "elmer.material." + key.toString());
                     this->materials.push_back(material);
                 }
+                ULOG("# of materials loaded: " + std::to_string(this->materials.size()));
                 
                 _h.getDictKeysAtPath(keys, "elmer.solver");
                 for (auto key : keys) {
@@ -105,11 +101,8 @@ namespace elmer {
                     _h.getDictAtPath(solver->contents, "elmer.solver." + key.toString());
                     this->solvers.push_back(solver);
                 }
+                ULOG("# of solvers loaded: " + std::to_string(this->solvers.size()));
 
-                // _h.getDictAtPath(this->material.contents, "elmer.material");
-                // ULOG(this->constants.getItem("Stefan_Boltzmann").toString());
-                ULOG("# of materials input: " + std::to_string(this->materials.size()));
-                ULOG("# of solvers input: " + std::to_string(this->solvers.size()));
 
                 this->checks();
             }
@@ -124,7 +117,7 @@ namespace elmer {
                 ULOG("making surface file for sparta");
                 std::size_t i;
                 unsigned int j;
-                util::string_t surf_file = this->simulation_directory + SEP + "mesh.surf";
+                util::string_t surf_file = this->simulation_directory.toString() + SEP + "mesh.surf";
                 
                 util::oFile f(surf_file);
                 f << "# Surface element file written by SPARTA fea interface\n\n" << this->nodes.size() << " points\n" << this->boundaries.size() << " triangles\n\nPoints\n\n";
@@ -189,11 +182,21 @@ namespace elmer {
                 ULOG("# of initial conditions and bodies: " + std::to_string(this->initial_conditions.size()));
 
                 // setting the timestep size
-                this->simulation.setItem( "Timestep Sizes",    (std::vector<util::double_t>){ (util::double_t)this->sparta->update->dt });
+                if (!(this->simulation.hasKey("Timestep_Sizes"))) {
+                    ULOG("did not provide \"timestep size\", using Sparta's");
+                    this->simulation.setItem("Timestep_Sizes", (std::vector<util::double_t>){ (util::double_t)this->sparta->update->dt });
+                }
 
                 // setting number of timesteps to run
-                this->simulation.setItem("Timestep intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
-                this->simulation.setItem("Output Intervals",   (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
+                if (!(this->simulation.hasKey("Timestep_intervals"))) {
+                    ULOG("did not provide \"number of timesteps\", using Sparta's");
+                    this->simulation.setItem("Timestep_intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
+                }
+                
+                if (!(this->simulation.hasKey("Output_Intervals"))) {
+                    ULOG("did not provide \"output interval\", using Sparta's");
+                    this->simulation.setItem("Output_Intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
+                }
 
                 // making the sif file
                 this->makeSif();
@@ -205,11 +208,11 @@ namespace elmer {
                 int exit_status = 0;
                 try {
                     if (this->print_intensity == "none")
-                        exit_status = util::quietExec(exe+" "+this->sif+" 2>&1");
+                        exit_status = util::quietExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
                     else if (this->print_intensity == "limited")
-                        exit_status = util::limitedExec(exe+" "+this->sif+" 2>&1", "MAIN: Time:", ":");
+                        exit_status = util::limitedExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1", "MAIN: Time:", ":");
                     else
-                        exit_status = util::verboseExec(exe+" "+this->sif+" 2>&1");
+                        exit_status = util::verboseExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
                 } catch (std::exception& e) {
                     UERR(e.what());
                 }
@@ -222,8 +225,8 @@ namespace elmer {
                 
                 this->loadNodeData();
                 this->updateNodeFile();
-
             }
+
 
             bool shouldRun() {
                 util::int_t i; util::double_t sum;
@@ -235,25 +238,25 @@ namespace elmer {
                 // returns true if above the threshold
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->qw[i]);
-                if (sum > this->energy_threshold)   { this->run_these.push_back("qw"); }
+                if (sum > this->energy_threshold.toDouble())   { this->run_these.push_back("qw"); }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->px[i]);
-                if (sum > this->pressure_threshold) { this->run_these.push_back("px");     }
+                if (sum > this->pressure_threshold.toDouble()) { this->run_these.push_back("px");     }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->py[i]);
-                if (sum > this->pressure_threshold) { this->run_these.push_back("py");     }
+                if (sum > this->pressure_threshold.toDouble()) { this->run_these.push_back("py");     }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->pz[i]);
-                if (sum > this->pressure_threshold) { this->run_these.push_back("pz");     }
+                if (sum > this->pressure_threshold.toDouble()) { this->run_these.push_back("pz");     }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->shx[i]);
-                if (sum > this->shear_threshold)    { this->run_these.push_back("shx");    }
+                if (sum > this->shear_threshold.toDouble())    { this->run_these.push_back("shx");    }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->shy[i]);
-                if (sum > this->shear_threshold)    { this->run_these.push_back("shy");    }
+                if (sum > this->shear_threshold.toDouble())    { this->run_these.push_back("shy");    }
                 sum = 0;
                 for (i = 0; i < this->sparta->nsurf; i++) sum+=std::abs(this->sparta->shz[i]);
-                if (sum > this->shear_threshold)    { this->run_these.push_back("shz");    }
+                if (sum > this->shear_threshold.toDouble())    { this->run_these.push_back("shz");    }
                 
                 return this->run_these.size() > (std::size_t)0;
             }
@@ -296,56 +299,55 @@ namespace elmer {
 
                 struct stat sb;
                 // making sure the elmer exe 
-                if (!(stat(this->exe.c_str(),  &sb) == 0))
+                if (!(stat(this->exe.toString().c_str(),  &sb) == 0))
                     UERR("Illegal fix fea command, exe path does not exist");
                 
                 // making sure the mesh database is complete
                 util::string_t exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
                 for (int i = 0; i < 4; i++) {
-                    if (!(stat((this->meshDB + SEP + "mesh." + exts[i]).c_str(),  &sb) == 0))
-                        UERR("Illegal fix fea command, mesh database incomplete, " + (this->meshDB + SEP + "mesh." + exts[i]) + " does not exist");
+                    if (!(stat((this->meshDB.toString() + SEP + "mesh." + exts[i]).c_str(),  &sb) == 0))
+                        UERR("Illegal fix fea command, mesh database incomplete, " + (this->meshDB.toString() + SEP + "mesh." + exts[i]) + " does not exist");
                 }
 
                 // making sure base temperature is valid
-                if (this->base_temp <= 0.0)
+                if (this->base_temp.toDouble() <= 0.0)
                     UERR("base temperature must be greater than 0");
 
-                if (this->simulation_directory.back() == SEP)
-                    this->simulation_directory = this->simulation_directory.substr(0, this->simulation_directory.length()-1);
-                
-                if (this->print_intensity == toml::noString) this->print_intensity = "none";
-                if (this->print_intensity != "none" && this->print_intensity != "limited" && this->print_intensity != "verbose")
-                    UERR("invalid print intensity for elmer");
+                if (this->simulation_directory.toString().back() == SEP)
+                    this->simulation_directory = this->simulation_directory.toString().substr(0, this->simulation_directory.length()-1);
                 
                 // setting vars from provided values
-                this->node_data_file = this->simulation_directory + SEP + this->simulation.getItem("Output_File").toString();
-                this->simulation.setItem("Output File", this->node_data_file);
+                this->node_data_file = this->simulation_directory.toString() + SEP + this->simulation.getItem("Output_File").toString();
+                this->simulation.setItem("Output_File", this->node_data_file);
+                ULOG("Will load node data from: " + this->node_data_file.toString());
 
-                // this->velocity_solver["equation = "Velocity equation";
-                // this->velocity_solver.Variable = "-dofs 3 Velocity";
-                // this->velocity_solver.id = 3;
-                // this->velocity_solver.name = "Solver " + std::to_string(this->velocity_solver.id);
+                toml::Item_t _temp_solvers = {};
+                for (auto& it : this->solvers) {
+                    _temp_solvers.append(it->getId());
+                }
 
-                // this->equation.Active_Solvers = {1, 2, 3}; // id for each solver of the class
+                for (auto& it : this->equations) {
+                    it->setItem("Active_Solvers",  _temp_solvers); // id for each solver of the class
+                }
                 
-                this->header.setItem("Mesh DB", std::vector<util::string_t>({ this->simulation_directory, "." }));
-                this->header.setItem("Results Directory", this->simulation_directory);
+                this->header.setItem("Mesh_DB", std::vector<util::string_t>({ this->simulation_directory.toString(), "." }));
+                this->header.setItem("Results_Directory", this->simulation_directory);
 
-                if (this->gravity_on) {
+                if (this->gravity_on.toBool()) {
                     util::int_t count = 1;
                     for (auto it : this->materials) {
                         elmer::Section* bf = new elmer::Section("Body Force", it->getId());
                         ULOG("gravity acts as: " + this->constants.getItem("Gravity").toString());
                         if (this->constants.getItem("Gravity")[0].toDouble() != 0.0) {
-                            (*bf).setItem("Stress Bodyforce 1", this->constants.getItem("Gravity")[0].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            (*bf).setItem("Stress_Bodyforce_1", this->constants.getItem("Gravity")[0].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
                             //ULOG("gravity acts (at least in part) in the x-direction");
                         }
                         if (this->constants.getItem("Gravity")[1].toDouble() != 0.0) {
-                            (*bf).setItem("Stress Bodyforce 2", this->constants.getItem("Gravity")[1].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            (*bf).setItem("Stress_Bodyforce_2", this->constants.getItem("Gravity")[1].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
                             //ULOG("gravity acts (at least in part) in the y-direction");
                         }
                         if (this->constants.getItem("Gravity")[2].toDouble() != 0.0) {
-                            (*bf).setItem("Stress Bodyforce 3", this->constants.getItem("Gravity")[2].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
+                            (*bf).setItem("Stress_Bodyforce_3", this->constants.getItem("Gravity")[2].toDouble()*this->constants.getItem("Gravity")[3].toDouble()*(*it).getItem("Density").toDouble());
                             //ULOG("gravity acts (at least in part) in the z-direction");
                         }
                         this->body_forces.push_back(bf);
@@ -364,13 +366,13 @@ namespace elmer {
                 // making sure the mesh database is complete
                 util::string_t exts[4] = {"boundary", "nodes", "header", "elements"}; // list of component file extensions
                 for (int i = 0; i < 4; i++) {
-                    util::copyFile(this->meshDB + SEP + "mesh." + exts[i], this->simulation_directory + SEP + "mesh." + exts[i]);
+                    util::copyFile(this->meshDB.toString() + SEP + "mesh." + exts[i], this->simulation_directory.toString() + SEP + "mesh." + exts[i]);
                 }
 
                 // setting files
-                this->boundary_file = this->simulation_directory + SEP + "mesh.boundary";
-                this->element_file = this->simulation_directory + SEP + "mesh.elements";
-                this->node_file = this->simulation_directory + SEP + "mesh.nodes";
+                this->boundary_file = this->simulation_directory.toString() + SEP + "mesh.boundary";
+                this->element_file  = this->simulation_directory.toString() + SEP + "mesh.elements";
+                this->node_file     = this->simulation_directory.toString() + SEP + "mesh.nodes";
             }
 
             /* ---------------------------------------------------------------------- */
@@ -378,27 +380,21 @@ namespace elmer {
             void setupVectors() {
                 ULOG("setting up vectors");
                 // getting the number of nodes
-                long count = util::countLinesInFile(this->node_file);
-
-                // setting temperature vector to all base temperatures
-                util::string_t str = util::dtos(this->base_temp);
+                long count = util::countLinesInFile(this->node_file.toString());
 
                 std::array<util::double_t, elmer::dimension> temp;
                 temp.fill((util::double_t)0);
 
                 // writing base temperature to file for each node
                 for (long i = 0; i < count; i++) {
-                    this->node_temperature_data.push_back(this->base_temp);
+                    this->node_temperature_data.push_back(this->base_temp.toDouble());
                     this->node_velocity_data.push_back(temp);
                 }
             }
 
             /* ---------------------------------------------------------------------- */
 
-            void makeSif() {
-                util::oFile _buf(this->sif);
-                this->join(_buf);
-            }
+            void makeSif() { util::oFile _buf(this->sif.toString()); this->join(_buf); }
 
             /* ---------------------------------------------------------------------- */
 
@@ -477,8 +473,8 @@ namespace elmer {
                     std::vector<util::double_t> _temp_vec;
                     for (std::size_t i = 0; i < data.size(); i++) {
                         elmer::Section* bc = new elmer::Section("Boundary Condition" ,bc_count++);
-                        (*bc).setItem("Target Boundaries", ids[i]);
-                        (*bc).setItem("Heat Flux", data[i][0]);
+                        (*bc).setItem("Target_Boundaries", ids[i]);
+                        (*bc).setItem("Heat_Flux", data[i][0]);
                         _temp_vec.clear();
                         for (j = 1; j < numDataPoints; j++)
                             _temp_vec.push_back(data[i][j]);
@@ -495,7 +491,7 @@ namespace elmer {
                 */
                 size = this->node_temperature_data.size();
     
-                if (this->gravity_on) _body_force = 1;
+                if (this->gravity_on.toBool()) _body_force = 1;
                 else                  _body_force = toml::noInt;
 
                 const util::int_t arr_size = elmer::dimension+2;
@@ -533,15 +529,15 @@ namespace elmer {
                 
                 for (std::size_t i = 0; i < init_conds.size(); i++) {
                     Section* _body = new Section("Body", i+1);
-                    (*_body).setItem("Initial Condition", (util::int_t)(i+1));
-                    (*_body).setItem("Body Force", _body_force);
+                    (*_body).setItem("Initial_Condition", (util::int_t)(i+1));
+                    (*_body).setItem("Body_Force", _body_force);
                     (*_body).setItem("Material", (util::int_t)init_conds[i][0]);
-                    (*_body).setItem("Target Bodies", ids[i]);
+                    (*_body).setItem("Target_Bodies", ids[i]);
                     Section* _ic = new Section("Initial Condition", i+1);
                     (*_ic).setItem("Temperature", init_conds[i][1]);
-                    (*_ic).setItem("Velocity 1", init_conds[i][2]);
-                    (*_ic).setItem("Velocity 2", init_conds[i][3]);
-                    (*_ic).setItem("Velocity 3", init_conds[i][4]);
+                    (*_ic).setItem("Velocity_1", init_conds[i][2]);
+                    (*_ic).setItem("Velocity_2", init_conds[i][3]);
+                    (*_ic).setItem("Velocity_3", init_conds[i][4]);
 
                     this->initial_conditions.push_back(_ic);
                     this->bodies.push_back(_body);
@@ -555,7 +551,7 @@ namespace elmer {
                 std::size_t i, start;
                 std::vector<util::string_t> lines, split_line;
                 util::string_t cur_key, line;
-                util::readFile(this->node_data_file, lines);
+                util::readFile(this->node_data_file.toString(), lines);
                 start = 0;
                 for (i = 0; i < lines.size(); i++) {
                     util::split(lines[i], split_line, ' ');
@@ -600,7 +596,7 @@ namespace elmer {
 
             void updateNodeFile() {
                 ULOG("updating node file");
-                util::oFile out(this->node_file);
+                util::oFile out(this->node_file.toString());
 
                 for (std::size_t i = 0; i < this->nodes.size(); i++)
                     out << i+1 << " " << -1 << " " << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
@@ -613,7 +609,7 @@ namespace elmer {
                 std::vector<util::string_t> lines, split_line;
                 std::array<util::double_t, 3> data_item;
 
-                util::readFile(node_file, lines);
+                util::readFile(node_file.toString(), lines);
                 util::int_t count = 0;
                 for (util::string_t& it : lines) {
                     count++;
@@ -642,8 +638,8 @@ namespace elmer {
                 std::array<util::int_t, boundary_size> arr;
                 this->boundaries.clear();
 
-                util::readFile(this->boundary_file, lines);
-                util::oFile out(this->boundary_file);
+                util::readFile(this->boundary_file.toString(), lines);
+                util::oFile out(this->boundary_file.toString());
 
                 util::int_t last_id = 0;
                 util::int_t cur_id;
@@ -688,8 +684,8 @@ namespace elmer {
                 std::pair<util::int_t, std::vector<util::int_t>> arr;
                 this->elements.clear();
 
-                util::readFile(this->element_file, _temp_data);
-                util::oFile out(this->element_file);
+                util::readFile(this->element_file.toString(), _temp_data);
+                util::oFile out(this->element_file.toString());
                 //this->elements.resize(_temp_data.size());
 
                 util::int_t last_id = 0;
@@ -763,7 +759,7 @@ namespace elmer {
 
             void dumpNodeTemperaturesBefore() {
                 ULOG("dumping node temperatures before");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_temperature_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_temperature_file_ext.toString();
                 util::oFile out(filename);
 
                 for (util::double_t& it : this->node_temperature_data)
@@ -774,7 +770,7 @@ namespace elmer {
 
             void dumpNodeVelocitiesBefore() {
                 ULOG("dumping node velocities before");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_velocity_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_velocity_file_ext.toString();
                 util::oFile out(filename);
 
                 for (auto& it : this->node_velocity_data)
@@ -785,7 +781,7 @@ namespace elmer {
 
             void dumpNodePositionsBefore() {
                 ULOG("dumping node positions before");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_position_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + ".before_" + this->node_position_file_ext.toString();
                 util::oFile out(filename);
 
                 for (std::size_t i = 0; i < this->nodes.size(); i++) 
@@ -796,7 +792,7 @@ namespace elmer {
 
             void dumpNodeTemperatures() {
                 ULOG("dumping node temperatures");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_temperature_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_temperature_file_ext.toString();
                 util::oFile out(filename);
 
                 for (util::double_t& it : this->node_temperature_data)
@@ -807,7 +803,7 @@ namespace elmer {
 
             void dumpNodePositions() {
                 ULOG("dumping node positions");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_position_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_position_file_ext.toString();
                 util::oFile out(filename);
 
                 for (std::size_t i = 0; i < this->nodes.size(); i++) 
@@ -818,7 +814,7 @@ namespace elmer {
 
             void dumpNodeVelocities() {
                 ULOG("dumping node velocities");
-                util::string_t filename = this->simulation_directory + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_velocity_file_ext;
+                util::string_t filename = this->simulation_directory.toString() + SEP + std::to_string(this->sparta->update->ntimestep) + "." + this->node_velocity_file_ext.toString();
                 util::oFile out(filename);
 
                 for (auto& it : this->node_velocity_data)
