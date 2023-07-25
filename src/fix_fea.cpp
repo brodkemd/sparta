@@ -119,7 +119,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (!(surf->exist))
         this->loadSurf();
     else
-        ULOG("using existing surface");
+        UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
 
     // making sure the surface is the correct type
     if (surf->implicit)
