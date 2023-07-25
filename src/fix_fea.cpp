@@ -115,8 +115,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     END_TRY
 
-    
-
     // makes a surface file if none is provided
     if (!(surf->exist))
         this->loadSurf();
@@ -201,19 +199,19 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     ULOG("modified surface");
 
     // initing vars
-    this->qw = NULL;
-    this->qw_me = NULL;
-    this->px = NULL;
-    this->px_me = NULL;
-    this->py = NULL;
-    this->py_me = NULL;
-    this->pz = NULL;
-    this->pz_me = NULL;
-    this->shx = NULL;
+    this->qw     = NULL;
+    this->qw_me  = NULL;
+    this->px     = NULL;
+    this->px_me  = NULL;
+    this->py     = NULL;
+    this->py_me  = NULL;
+    this->pz     = NULL;
+    this->pz_me  = NULL;
+    this->shx    = NULL;
     this->shx_me = NULL;
-    this->shy = NULL;
+    this->shy    = NULL;
     this->shy_me = NULL;
-    this->shz = NULL;
+    this->shz    = NULL;
     this->shz_me = NULL;
 
     // telling the compute surf etot to run
@@ -270,49 +268,37 @@ void FixFea::init() {
     this->nsurf = surf->nlocal;
 
     // creating the memory
-    memory->create(this->qw, this->nsurf, "fea:qw");
-    memset(this->qw, 0, this->nsurf*sizeof(double));
+    memory->create(this->qw,        this->nsurf, "fea:qw");
+    memory->create(this->qw_me,     this->nsurf, "fea:qw_me");
+    memory->create(this->px,        this->nsurf, "fea:px");
+    memory->create(this->px_me,     this->nsurf, "fea:px_me");
+    memory->create(this->py,        this->nsurf, "fea:py");
+    memory->create(this->py_me,     this->nsurf, "fea:py_me");
+    memory->create(this->pz,        this->nsurf, "fea:px");
+    memory->create(this->pz_me,     this->nsurf, "fea:pz_me");
+    memory->create(this->shx,       this->nsurf, "fea:shx");
+    memory->create(this->shx_me,    this->nsurf, "fea:shx_me");
+    memory->create(this->shy,       this->nsurf, "fea:shy");
+    memory->create(this->shy_me,    this->nsurf, "fea:shz_me");
+    memory->create(this->shz,       this->nsurf, "fea:shz");
+    memory->create(this->shz_me,    this->nsurf, "fea:shz_me");
+    memory->create(this->pselect, 3*surf->nsurf, "fea:pselect"); // needs "surf->nsurf"
 
-    memory->create(this->qw_me, this->nsurf, "fea:qw_me");
-    memset(this->qw_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->px, this->nsurf, "fea:px");
-    memset(this->px, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->px_me, this->nsurf, "fea:px_me");
-    memset(this->px_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->py, this->nsurf, "fea:py");
-    memset(this->py, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->py_me, this->nsurf, "fea:py_me");
-    memset(this->py_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->pz, this->nsurf, "fea:px");
-    memset(this->pz, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->pz_me, this->nsurf, "fea:pz_me");
-    memset(this->pz_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->shx, this->nsurf, "fea:shx");
-    memset(this->shx, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->shx_me, this->nsurf, "fea:shx_me");
-    memset(this->shx_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->shy, this->nsurf, "fea:shy");
-    memset(this->shy, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->shy_me, this->nsurf, "fea:shz_me");
-    memset(this->shy_me, 0, this->nsurf*sizeof(double));
-    
-    memory->create(this->shz, this->nsurf, "fea:shz");
-    memset(this->shz, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->shz_me, this->nsurf, "fea:shz_me");
-    memset(this->shz_me, 0, this->nsurf*sizeof(double));
-
-    memory->create(this->pselect,3*surf->nsurf,"fea:pselect");
+    // setting all of the entries to zero
+    memset(this->qw,      0,   this->nsurf*sizeof(double));
+    memset(this->qw_me,   0,   this->nsurf*sizeof(double));
+    memset(this->px,      0,   this->nsurf*sizeof(double));
+    memset(this->px_me,   0,   this->nsurf*sizeof(double));
+    memset(this->py,      0,   this->nsurf*sizeof(double));
+    memset(this->py_me,   0,   this->nsurf*sizeof(double));
+    memset(this->pz,      0,   this->nsurf*sizeof(double));
+    memset(this->pz_me,   0,   this->nsurf*sizeof(double));
+    memset(this->shx,     0,   this->nsurf*sizeof(double));
+    memset(this->shx_me,  0,   this->nsurf*sizeof(double));
+    memset(this->shy,     0,   this->nsurf*sizeof(double));
+    memset(this->shy_me,  0,   this->nsurf*sizeof(double));
+    memset(this->shz,     0,   this->nsurf*sizeof(double));
+    memset(this->shz_me,  0,   this->nsurf*sizeof(double));
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
     // loading the boundary data
@@ -565,8 +551,6 @@ void FixFea::connect3dPost() {
     int m,value,j,jwhich;
     double *p[3],*q;
     OnePoint3d key;
-
-    // Surf::Tri *tris = surf->tris;
 
     for (int i = 0; i < nsurf; i++) {
         if (surf->tris[i].mask & groupbit) continue;

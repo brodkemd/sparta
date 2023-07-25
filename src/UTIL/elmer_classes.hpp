@@ -61,13 +61,20 @@ namespace elmer {
                 _buf << this->_end << "\n";
             }
 
-            util::int_t getId() {
-                return this->_id;
-            }
+            /**
+             * Return id for this class instance.
+             *
+             * @return integer id for this class instance.
+             */
+            util::int_t getId() { return this->_id; }
 
-            toml::Item_t getItem(toml::Item_t key) {
-                return this->contents.getItem(key);
-            }
+            /**
+             * Sum numbers in a vector.
+             *
+             * @param values Container whose values are summed.
+             * @return sum of `values`, or 0.0 if `values` is empty.
+             */
+            toml::Item_t getItem(toml::Item_t key) { return this->contents.getItem(key); }
 
             bool hasKey(toml::Item_t key) {
                 return this->contents.hasKey(key);
@@ -79,7 +86,6 @@ namespace elmer {
             void clear() { this->contents.clear(); }
             util::int_t length() { return this->contents.length(); }
     };
-} // namespace elmer 
-
+}
 
 #endif

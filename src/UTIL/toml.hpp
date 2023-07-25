@@ -28,7 +28,7 @@ namespace toml {
             util::bool_t _b_src = 0;
 
         public:
-            Item_t() { this->type = NONE; }
+            Item_t()                    { this->type = NONE; }
             Item_t(util::double_t _key) { *this = _key; }
             Item_t(util::int_t _key)    { *this = _key; }
             Item_t(util::string_t _key) { *this = _key; }
@@ -84,7 +84,7 @@ namespace toml {
                         for (std::size_t i = 0; i < this->_list.size(); i++) {
                             if (!(this->_list[i] == other._list[i])) return false;
                         }
-                        break;
+                        return true;
                 }
                 return false; 
             }
