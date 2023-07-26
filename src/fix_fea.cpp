@@ -118,7 +118,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // makes a surface file if none is provided
     if (!(surf->exist)) {
-        if (comm->me == 0) { this->loadSurf(); }
+        this->loadSurf();
     } else
         UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
 
@@ -267,6 +267,7 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
  * allocates memory, loads the initial data, and performs some checks
  */
 void FixFea::init() {
+    fprintf(screen, "%d process here\n", comm->me);
     // number of surface elements
     this->nsurf = surf->nlocal;
 
@@ -354,7 +355,7 @@ void FixFea::end_of_step() {
         this->shz_me[i]+=cqw->array_surf[m][shear_locs[2]];
         m++;
     }
-
+    MPI_Barrier(world);
     // if should run fea
     if (this->runCondition()) {
         ULOG("got true run condition, running fea");
@@ -398,10 +399,10 @@ void FixFea::end_of_step() {
         memset(this->shx_me, 0, this->nsurf*sizeof(double));
         memset(this->shy_me, 0, this->nsurf*sizeof(double));
         memset(this->shz_me, 0, this->nsurf*sizeof(double));
-        MPI_Barrier(world);
     }
     // telling the compute to run on the next timestep
     modify->addstep_compute(update->ntimestep+1);
+    MPI_Barrier(world);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -650,44 +651,30 @@ bigint FixFea::removeParticles() {
  * makes surface using data from fea
 */
 void FixFea::loadSurf() {
-    char* arr[1];
+    char *arr[1], *fname;
+    int length;
+    std::string _temp;
+
     if (comm->me == 0) {
         ULOG("no surface detected, making surface from fea object");
 
         START_TRY
-        arr[0] = (char*)this->fea->makeSpartaSurf().c_str();
-
+        _temp = this->fea->makeSpartaSurf();
+        length = (int)(_temp.size());
+        fname = (char*)_temp.c_str();
         END_TRY
     }
+    MPI_Barrier(world);
+    MPI_Bcast(fname, length, MPI_CHAR, 0, world);
 
-    if (com != 0) {
-        MPI_Send (&length, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
-        MPI_Send (&temp, length+1, MPI_CHAR, 0, 1, MPI_COMM_WORLD);
-    }   
-    else {      
-        int length;
-        for (int i = 1; i < num_procs; i++)
-        {
-            MPI_Recv (&length, 2, MPI_INT, i, 1, MPI_COMM_WORLD, &status[0]);
-            char* rec_buf;
-            rec_buf = (char *) malloc(length+1);
-            MPI_Recv (rec_buf, length+1, MPI_CHAR, i, 1, MPI_COMM_WORLD, &status[1]);
-            out += rec_buf;
-            free(rec_buf);
-        }
-    }
+    arr[0] = fname;
 
-    ULOG("running surface reader on resulting surface file: " + args[0]);
-    std::string msg = "";
-    for (int i = 0; i < 1; i++) {
-        msg += (std::string(arr[i]) + " ");
-    }
+    ULOG("running surface reader on resulting surface file: " + std::string(fname));
+
     ReadSurf reader(sparta);
-    ULOG("running command");
     reader.command(1, arr);
 
     if (!(surf->exist))
         UERR("reading surf was unsuccessful");
-
-    delete [] arr;
+    MPI_Barrier(world);
 }

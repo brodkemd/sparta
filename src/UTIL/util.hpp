@@ -235,14 +235,18 @@ namespace util {
         string_t result, temp;
         result = temp = "";
         std::size_t _start_ind, _end_ind;
+        ULOG("right before popen");
 
         FILE *pipe = popen(command.c_str(), "r");
+        ULOG("right after popen");
         if (pipe == nullptr) {
             throw std::runtime_error("popen() failed!");
         }
         try {
             std::size_t bytesread;
+            ULOG("before read");
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
+                ULOG("in loop");
                 temp    = string_t(buffer.data(), bytesread);
                 //data   += temp;
                 result += temp;
