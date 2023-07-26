@@ -652,15 +652,19 @@ void FixFea::loadSurf() {
     args.clear();
 
     START_TRY
-    std::string file = this->fea->makeSpartaSurf();
-    args.push_back(file);
+    args.push_back(this->fea->makeSpartaSurf());
 
     END_TRY
 
     char** arr;
     util::vecToArr(args, arr);
 
-    ULOG("running surface reader on resulting surface file");
+    ULOG("running surface reader on resulting surface file: " + args[0]);
+    std::string msg = "";
+    for (int i = 0; i < 1; i++) {
+        msg += (std::string(arr[i]) + " ");
+    }
+    ULOG(msg);
     ReadSurf reader(sparta);
     reader.command(1, arr);
 

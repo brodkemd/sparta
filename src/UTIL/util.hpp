@@ -278,7 +278,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int_t vecToArr(std::vector<string_t> _vec, char**& _arr) {
+    int_t vecToArr(std::vector<string_t>& _vec, char**& _arr) {
         const int_t _size = _vec.size();
         _arr = new char*[_size];
         for (int_t i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();

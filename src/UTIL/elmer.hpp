@@ -219,9 +219,6 @@ namespace elmer {
                 // if the command did not succeed
                 if (exit_status)
                     UERR("check elmer output");
-                UERR("DONE");
-                // else
-                //     util::printToFile(command_result.output, 0);
                 
                 this->loadNodeData();
                 this->updateNodeFile();
@@ -321,7 +318,7 @@ namespace elmer {
                 this->simulation.setItem("Output_File", this->node_data_file);
                 ULOG("Will load node data from: " + this->node_data_file.toString());
 
-                toml::Item_t _temp_solvers = {};
+                toml::Item_t _temp_solvers = std::vector<toml::Item_t>({});
                 for (auto& it : this->solvers) {
                     _temp_solvers.append(it->getId());
                 }

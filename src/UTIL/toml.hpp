@@ -17,6 +17,29 @@ namespace toml {
     /* ---------------------------------------------------------------------- */
     enum{NONE,INT,DOUBLE,STRING,BOOL,LIST};
 
+    util::string_t getTypeName(util::int_t _type) {
+        switch (_type) {
+            case NONE:
+                return "None";
+            
+            case INT:
+                return "Int";
+            
+            case DOUBLE:
+                return "Double";
+            
+            case STRING:
+                return "String";
+            
+            case BOOL:
+                return "Bool";
+
+            case LIST:
+                return "List";
+        }
+        return "Invalid";
+    }
+
     class Item_t {
         private:
             int type = NONE;
@@ -411,7 +434,7 @@ namespace toml {
             
                 this->_setVar(out, _var);
                 if (_var.getType() != _type)
-                    TERR("Invalid type");
+                    TERR("Invalid type \"" + getTypeName(_var.getType()) + "\"");
 
                 Py_DECREF(out);
             }
@@ -419,9 +442,8 @@ namespace toml {
 
             void getDictAtPath(OrderedDict_t& _d, util::string_t _path) {
                 cur_path = _path;
-                this->pArgs = PyTuple_New(2);
+                this->pArgs = PyTuple_New(1);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-                PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)(true)));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
 
@@ -443,9 +465,8 @@ namespace toml {
             void getDictKeysAtPath(std::vector<Item_t>& _d, util::string_t _path) {
                 cur_path = _path;
                 _d.clear();
-                this->pArgs = PyTuple_New(2);
+                this->pArgs = PyTuple_New(1);
                 PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(_path.c_str()));
-                PyTuple_SetItem(pArgs, 1, PyBool_FromLong((long)(true)));
                 PyObject* out = PyObject_CallObject(this->get_at, pArgs);
                 this->_err();
 
@@ -480,13 +501,13 @@ namespace toml {
             void _setVar(PyObject*& _in, Item_t& _out) {
                 if (PyUnicode_Check(_in)) {
                     _out = _PyUnicode_AsString(_in);
+                } else if (PyBool_Check(_in)) { // bool must be before int
+                    if (PyObject_IsTrue(_in)) _out = true;
+                    else _out = false;
                 } else if (PyLong_Check(_in)) {
                     _out = PyLong_AsLong(_in);
                 } else if (PyFloat_Check(_in)) {
                     _out = PyFloat_AsDouble(_in);
-                } else if (PyBool_Check(_in)) {
-                    if (PyObject_IsTrue(_in)) _out = true;
-                    else _out = false;
                 } else if (PyList_Check(_in)) {
                     _out = std::vector<Item_t>({});
 
@@ -500,200 +521,7 @@ namespace toml {
                         }
                     }
                 } else { TERR("got invalid type"); }
-            }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(util::double_t& _var, PyObject *_src, util::string_t _path) {
-            //     if (Py_IsNone(_src)) {
-            //         _var = noDouble;
-            //         return;
-            //     }
-
-            //     if (!(PyFloat_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be float");
-            //     _var = PyFloat_AsDouble(_src);
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(util::string_t& _var, PyObject *_src, util::string_t _path) {
-            //     if (Py_IsNone(_src)) {
-            //         _var = noString;
-            //         return;
-            //     }
-
-            //     if (!(PyUnicode_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be string");
-            //     _var = _PyUnicode_AsString(_src);
-            // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(int& _var, PyObject *_src, util::string_t _path) {
-            //     if (Py_IsNone(_src)) {
-            //         _var = noInt;
-            //         return;
-            //     }
-
-            //     if (!(PyLong_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be int");
-            //     _var = PyLong_AsLong(_src);
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(util::int_t& _var, PyObject *_src, util::string_t _path) {
-            //     if (Py_IsNone(_src)) {
-            //         _var = noInt;
-            //         return;
-            //     }
-
-            //     if (!(PyLong_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be int");
-            //     _var = PyLong_AsLong(_src);
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(util::bool_t& _var, PyObject *_src, util::string_t _path) {
-            //     if (Py_IsNone(_src)) {
-            //         _var = noBool;
-            //         return;
-            //     }
-
-            //     if (!(PyBool_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be bool");
-                
-            //     if (PyObject_IsTrue(_src))
-            //         _var = true;
-            //     else
-            //         _var = false;
-            // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVarOr(util::double_t& _var, util::double_t& _or, PyObject *_src, util::string_t _path) {
-            // //     if (Py_IsNone(_src)) {
-            // //         _var = &_or;
-            // //         return;
-            // //     }
-
-            // //     if (!(PyFloat_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be float");
-            // //     _var = PyFloat_AsDouble(_src);
-            // // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVarOr(util::string_t& _var, PyObject *_src, util::string_t _path) {
-            // //     if (Py_IsNone(_src)) {
-            // //         _var = noString;
-            // //         return;
-            // //     }
-
-            // //     if (!(PyUnicode_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be string");
-            // //     _var = _PyUnicode_AsString(_src);
-            // // }
-
-            // // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVarOr(int& _var, PyObject *_src, util::string_t _path) {
-            // //     if (Py_IsNone(_src)) {
-            // //         _var = noInt;
-            // //         return;
-            // //     }
-
-            // //     if (!(PyLong_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be int");
-            // //     _var = PyLong_AsLong(_src);
-            // // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVarOr(util::int_t& _var, PyObject *_src, util::string_t _path) {
-            // //     if (Py_IsNone(_src)) {
-            // //         _var = noInt;
-            // //         return;
-            // //     }
-
-            // //     if (!(PyLong_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be int");
-            // //     _var = PyLong_AsLong(_src);
-            // // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVarOr(util::bool_t& _var, PyObject *_src, util::string_t _path) {
-            // //     if (Py_IsNone(_src)) {
-            // //         _var = noBool;
-            // //         return;
-            // //     }
-
-            // //     if (!(PyBool_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be bool");
-                
-            // //     if (PyObject_IsTrue(_src))
-            // //         _var = true;
-            // //     else
-            // //         _var = false;
-            // // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // template<typename T>
-            // void _list(std::vector<T>& _var, PyObject *_src, util::string_t _path) {
-            //     _var.clear();
-            //     T _temp;
-            //     for (util::int_t i = 0; i < PyList_Size(_src); i++) {
-            //         _handleVar(_temp, PyList_GetItem(_src, i), _path + "[" + std::to_string(i) + "]");
-            //         _var.push_back(_temp);
-            //     }
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(std::vector<util::string_t>& _var, PyObject *_src, util::string_t _path) {
-            //     if (!(PyList_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be array of strings");
-
-            //     _list(_var, _src, _path);
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(std::vector<util::double_t>& _var, PyObject *_src, util::string_t _path) {
-            //     if (!(PyList_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be array of floats");
-                
-            //     _list(_var, _src, _path);
-            // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(std::vector<util::int_t>& _var, PyObject *_src, util::string_t _path) {
-            //     if (!(PyList_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be array of ints");
-                
-            //     _list(_var, _src, _path);
-            // }
-
-            // // /* ---------------------------------------------------------------------- */
-
-            // // void _handleVar(std::vector<long>& _var, PyObject *_src, util::string_t _path) {
-            // //     if (!(PyList_Check(_src)))
-            // //         UERR(_path + " is not the correct type, must be array of ints");
-            // //     _list(_var, _src, _path);
-            // // }
-
-            // /* ---------------------------------------------------------------------- */
-
-            // void _handleVar(std::vector<util::bool_t>& _var, PyObject *_src, util::string_t _path) {
-            //     if (!(PyList_Check(_src)))
-            //         UERR(_path + " is not the correct type, must be array of ints");
-            //     _list(_var, _src, _path);
-            // }            
+            }     
     };
 }
 

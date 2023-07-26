@@ -43,3 +43,7 @@ By coupling Sparta with Elmer it is now possible to:
 <div align="center">
 <img src="Diagram.png" style="width:80%;height:auto;"></img>
 </div>
+
+---
+# Features
+
