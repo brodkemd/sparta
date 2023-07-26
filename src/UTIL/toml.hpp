@@ -7,6 +7,10 @@
 #define TERR(_msg) UERR(_msg + ", while handling key: " + toml::cur_path)
 #define TLOG(_msg) ULOG(_msg + ", handling key: " + toml::cur_path)
 
+namespace elmer{
+    class Section;
+}
+
 namespace toml {
     const util::double_t noDouble       = std::numeric_limits<util::double_t>::min();
     const util::int_t noInt             = std::numeric_limits<util::int_t>::min();
@@ -348,25 +352,31 @@ namespace toml {
         return util::vecToArr(_temp, _arr);
     }
 
+    template<typename T>
+    class Dict_t {
+        protected:
+            std::vector<T> keys, vals;
 
-    class OrderedDict_t {
-        private:
-            std::vector<Item_t> keys, vals;
+            virtual util::string_t keyToString(T key) {
+                Item_t _temp = key;
+                return _temp.toString();
+            }
+        
         public:
-            OrderedDict_t() { keys.clear(); vals.clear(); }
+            Dict_t() { this->keys.clear(); this->vals.clear(); }
 
-            Item_t getItem(Item_t key) {
+            virtual T getKey(T key) {
                 for (std::size_t  i = 0; i < this->keys.size(); i++) {
                     if (keys[i] == key) return vals.at(i);
                 }
-                UERR(key.toString() + " is not a valid key");
+                UERR(this->keyToString(key) + " is not a valid key");
                 return vals.at(0);
             }
 
-            void setItem(Item_t key, Item_t val) {
+            virtual void setKey(T key, T val) {
                 for (std::size_t  i = 0; i < this->keys.size(); i++) {
                     if (keys[i] == key) {
-                        vals[i] == val;
+                        vals[i] = val;
                         return;
                     }
                 }
@@ -374,7 +384,27 @@ namespace toml {
                 vals.push_back(val);
             }
 
-            util::bool_t hasKey(Item_t key) { return util::find(this->keys, key) != util::npos; }
+            virtual util::bool_t hasKey(T key) { return util::find(this->keys, key) != util::npos; }
+
+            virtual void removeKey(T key) {
+                std::size_t i;
+                for (i = 0; i < this->keys.size(); i++) {
+                    if (keys[i] == key) {
+                        break;
+                    }
+                }
+                this->keys.erase(this->keys.begin() + i);
+                this->vals.erase(this->vals.begin() + i);
+            }
+
+            void clear() { this->keys.clear(); this->vals.clear(); }
+            util::int_t length() { return (util::int_t)this->vals.size(); }
+            
+    };
+
+    class OrderedDict_t : public Dict_t<Item_t> {
+        public:
+            OrderedDict_t() : Dict_t() {}
 
             Item_t getKeys() {
                 Item_t to_return = this->keys;
@@ -384,10 +414,7 @@ namespace toml {
             Item_t getValues() {
                 Item_t to_return = this->vals;
                 return to_return;
-            }
-
-            void clear() { this->keys.clear(); this->vals.clear(); }
-            util::int_t length() { return (util::int_t)this->vals.size(); }
+            }            
     };
 
     class handler {
@@ -439,6 +466,9 @@ namespace toml {
                 Py_DECREF(out);
             }
 
+            template<typename T> // for elmer::section class
+            void getDictAtPath(T& _s, util::string_t _path) { getDictAtPath(_s.contents, _path); }
+
 
             void getDictAtPath(OrderedDict_t& _d, util::string_t _path) {
                 cur_path = _path;
@@ -458,7 +488,7 @@ namespace toml {
                     cur_path = (_path + "." + _key.toString());
                     
                     this->_setVar(value, _value);
-                    _d.setItem(_key, _value);
+                    _d.setKey(_key, _value);
                 }
             }
 

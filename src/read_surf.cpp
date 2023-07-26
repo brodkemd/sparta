@@ -112,13 +112,15 @@ void ReadSurf::command(int narg, char **arg)
   // multiproc = 0/1 = single or multiple files
   // files may list Points or not
   // store surfs as distributed or all
-
+  error->message(FLERR, "Before read");
   if (!multiproc) read_single(file);
   else read_multiple(file);
+  error->message(FLERR, "after read");
 
   delete [] file;
 
   MPI_Barrier(world);
+  error->message(FLERR, "after barrier");
   double time2 = MPI_Wtime();
 
   // -----------------------
@@ -132,6 +134,7 @@ void ReadSurf::command(int narg, char **arg)
   // process command-line args
   // geometry transformations, group, type, etc
 
+  error->message(FLERR, "process args");
   process_args(1,narg,arg);
 
   // write out new surf file if requested
@@ -178,7 +181,7 @@ void ReadSurf::command(int narg, char **arg)
   // -----------------------
 
   // sort particles
-
+error->message(FLERR, "particles");
   if (particle->exist) particle->sort();
 
   // make list of surf elements I own
@@ -195,7 +198,7 @@ void ReadSurf::command(int narg, char **arg)
       if (cells[icell].nsplit > 1)
         grid->combine_split_cell_particles(icell,1);
   }
-
+error->message(FLERR, "grid clear surf");
   grid->clear_surf();
 
   MPI_Barrier(world);
@@ -215,7 +218,7 @@ void ReadSurf::command(int narg, char **arg)
   else surf->check_point_near_surf_3d();
 
   // re-setup grid ghosts and neighbors
-
+error->message(FLERR, "grid mods");
   grid->setup_owned();
   grid->acquire_ghosts();
   grid->reset_neighbors();
@@ -238,7 +241,7 @@ void ReadSurf::command(int narg, char **arg)
   // remove particles in any cell that is now INSIDE or has new surfs
   // reassign particles in split cells to sub cell owner
   // compress particles if any flagged for deletion
-
+  error->message(FLERR, "deleting");
   bigint ndeleted;
   if (particle->exist) {
     Grid::ChildCell *cells = grid->cells;
@@ -348,7 +351,7 @@ void ReadSurf::command(int narg, char **arg)
 void ReadSurf::read_single(char *file)
 {
   // surf counts before new read
-
+  error->message(FLERR, "reading file");
   nsurf_total_old = surf->nsurf;
   if (distributed) nsurf_old = surf->nown;
   else nsurf_old = surf->nlocal;
@@ -360,12 +363,12 @@ void ReadSurf::read_single(char *file)
   filecomm = world;
   me_file = me;
   nprocs_file = nprocs;
-
+  error->message(FLERR, "Before read");
   if (distributed) read_file(file,MINE);
   else read_file(file,LOCAL);
-
+error->message(FLERR, "after read");
   // surf counts, stats, error check
-
+error->message(FLERR, "surf counts");
   surf_counts();
 }
 
@@ -765,7 +768,7 @@ void ReadSurf::read_file(char *file, int storeflag)
   // open file
 
   if (filereader) open(file);
-
+error->message(FLERR, "in read file");
   // read header
 
   pts = NULL;
@@ -785,19 +788,22 @@ void ReadSurf::read_file(char *file, int storeflag)
     surf->nown = surf->maxown = nnew;
     surf->grow_own(maxown_old);
   }
+  error->message(FLERR, "before parse keyword");
 
   // read and store data from Points section
 
   parse_keyword(1);
-
+error->message(FLERR, "parse keyword");
   if (strcmp(keyword,"Points") == 0) {
     if (npoint_file == 0)
       error->all(FLERR,"Read_surf file has no points keyword");
+    error->message(FLERR, "reading points");
     read_points();
+    error->message(FLERR, "done reading points");
     parse_keyword(0);
   } else if (npoint_file)
     error->one(FLERR,"Read_surf file has no Points section");
-
+error->message(FLERR, "after first if");
   // read and store data from Lines or Triangles section
 
   if (dim == 2) {
@@ -811,11 +817,11 @@ void ReadSurf::read_file(char *file, int storeflag)
   }
 
   // can now free Points
-
+  error->message(FLERR, "mem free");
   if (npoint_file) memory->sfree(pts);
 
   // close file
-
+error->message(FLERR, "Before close");
   if (filereader) {
     if (compressed) pclose(fp);
     else fclose(fp);

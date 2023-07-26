@@ -34,7 +34,7 @@ namespace elmer {
             std::vector<util::double_t> node_temperature_data;
             std::vector<std::array<util::int_t, elmer::boundary_size>> boundaries;
             // array format: x, y, z
-            std::vector<std::array<util::double_t, elmer::dimension>>  nodes, node_velocity_data;
+            std::vector<std::array<util::double_t, elmer::dimension>> nodes, node_velocity_data, node_displacements;
             std::vector<std::pair<util::int_t, std::vector<util::int_t>>> elements;
             toml::Item_t name, exe, sif, meshDB, node_data_file, simulation_directory, boundary_file, element_file, node_file, node_temperature_file_ext, node_position_file_ext, node_velocity_file_ext, print_intensity, gravity_on, base_temp, energy_threshold, pressure_threshold, shear_threshold;
 
@@ -82,15 +82,15 @@ namespace elmer {
 
                 // each elmer section sets its own variables, so passing it the data structure
                 // this->header.set(_h);
-                _h.getDictAtPath(this->simulation.contents, "elmer.simulation");
-                _h.getDictAtPath(this->constants.contents, "elmer.constants");
+                _h.getDictAtPath(this->simulation, "elmer.simulation");
+                _h.getDictAtPath(this->constants, "elmer.constants");
 
                 std::vector<toml::Item_t> keys;
 
                 _h.getDictKeysAtPath(keys, "elmer.material");
                 for (auto key : keys) {
                     Section* material = new Section("Material", std::stoi(key.toString()));
-                    _h.getDictAtPath(material->contents, "elmer.material." + key.toString());
+                    _h.getDictAtPath(*material, "elmer.material." + key.toString());
                     this->materials.push_back(material);
                 }
                 ULOG("# of materials loaded: " + std::to_string(this->materials.size()));
@@ -98,7 +98,7 @@ namespace elmer {
                 _h.getDictKeysAtPath(keys, "elmer.solver");
                 for (auto key : keys) {
                     Section* solver = new Section("Solver", std::stoi(key.toString()));
-                    _h.getDictAtPath(solver->contents, "elmer.solver." + key.toString());
+                    _h.getDictAtPath(*solver, "elmer.solver." + key.toString());
                     this->solvers.push_back(solver);
                 }
                 ULOG("# of solvers loaded: " + std::to_string(this->solvers.size()));
@@ -170,8 +170,27 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
             void getNodePointAtIndex(util::int_t _index, util::int_t _boundary_index, double(&_point)[3]) {
-                for (std::size_t j = 0; j < elmer::dimension; j++)
-                    _point[j] = this->nodes[this->boundaries[_index][_boundary_index]-1][j];
+                double before, after;
+                bool got_no_difference = false;
+                std::size_t j;
+                for (j = 0; j < elmer::dimension; j++) {
+                    before = _point[j];
+                    after = before + this->node_displacements[this->boundaries[_index][_boundary_index]-1][j];
+                    if (before == after && this->node_displacements[this->boundaries[_index][_boundary_index]-1][j] != 0.0) {
+                        got_no_difference = true;
+                        break;
+                    }
+                }
+
+                if (got_no_difference) {
+                    ULOG("did not update node element: " + std::to_string(_boundary_index+1) + ", remembering displacement");
+                } else {
+                    for (j = 0; j < elmer::dimension; j++) {
+                        _point[j] += this->node_displacements[this->boundaries[_index][_boundary_index]-1][j];
+                        this->nodes[this->boundaries[_index][_boundary_index]-1][j]              = _point[j];
+                        this->node_displacements[this->boundaries[_index][_boundary_index]-1][j] = 0.0;
+                    }
+                }
             }
 
             /* ---------------------------------------------------------------------- */
@@ -182,23 +201,30 @@ namespace elmer {
                 ULOG("# of initial conditions and bodies: " + std::to_string(this->initial_conditions.size()));
 
                 // setting the timestep size
+                bool has_timestep_sizes = true;
                 if (!(this->simulation.hasKey("Timestep_Sizes"))) {
+                    has_timestep_sizes = false;
                     ULOG("did not provide \"timestep size\", using Sparta's");
                     this->simulation.setItem("Timestep_Sizes", (std::vector<util::double_t>){ (util::double_t)this->sparta->update->dt });
                 }
 
                 // setting number of timesteps to run
+                bool has_timestep_intervals = true;
                 if (!(this->simulation.hasKey("Timestep_intervals"))) {
+                    has_timestep_intervals = false;
                     ULOG("did not provide \"number of timesteps\", using Sparta's");
                     this->simulation.setItem("Timestep_intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
                 }
                 
+                bool has_output_intervals = true;
                 if (!(this->simulation.hasKey("Output_Intervals"))) {
+                    has_output_intervals = false;
                     ULOG("did not provide \"output interval\", using Sparta's");
                     this->simulation.setItem("Output_Intervals", (std::vector<util::int_t>){ (util::int_t)this->sparta->run_every });
                 }
 
                 // making the sif file
+                ULOG("Making sif file for elmer");
                 this->makeSif();
 
                 ULOG("running");
@@ -219,6 +245,15 @@ namespace elmer {
                 // if the command did not succeed
                 if (exit_status)
                     UERR("check elmer output");
+                
+                if (!(has_timestep_sizes))
+                    this->simulation.removeKey("Timestep_Sizes");
+                
+                if (!(has_timestep_intervals))
+                    this->simulation.removeKey("Timestep_intervals");
+                
+                if (!(has_output_intervals))
+                    this->simulation.removeKey("Output_Intervals");
                 
                 this->loadNodeData();
                 this->updateNodeFile();
@@ -314,8 +349,8 @@ namespace elmer {
                     this->simulation_directory = this->simulation_directory.toString().substr(0, this->simulation_directory.length()-1);
                 
                 // setting vars from provided values
-                this->node_data_file = this->simulation_directory.toString() + SEP + this->simulation.getItem("Output_File").toString();
-                this->simulation.setItem("Output_File", this->node_data_file);
+                this->node_data_file = this->simulation.getItem("Output_File").toString();
+                // this->simulation.setItem("Output_File", this->node_data_file);
                 ULOG("Will load node data from: " + this->node_data_file.toString());
 
                 toml::Item_t _temp_solvers = std::vector<toml::Item_t>({});
@@ -323,9 +358,12 @@ namespace elmer {
                     _temp_solvers.append(it->getId());
                 }
 
-                for (auto& it : this->equations) {
-                    it->setItem("Active_Solvers",  _temp_solvers); // id for each solver of the class
-                }
+                // ULOG("# equations: " + std::to_string(this->equations.size()));
+                // UERR("done");
+                Section* eqn = new Section("Equation", 1);
+                eqn->setItem("Active_Solvers",  _temp_solvers); // id for each solver of the class
+                this->equations.push_back(eqn);
+
                 
                 this->header.setItem("Mesh_DB", std::vector<util::string_t>({ this->simulation_directory.toString(), "." }));
                 this->header.setItem("Results_Directory", this->simulation_directory);
@@ -391,7 +429,14 @@ namespace elmer {
 
             /* ---------------------------------------------------------------------- */
 
-            void makeSif() { util::oFile _buf(this->sif.toString()); this->join(_buf); }
+            void makeSif() {
+                util::oFile _buf(this->sif.toString());
+                _buf << "! File created: " << util::getTime() << "\n";
+                _buf << "! File made by process: " << util::_me << "\n";
+                _buf << "\n";
+                _buf << "Check Keywords warn\n";
+                this->join(_buf);
+            }
 
             /* ---------------------------------------------------------------------- */
 
@@ -528,6 +573,7 @@ namespace elmer {
                     Section* _body = new Section("Body", i+1);
                     (*_body).setItem("Initial_Condition", (util::int_t)(i+1));
                     (*_body).setItem("Body_Force", _body_force);
+                    (*_body).setItem("Equation", (util::int_t)1);
                     (*_body).setItem("Material", (util::int_t)init_conds[i][0]);
                     (*_body).setItem("Target_Bodies", ids[i]);
                     Section* _ic = new Section("Initial Condition", i+1);
@@ -549,10 +595,36 @@ namespace elmer {
                 std::vector<util::string_t> lines, split_line;
                 util::string_t cur_key, line;
                 util::readFile(this->node_data_file.toString(), lines);
+                toml::Dict_t<util::int_t> permutation_table;
                 start = 0;
                 for (i = 0; i < lines.size(); i++) {
+                    util::trim(lines[i]);
                     util::split(lines[i], split_line, ' ');
                     if (split_line[0] == (util::string_t)"Time:") start = i;
+                    if (split_line[0] == (util::string_t)"Perm:") {
+                        if (split_line[1] == "use") {
+                            ULOG("Got empty permutation table at line: " + std::to_string(i));
+                            continue;
+                        } else {
+
+                            util::split(lines[i-2], split_line, ' ');
+                            if (split_line[0] != (util::string_t)"Time:")
+                                UERR("got another permutation table from data file at line: " + std::to_string(i) + ", this is not currently support");
+                            
+                            ULOG("Loading permutation table at line (will overwrite existing): " + std::to_string(i+1));
+                            permutation_table.clear();
+
+                            for (i = i + 1; i < lines.size(); i++) {
+                                util::trim(lines[i]);
+                                util::split(lines[i], split_line, ' ');
+                                if (split_line.size() < (std::size_t)2) {
+                                    i--;
+                                    break;
+                                }
+                                permutation_table.setKey(std::stoi(split_line[0]), std::stoi(split_line[1]));
+                            }
+                        }
+                    }
                 }
 
                 util::int_t cur_index = 0;
@@ -562,25 +634,26 @@ namespace elmer {
                     util::split(line, split_line, ' ');
                     if (lines[i][0] == ' ' && split_line.size() == 1) {
                         if (cur_key == (util::string_t)"temperature") {
-                            this->node_temperature_data[cur_index] = std::stod(line);
+                            this->node_temperature_data[permutation_table.getKey(cur_index)] = std::stod(line);
                         } else if (cur_key == (util::string_t)"displacement 1") {
-                            this->nodes[cur_index][0] += std::stod(line);
+                            this->node_displacements[permutation_table.getKey(cur_index)][0] += std::stod(line);
                         } else if (cur_key == (util::string_t)"displacement 2") {
-                            this->nodes[cur_index][1] += std::stod(line);
+                            this->node_displacements[permutation_table.getKey(cur_index)][1] += std::stod(line);
                         } else if (cur_key == (util::string_t)"displacement 3") {
-                            this->nodes[cur_index][2] += std::stod(line);
+                            this->node_displacements[permutation_table.getKey(cur_index)][2] += std::stod(line);
                         } else if (cur_key == (util::string_t)"velocity 1") {
-                            this->node_velocity_data[cur_index][0] = std::stod(line);
+                            this->node_velocity_data[permutation_table.getKey(cur_index)][0] = std::stod(line);
                         } else if (cur_key == (util::string_t)"velocity 2") {
-                            this->node_velocity_data[cur_index][1] = std::stod(line);
+                            this->node_velocity_data[permutation_table.getKey(cur_index)][1] = std::stod(line);
                         } else if (cur_key == (util::string_t)"velocity 3") {
-                            this->node_velocity_data[cur_index][2] = std::stod(line);
+                            this->node_velocity_data[permutation_table.getKey(cur_index)][2] = std::stod(line);
                         } else
-                            UERR("got unknown key in data file: " + cur_key);
+                            UERR("got unknown key in data file with name: " + cur_key);
                         cur_index++;
-                    } else if ("Perm:" == split_line[0]) {
+                    } else if ((util::string_t)"Perm:" == split_line[0]) {
                         if (cur_index > 0) {
-                            if ((std::size_t)cur_index != this->nodes.size()) UERR("did not get all indicies while loading data");
+                            if ((std::size_t)cur_index != this->nodes.size())
+                                UERR("did not get all indicies while loading \"" + cur_key + "\" from data");
                         }
                         cur_index = 0;
                         cur_key = lines[i-1];
@@ -605,7 +678,10 @@ namespace elmer {
                 ULOG("loading nodes");
                 std::vector<util::string_t> lines, split_line;
                 std::array<util::double_t, 3> data_item;
-
+                
+                this->nodes.clear();
+                this->node_displacements.clear();
+                ULOG("Loading raw data");
                 util::readFile(node_file.toString(), lines);
                 util::int_t count = 0;
                 for (util::string_t& it : lines) {
@@ -624,6 +700,8 @@ namespace elmer {
 
                     data_item = { std::stod(split_line[2]), std::stod(split_line[3]), std::stod(split_line[4]) };
                     this->nodes.push_back(data_item);
+                    data_item.fill(0.0);
+                    this->node_displacements.push_back(data_item);
                 }
             }
 
@@ -635,7 +713,9 @@ namespace elmer {
                 std::array<util::int_t, boundary_size> arr;
                 this->boundaries.clear();
 
+                ULOG("Loading raw data");
                 util::readFile(this->boundary_file.toString(), lines);
+                ULOG("Itemizing boundary");
                 util::oFile out(this->boundary_file.toString());
 
                 util::int_t last_id = 0;
@@ -681,7 +761,9 @@ namespace elmer {
                 std::pair<util::int_t, std::vector<util::int_t>> arr;
                 this->elements.clear();
 
+                ULOG("Loading raw data");
                 util::readFile(this->element_file.toString(), _temp_data);
+                ULOG("Itemizing elements");
                 util::oFile out(this->element_file.toString());
                 //this->elements.resize(_temp_data.size());
 

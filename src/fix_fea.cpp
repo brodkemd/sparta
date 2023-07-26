@@ -107,18 +107,19 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->nevery = temp_run_every.toInt();
     this->connectflag = temp_connectflag.toBool();
 
-    // letting fea handle its variable setting
-    this->fea->set(s);
-    
     // sets up elmer
-    this->fea->setup();
+    if (comm->me == 0) {
+        // letting fea handle its variable setting
+        this->fea->set(s);
+        this->fea->setup();
+    }
 
     END_TRY
 
     // makes a surface file if none is provided
-    if (!(surf->exist))
-        this->loadSurf();
-    else
+    if (!(surf->exist)) {
+        if (comm->me == 0) { this->loadSurf(); }
+    } else
         UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
 
     // making sure the surface is the correct type
@@ -219,6 +220,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // deleting no longer needed var
     delete [] arr;
+
+    MPI_Barrier(world);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -370,7 +373,7 @@ void FixFea::end_of_step() {
             // wrapping in try to catch if exception is,
             // fea throws exceptions if it encounters an error
             START_TRY
-            this->fea->dumpBefore();
+            // this->fea->dumpBefore();
 
             // checks to see if elmer should be run
             if (this->fea->shouldRun()) {
@@ -647,25 +650,40 @@ bigint FixFea::removeParticles() {
  * makes surface using data from fea
 */
 void FixFea::loadSurf() {
-    ULOG("no surface detected, making surface from fea object");
-    std::vector<std::string> args;
-    args.clear();
+    char* arr[1];
+    if (comm->me == 0) {
+        ULOG("no surface detected, making surface from fea object");
 
-    START_TRY
-    args.push_back(this->fea->makeSpartaSurf());
+        START_TRY
+        arr[0] = (char*)this->fea->makeSpartaSurf().c_str();
 
-    END_TRY
+        END_TRY
+    }
 
-    char** arr;
-    util::vecToArr(args, arr);
+    if (com != 0) {
+        MPI_Send (&length, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+        MPI_Send (&temp, length+1, MPI_CHAR, 0, 1, MPI_COMM_WORLD);
+    }   
+    else {      
+        int length;
+        for (int i = 1; i < num_procs; i++)
+        {
+            MPI_Recv (&length, 2, MPI_INT, i, 1, MPI_COMM_WORLD, &status[0]);
+            char* rec_buf;
+            rec_buf = (char *) malloc(length+1);
+            MPI_Recv (rec_buf, length+1, MPI_CHAR, i, 1, MPI_COMM_WORLD, &status[1]);
+            out += rec_buf;
+            free(rec_buf);
+        }
+    }
 
     ULOG("running surface reader on resulting surface file: " + args[0]);
     std::string msg = "";
     for (int i = 0; i < 1; i++) {
         msg += (std::string(arr[i]) + " ");
     }
-    ULOG(msg);
     ReadSurf reader(sparta);
+    ULOG("running command");
     reader.command(1, arr);
 
     if (!(surf->exist))

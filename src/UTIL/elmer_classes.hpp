@@ -26,9 +26,10 @@ namespace elmer {
             util::string_t _end = "End";
             util::int_t _id;
             util::bool_t _include_count;
+            toml::OrderedDict_t contents;
 
         public:
-            toml::OrderedDict_t contents;
+            
             Section() {}
             Section(util::string_t name, util::int_t id = toml::noInt, util::string_t sep = " = ", util::bool_t include_count = true) {
                 this->_name = name;
@@ -74,18 +75,26 @@ namespace elmer {
              * @param values Container whose values are summed.
              * @return sum of `values`, or 0.0 if `values` is empty.
              */
-            toml::Item_t getItem(toml::Item_t key) { return this->contents.getItem(key); }
+            toml::Item_t getItem(toml::Item_t key) { return this->contents.getKey(key); }
 
             bool hasKey(toml::Item_t key) {
                 return this->contents.hasKey(key);
             }
 
+            void removeKey(toml::Item_t key) {
+                this->contents.removeKey(key);
+            }
+
             void setItem(toml::Item_t key, toml::Item_t val) {
-                this->contents.setItem(key, val);
+                this->contents.setKey(key, val);
             }
             void clear() { this->contents.clear(); }
             util::int_t length() { return this->contents.length(); }
+
+            friend class toml::handler;
     };
+
+
 }
 
 #endif
