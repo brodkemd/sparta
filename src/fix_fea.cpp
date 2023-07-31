@@ -670,7 +670,7 @@ void FixFea::loadSurf() {
     arr[0] = fname;
 
     ULOG("running surface reader on resulting surface file: " + std::string(fname));
-
+    MPI_Barrier(world);
     ReadSurf reader(sparta);
     reader.command(1, arr);
 

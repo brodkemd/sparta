@@ -1,0 +1,6 @@
+Marek:
+
+1. A few slides on the overall goals
+2. One or two slides each on the governing equations solved in each solver and their capabilities in bulleted form. 
+3. After this we should have a couple of slides on flowchart of the methodology, snippets of the code coupling (a couple of them). 
+4. After this a set of slides showing that the coupling is working – a video showing the deformation of the solid and heat transfer in it will be great. You will have to be creative on showing this – if showing heat transfer and deformation is not possible in one video, please make separate videos, one with deformation and the other with heat transfer. If there is any flow, please include that in these videos – please use different legends for flow and deformation, and flow and heat transfer.

@@ -98,6 +98,7 @@ module load gnu/8.3.0 openmpi/4.1.4 anaconda/3.0
 
 # adds path to environment vairable to load the python shared library
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.conda/envs/sparta/lib/
+export PMIX_MCA_gds=hash
 
 # runs with mpi, '--mca mpi_warn_on_fork 0' allows system calls
 mpirun --mca mpi_warn_on_fork 0 SPARTA_COMMAND
