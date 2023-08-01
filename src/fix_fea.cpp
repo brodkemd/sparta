@@ -70,7 +70,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     util::_screen  = &*screen;
     util::_logfile = &*logfile;
-    util::_me = comm->me;
+    util::_me      = comm->me;
 
     ULOG("Setting up fix fea");
 
@@ -92,19 +92,16 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     toml::handler s(arg[2]);
 
     // getting the val at the path (second input) and setting the variable (first input) to that variable
-
     s.getAtPath(temp_run_every,           "sparta.run_every",         toml::INT);
     s.getAtPath(temp_nevery,              "sparta.nevery",            toml::INT);
     s.getAtPath(temp_connectflag,         "sparta.connect",           toml::BOOL);
-    // s.getAtPath(groupID,                  "sparta.groupID",           toml::STRING);
-    //s.getAtPath(mixID,                    "sparta.mixID",             toml::STRING);
     s.getAtPath(customID,                 "sparta.customID",          toml::STRING);
     s.getAtPath(compute_args,             "sparta.compute",           toml::LIST);
     s.getAtPath(surf_collide_args,        "sparta.surf_collide",      toml::LIST);
     s.getAtPath(surf_modify_args,         "sparta.surf_modify",       toml::LIST);  
 
-    this->run_every = temp_run_every.toInt();
-    this->nevery = temp_run_every.toInt();
+    this->run_every   = temp_run_every.toInt();
+    this->nevery      = temp_nevery.toInt();
     this->connectflag = temp_connectflag.toBool();
 
     // sets up elmer
@@ -112,6 +109,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         // letting fea handle its variable setting
         this->fea->set(s);
         this->fea->setup();
+        this->fea->dump();
     }
 
     END_TRY
@@ -165,10 +163,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
             SERR((opts[i] + " is not provided as compute arg").c_str());
     }
 
-    // ULOG("px index = " + std::to_string(force_locs[0]));
-    // ULOG("py index = " + std::to_string(force_locs[1]));
-    // ULOG("pz index = " + std::to_string(force_locs[2]));
-
     // getting the indicies for the shear stresses from the compute
     opts = {"shx", "shy", "shz"};
     for (std::size_t i = 0; i < opts.size(); i++) {
@@ -176,15 +170,13 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         if (shear_locs[i] == util::npos)
             SERR((opts[i] + " is not provided as compute arg").c_str());
     }
-    
-    // ULOG("shx index = " + std::to_string(shear_locs[0]));
-    // ULOG("shy index = " + std::to_string(shear_locs[1]));
-    // ULOG("shz index = " + std::to_string(shear_locs[2]));
 
     // checking to make sure the indicies just detected do not go above the bounds of the compute array
-    std::vector<util::int_t> _temp_indicies = {energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]};
+    std::vector<util::int_t> _temp_indicies = {
+        energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]
+    };
+
     util::int_t max = util::max(_temp_indicies);
-    // ULOG("max = "+std::to_string(max));
     if (max > 0 && max > cqw->size_per_surf_cols)
         SERR("Fix fea compute array is accessed out-of-range");
 
@@ -267,7 +259,6 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
  * allocates memory, loads the initial data, and performs some checks
  */
 void FixFea::init() {
-    fprintf(screen, "%d process here\n", comm->me);
     // number of surface elements
     this->nsurf = surf->nlocal;
 
@@ -331,43 +322,59 @@ void FixFea::end_of_step() {
     util::int_t i, m;
     
     // number of surface elements
-    if (this->nsurf != surf->nlocal)
+    if (this->nsurf != this->surf->nlocal)
         SERR("detected surface change, this is not allowed with fix fea command");
 
     // required to run the compute
-    modify->clearstep_compute();
-    if (!(cqw->invoked_flag & INVOKED_PER_SURF)) {
-        cqw->compute_per_surf();
-        cqw->invoked_flag |= INVOKED_PER_SURF;
+    this->modify->clearstep_compute();
+    if (!(this->cqw->invoked_flag & INVOKED_PER_SURF)) {
+        this->cqw->compute_per_surf();
+        this->cqw->invoked_flag |= INVOKED_PER_SURF;
     }
-    cqw->post_process_surf();
+    this->cqw->post_process_surf();
 
     // adding the heat flux and all of the stress to the running averages
     m = 0;
-    for (i = comm->me; i < nsurf; i += nprocs) {
+    for (i = comm->me; i < this->nsurf; i += this->nprocs) {
         if (!(surf->tris[i].mask & groupbit))
-        this->qw_me[i] +=cqw->array_surf[m][energy_loc];
-        this->px_me[i] +=cqw->array_surf[m][force_locs[0]];
-        this->py_me[i] +=cqw->array_surf[m][force_locs[1]];
-        this->pz_me[i] +=cqw->array_surf[m][force_locs[2]];
-        this->shx_me[i]+=cqw->array_surf[m][shear_locs[0]];
-        this->shy_me[i]+=cqw->array_surf[m][shear_locs[1]];
-        this->shz_me[i]+=cqw->array_surf[m][shear_locs[2]];
+        this->qw_me[i] +=this->cqw->array_surf[m][this->energy_loc];
+        this->px_me[i] +=this->cqw->array_surf[m][this->force_locs[0]];
+        this->py_me[i] +=this->cqw->array_surf[m][this->force_locs[1]];
+        this->pz_me[i] +=this->cqw->array_surf[m][this->force_locs[2]];
+        this->shx_me[i]+=this->cqw->array_surf[m][this->shear_locs[0]];
+        this->shy_me[i]+=this->cqw->array_surf[m][this->shear_locs[1]];
+        this->shz_me[i]+=this->cqw->array_surf[m][this->shear_locs[2]];
         m++;
     }
     MPI_Barrier(world);
+
     // if should run fea
     if (this->runCondition()) {
         ULOG("got true run condition, running fea");
+        double denominator = ((double)this->run_every)/((double)this->nevery);
+        // ULOG("Dividing by: " + std::to_string(denominator));
+        // averaging the values over time range
+        m = 0;
+        for (i = comm->me; i < this->nsurf; i += this->nprocs) {
+            if (!(surf->tris[i].mask & groupbit))
+            this->qw_me[i]  /= denominator;
+            this->px_me[i]  /= denominator;
+            this->py_me[i]  /= denominator;
+            this->pz_me[i]  /= denominator;
+            this->shx_me[i] /= denominator;
+            this->shy_me[i] /= denominator;
+            this->shz_me[i] /= denominator;
+            m++;
+        }
 
         // summing all of the per process arrays into shared arrays
-        MPI_Allreduce(this->qw_me,  this->qw,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->px_me,  this->px,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->py_me,  this->py,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->pz_me,  this->pz,  nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shx_me, this->shx, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shy_me, this->shy, nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shz_me, this->shz, nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->px_me,  this->px,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->py_me,  this->py,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->pz_me,  this->pz,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shx_me, this->shx, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shy_me, this->shy, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        MPI_Allreduce(this->shz_me, this->shz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
 
         // only run on the main process
         if (comm->me == 0) {
@@ -375,9 +382,10 @@ void FixFea::end_of_step() {
             // fea throws exceptions if it encounters an error
             START_TRY
             // this->fea->dumpBefore();
-
             // checks to see if elmer should be run
             if (this->fea->shouldRun()) {
+                this->fea->createInitialConditions();
+                this->fea->createBoundaryConditions();
                 // runs the fea solver
                 this->fea->run();
 
@@ -466,6 +474,7 @@ void FixFea::updateSurf() {
         this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
     }
+    //this->fea->checkUpdatedAllBoundaryNodes();
     
     // connects the surfs, makes it water tight
     if (this->connectflag && this->groupbit != 1) this->connect3dPost();
@@ -651,8 +660,8 @@ bigint FixFea::removeParticles() {
  * makes surface using data from fea
 */
 void FixFea::loadSurf() {
-    char *arr[1], *fname;
-    int length;
+    char *arr[1], *fname = (char*)"";
+    int length = 0;
     std::string _temp;
 
     if (comm->me == 0) {

@@ -7,12 +7,6 @@
 #include <iomanip>
 #include <string>
 
-// #include <stdio.h>
-// #include <execinfo.h>
-// #include <signal.h>
-// #include <stdlib.h>
-// #include <unistd.h>
-
 #include "float.h"
 
 /* ---------------------------------------------------------------------- */
@@ -32,22 +26,7 @@ namespace util {
     typedef double double_t;
     typedef std::string string_t;
     typedef bool bool_t;
-
-    // void handler(int sig) {
-    //     void *array[10];
-    //     size_t size;
-
-    //     // get void*'s for all entries on the stack
-    //     size = backtrace(array, 10);
-
-    //     // print out all the frames to stderr
-    //     // fprintf(stderr, "Error: signal %d:\n", sig);
-    //     backtrace_symbols_fd(array, size, STDERR_FILENO);
-
-    // }
-
-    // signal(SIGSEGV, handler);   // install our handler
-    
+   
     /* ---------------------------------------------------------------------- */
 
     std::ostringstream makeDoubleConverter() {
@@ -235,18 +214,18 @@ namespace util {
         string_t result, temp;
         result = temp = "";
         std::size_t _start_ind, _end_ind;
-        ULOG("right before popen");
+        // ULOG("right before popen");
 
         FILE *pipe = popen(command.c_str(), "r");
-        ULOG("right after popen");
+        // ULOG("right after popen");
         if (pipe == nullptr) {
             throw std::runtime_error("popen() failed!");
         }
         try {
             std::size_t bytesread;
-            ULOG("before read");
+            // ULOG("before read");
             while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                ULOG("in loop");
+                // ULOG("in loop");
                 temp    = string_t(buffer.data(), bytesread);
                 //data   += temp;
                 result += temp;
