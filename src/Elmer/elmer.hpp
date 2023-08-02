@@ -1,8 +1,8 @@
 #ifndef ELMER_H
 #define ELMER_H
 
-#include "elmer_classes.hpp"
-#include "shell_server_config.h"
+// #include "elmer_classes.hpp"
+#include "server.hpp"
 
 /* ---------------------------------------------------------------------- */
 
@@ -40,6 +40,7 @@ namespace elmer {
     class Elmer {
         private:
             SPARTA_NS::FixFea* sparta;
+            elmer::Server server;
             std::vector<util::double_t> node_temperature_data;
             std::vector<std::array<util::int_t, elmer::boundary_size>> boundaries;
             std::vector<util::bool_t> boundary_node_moved;
@@ -79,7 +80,7 @@ namespace elmer {
         protected:
             void setupDumpDirectory();
             void setupVectors();
-            void makeServerFile()
+            //void makeServerFile();
             void makeSif();
             void loadNodeData();
             void updateNodes();
@@ -107,28 +108,23 @@ namespace elmer {
 
     Elmer::Elmer(SPARTA_NS::FixFea* _sparta) {
         // referencing the calling sparta instance
-        this->sparta         = &*_sparta;
+        this->sparta     = &*_sparta;
+        this->server     = elmer::Server();
 
         // initing class variables
         this->header     = Section("Header", toml::noInt, " ", false);
         this->simulation = Section("Simulation");
         this->constants  = Section("Constants");
 
-        this->equations.clear();    this->materials.clear();
-        this->body_forces.clear();  this->bodies.clear();
-        this->solvers.clear();      this->initial_conditions.clear();
+        this->equations.clear();   this->materials.clear();
+        this->body_forces.clear(); this->bodies.clear();
+        this->solvers.clear();     this->initial_conditions.clear();
         this->boundary_conditions.clear();
-
-        this->makeServerFile();
-        this->waitForServerStart();
-
     }
 
     /* ---------------------------------------------------------------------- */
 
-    Elmer::~Elmer() {
-        // this->makeExitFile();
-    }
+    Elmer::~Elmer() { this->server.end(); }
 
     /* ---------------------------------------------------------------------- */
 
@@ -139,13 +135,15 @@ namespace elmer {
         _h.getAtPath(this->exe,                       "elmer.exe",                        toml::STRING);
         _h.getAtPath(this->sif,                       "elmer.sif",                        toml::STRING);
         _h.getAtPath(this->base_temp,                 "elmer.base_temp",                  toml::DOUBLE);
-        _h.getAtPath(this->shell_server_file,         "shell_server_file",                toml::STRING);
+        //_h.getAtPath(this->shell_server_file,         "shell_server_file",                toml::STRING);
         _h.getAtPath(this->simulation_directory,      "simulation_directory",             toml::STRING);
         _h.getAtPath(this->node_temperature_file_ext, "elmer.node_temperature_file_ext",  toml::STRING);
         _h.getAtPath(this->node_position_file_ext,    "elmer.node_position_file_ext",     toml::STRING);
         _h.getAtPath(this->node_velocity_file_ext,    "elmer.node_velocity_file_ext",     toml::STRING);
         _h.getAtPath(this->gravity_on,                "elmer.gravity_on",                 toml::BOOL);
         _h.getAtPath(this->print_intensity,           "elmer.print_intensity",            toml::STRING);
+
+        this->server.set(_h);
 
         // each elmer section sets its own variables, so passing it the data structure
         _h.getDictAtPath(this->simulation, "elmer.simulation");
@@ -232,10 +230,10 @@ namespace elmer {
 
     /* ---------------------------------------------------------------------- */
 
-    void Elmer::makeServerFile() {
-        util::oFile server_file(this->shell_server_file.toString());
-        server_file << SHELL_SERVER_STRING;
-    }
+    // void Elmer::makeServerFile() {
+    //     util::oFile server_file(this->shell_server_file.toString());
+    //     server_file << SHELL_SERVER_STRING;
+    // }
 
     /* ---------------------------------------------------------------------- */
 
@@ -459,7 +457,6 @@ namespace elmer {
         } else
             ULOG("Using provided \"output interval\"");
 
-        
         // making the sif file
         ULOG("Making sif file for elmer");
         this->makeSif();
@@ -468,22 +465,23 @@ namespace elmer {
 
         // running the command
         // must have " 2>&1" at end to pipe stderr to stdout
-        int exit_status = 0;
-        try {
-            // this->makeRunFile();
-            // this->waitForDoneFile();
-            if (this->print_intensity == "none")
-                exit_status = util::quietExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
-            else if (this->print_intensity == "limited")
-                exit_status = util::limitedExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1", "MAIN: Time:", ":");
-            else
-                exit_status = util::verboseExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
-        } catch (std::exception& e) {
-            UERR(e.what());
-        }
-        // if the command did not succeed
-        if (exit_status)
-            UERR("check elmer output");
+        // int exit_status = 0;
+        // try {
+        // this->makeRunFile();
+        this->server.runCommand(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
+        this->server.waitForDoneFile();
+        // if (this->print_intensity == "none")
+        //     exit_status = util::quietExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
+        // else if (this->print_intensity == "limited")
+        //     exit_status = util::limitedExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1", "MAIN: Time:", ":");
+        // else
+        //     exit_status = util::verboseExec(this->exe.toString() + " " + this->sif.toString() + " 2>&1");
+        // } catch (std::exception& e) {
+        //     UERR(e.what());
+        // }
+        // // if the command did not succeed
+        // if (exit_status)
+        //     UERR("check elmer output");
         
         if (!(has_timestep_sizes))
             this->simulation.removeKey("Timestep_Sizes");
@@ -509,7 +507,10 @@ namespace elmer {
         this->loadElements();
         this->loadNodes();
 
-        boundary_node_moved.resize(this->boundaries.size(), false);
+        this->boundary_node_moved.resize(this->boundaries.size(), false);
+
+        this->server.makeServerFile();
+        this->server.start();
     }
 
     /* ---------------------------------------------------------------------- */

@@ -6,6 +6,7 @@
 #include <vector>
 #include <iomanip>
 #include <string>
+#include <unistd.h>
 
 #include "float.h"
 
@@ -172,106 +173,106 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    /**
-     * Execute system command and get STDOUT result.
-     * Regular system() only gives back exit status, this gives back output as well.
-     * @param command system command to execute
-     * @return  exitstatus
-     * of command. Empty if command failed (or has no output). If you want stderr,
-     * use shell redirection (2&>1).
-     */
-    int_t verboseExec(const string_t &command) {
-        std::array<char, 128> buffer {};
+    // /**
+    //  * Execute system command and get STDOUT result.
+    //  * Regular system() only gives back exit status, this gives back output as well.
+    //  * @param command system command to execute
+    //  * @return  exitstatus
+    //  * of command. Empty if command failed (or has no output). If you want stderr,
+    //  * use shell redirection (2&>1).
+    //  */
+    // int_t verboseExec(const string_t &command) {
+    //     std::array<char, 128> buffer {};
 
-        FILE *pipe = popen(command.c_str(), "r");
-        if (pipe == nullptr) {
-            throw std::runtime_error("popen() failed!");
-        }
-        try {
-            std::size_t bytesread;
-            while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                print(string_t(buffer.data(), bytesread), 0, "");
-            }
-        } catch (...) {
-            pclose(pipe);
-            error("unhandled exception occurred");
-        }
-        return pclose(pipe);
-    }
+    //     FILE *pipe = popen(command.c_str(), "r");
+    //     if (pipe == nullptr) {
+    //         throw std::runtime_error("popen() failed!");
+    //     }
+    //     try {
+    //         std::size_t bytesread;
+    //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
+    //             print(string_t(buffer.data(), bytesread), 0, "");
+    //         }
+    //     } catch (...) {
+    //         pclose(pipe);
+    //         error("unhandled exception occurred");
+    //     }
+    //     return pclose(pipe);
+    // }
 
-    /* ---------------------------------------------------------------------- */
+    // /* ---------------------------------------------------------------------- */
 
-    /**
-     * Execute system command and get STDOUT result.
-     * Regular system() only gives back exit status, this gives back output as well.
-     * @param command system command to execute
-     * @return  exitstatus
-     * of command. Empty if command failed (or has no output). If you want stderr,
-     * use shell redirection (2&>1).
-     */
-    int_t limitedExec(const string_t &command, string_t _start, string_t _end) {
-        std::array<char, 128> buffer {};
-        string_t result, temp;
-        result = temp = "";
-        std::size_t _start_ind, _end_ind;
-        // ULOG("right before popen");
+    // /**
+    //  * Execute system command and get STDOUT result.
+    //  * Regular system() only gives back exit status, this gives back output as well.
+    //  * @param command system command to execute
+    //  * @return  exitstatus
+    //  * of command. Empty if command failed (or has no output). If you want stderr,
+    //  * use shell redirection (2&>1).
+    //  */
+    // int_t limitedExec(const string_t &command, string_t _start, string_t _end) {
+    //     std::array<char, 128> buffer {};
+    //     string_t result, temp;
+    //     result = temp = "";
+    //     std::size_t _start_ind, _end_ind;
+    //     // ULOG("right before popen");
 
-        FILE *pipe = popen(command.c_str(), "r");
-        // ULOG("right after popen");
-        if (pipe == nullptr) {
-            throw std::runtime_error("popen() failed!");
-        }
-        try {
-            std::size_t bytesread;
-            // ULOG("before read");
-            while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                // ULOG("in loop");
-                temp    = string_t(buffer.data(), bytesread);
-                //data   += temp;
-                result += temp;
-                _start_ind = result.find(_start);
-                _end_ind = result.find(_end, _start_ind+_start.length()+1);
-                if (_start_ind != string_t::npos && _end_ind != string_t::npos) {
-                    // printing only the part wanted
-                    ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
-                    result.clear();
-                }
-                printToFile(temp, 0, "");
-            }
-        } catch (...) { pclose(pipe); error("unhandled exception occured"); }
-        return pclose(pipe);
-    }
+    //     FILE *pipe = popen(command.c_str(), "r");
+    //     // ULOG("right after popen");
+    //     if (pipe == nullptr) {
+    //         throw std::runtime_error("popen() failed!");
+    //     }
+    //     try {
+    //         std::size_t bytesread;
+    //         // ULOG("before read");
+    //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
+    //             // ULOG("in loop");
+    //             temp    = string_t(buffer.data(), bytesread);
+    //             //data   += temp;
+    //             result += temp;
+    //             _start_ind = result.find(_start);
+    //             _end_ind = result.find(_end, _start_ind+_start.length()+1);
+    //             if (_start_ind != string_t::npos && _end_ind != string_t::npos) {
+    //                 // printing only the part wanted
+    //                 ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
+    //                 result.clear();
+    //             }
+    //             printToFile(temp, 0, "");
+    //         }
+    //     } catch (...) { pclose(pipe); error("unhandled exception occured"); }
+    //     return pclose(pipe);
+    // }
 
-    /* ---------------------------------------------------------------------- */
+    // /* ---------------------------------------------------------------------- */
 
-    /**
-     * Execute system command and get STDOUT result.
-     * Regular system() only gives back exit status, this gives back output as well.
-     * @param command system command to execute
-     * @return  exitstatus
-     * of command. Empty if command failed (or has no output). If you want stderr,
-     * use shell redirection (2&>1).
-     */
-    int_t quietExec(const string_t &command) {
-        std::array<char, 128> buffer {};
-        string_t result = "";
-        std::size_t bytesread;
+    // /**
+    //  * Execute system command and get STDOUT result.
+    //  * Regular system() only gives back exit status, this gives back output as well.
+    //  * @param command system command to execute
+    //  * @return  exitstatus
+    //  * of command. Empty if command failed (or has no output). If you want stderr,
+    //  * use shell redirection (2&>1).
+    //  */
+    // int_t quietExec(const string_t &command) {
+    //     std::array<char, 128> buffer {};
+    //     string_t result = "";
+    //     std::size_t bytesread;
 
-        FILE *pipe = popen(command.c_str(), "r");
-        if (pipe == nullptr) {
-            throw std::runtime_error("popen() failed!");
-        }
-        try {
-            while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-                result += string_t(buffer.data(), bytesread);
-            }
-        } catch (...) {
-            pclose(pipe);
-            error("unhandled exception occured");
-        }
-        printToFile(result, 0, "");
-        return pclose(pipe);
-    }
+    //     FILE *pipe = popen(command.c_str(), "r");
+    //     if (pipe == nullptr) {
+    //         throw std::runtime_error("popen() failed!");
+    //     }
+    //     try {
+    //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
+    //             result += string_t(buffer.data(), bytesread);
+    //         }
+    //     } catch (...) {
+    //         pclose(pipe);
+    //         error("unhandled exception occured");
+    //     }
+    //     printToFile(result, 0, "");
+    //     return pclose(pipe);
+    // }
 
     /* ---------------------------------------------------------------------- */
 
@@ -288,6 +289,13 @@ namespace util {
         _arr = new char*[_size];
         for (int_t i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
         return _size;
+    }
+
+    /* ---------------------------------------------------------------------- */
+
+    util::bool_t fileExists(util::string_t filename) {
+        std::ifstream infile(filename);
+        return infile.good();
     }
 
     /* ---------------------------------------------------------------------- */

@@ -50,6 +50,7 @@ namespace SPARTA_NS {
             void connect3dPost();
             bool runCondition();
             void loadSurf();
+            void readSurfFile(char* surf_file);
 
             #include "hash_options.h"
 
