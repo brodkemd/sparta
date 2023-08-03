@@ -12,8 +12,6 @@ while [ 1 ]; do
         rm $START_FILE
     fi
     if [ -f $RUN_FILE ]; then
-        echo $RUN_FILE" exists. Waiting"
-        sleep 2
         while IFS= read -r line; do
             eval "$line" && echo $? > $DONE_FILE
             break

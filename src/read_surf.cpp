@@ -89,9 +89,9 @@ void ReadSurf::command(int narg, char **arg)
       file_search(arg[0],file);
       n = strlen(file) + 1;
     }
-    error->message(FLERR, "1");
+    //error->message(FLERR, "1");
     MPI_Bcast(&n,1,MPI_INT,0,world);
-    error->message(FLERR, "2");
+    //error->message(FLERR, "2");
     MPI_Bcast(file,n,MPI_CHAR,0,world);
   } else strcpy(file,arg[0]);
 
@@ -604,8 +604,8 @@ void ReadSurf::header()
       if (fgets(line,MAXLINE,fp) == NULL) n = 0;
       else n = strlen(line) + 1;
     }
-    fprintf(screen, "</> %d process here\n", comm->me);
-    error->message(FLERR, "3");
+    //fprintf(screen, "</> %d process here\n", comm->me);
+    //error->message(FLERR, "3");
     MPI_Bcast(&n,1,MPI_INT,0,filecomm);
 
     // if n = 0 then end-of-file so return with blank line
@@ -616,7 +616,7 @@ void ReadSurf::header()
     }
 
     // bcast line
-    error->message(FLERR, "4");
+    //error->message(FLERR, "4");
     MPI_Bcast(line,n,MPI_CHAR,0,filecomm);
 
     // trim anything from '#' onward
@@ -709,7 +709,7 @@ void ReadSurf::base(char *file)
       if (fgets(line,MAXLINE,fp) == NULL) n = 0;
       else n = strlen(line) + 1;
     }
-    error->message(FLERR, "5");
+    //error->message(FLERR, "5");
     MPI_Bcast(&n,1,MPI_INT,0,world);
 
     // if n = 0 then end-of-file so break
@@ -717,7 +717,7 @@ void ReadSurf::base(char *file)
     if (n == 0) break;
 
     // bcast line
-    error->message(FLERR, "6");
+    //error->message(FLERR, "6");
     MPI_Bcast(line,n,MPI_CHAR,0,world);
 
     // trim anything from '#' onward
@@ -778,7 +778,7 @@ void ReadSurf::read_file(char *file, int storeflag)
 
   pts = NULL;
   header();
-  fprintf(screen, "//> %d process here\n", comm->me);
+  //fprintf(screen, "//> %d process here\n", comm->me);
 
   // for single file & distributed surfs, allocate Surf mylines/mytris now
   // since read lines/tri will store directly into it
@@ -796,9 +796,9 @@ void ReadSurf::read_file(char *file, int storeflag)
   }
 
   // read and store data from Points section
-  fprintf(screen, "=/> %d process here\n", comm->me);
+  //fprintf(screen, "=/> %d process here\n", comm->me);
   parse_keyword(1);
-  fprintf(screen, "=<> %d process here\n", comm->me);
+  //fprintf(screen, "=<> %d process here\n", comm->me);
   
   if (strcmp(keyword,"Points") == 0) {
     if (npoint_file == 0)
@@ -863,12 +863,12 @@ void ReadSurf::read_points()
       }
       m++;
     }
-    error->message(FLERR, "7");
+    //error->message(FLERR, "7");
     MPI_Bcast(&m,1,MPI_INT,0,filecomm);
-    error->message(FLERR, "8");
-    fprintf(screen, "==> %d process here\n", comm->me);
+    //error->message(FLERR, "8");
+    // fprintf(screen, "==> %d process here\n", comm->me);
     MPI_Bcast(buffer,m,MPI_CHAR,0,filecomm);
-    error->message(FLERR, "after 8");
+    //error->message(FLERR, "after 8");
     buf = buffer;
     next = strchr(buf,'\n');
     *next = '\0';
@@ -927,9 +927,9 @@ void ReadSurf::read_lines(int storeflag)
       }
       m++;
     }
-    error->message(FLERR, "9");
+    //error->message(FLERR, "9");
     MPI_Bcast(&m,1,MPI_INT,0,filecomm);
-    error->message(FLERR, "10");
+    //error->message(FLERR, "10");
     MPI_Bcast(buffer,m,MPI_CHAR,0,filecomm);
 
     buf = buffer;
@@ -1060,9 +1060,9 @@ void ReadSurf::read_tris(int storeflag)
       }
       m++;
     }
-    error->message(FLERR, "11");
+    //error->message(FLERR, "11");
     MPI_Bcast(&m,1,MPI_INT,0,filecomm);
-    error->message(FLERR, "12");
+    //error->message(FLERR, "12");
     MPI_Bcast(buffer,m,MPI_CHAR,0,filecomm);
 
     buf = buffer;
@@ -2453,7 +2453,7 @@ void ReadSurf::parse_keyword(int first)
   }
 
   // if eof, set keyword empty and return
-  error->message(FLERR, "13");
+  //error->message(FLERR, "13");
   MPI_Bcast(&eof,1,MPI_INT,0,filecomm);
   if (eof) {
     keyword[0] = '\0';
@@ -2464,9 +2464,9 @@ void ReadSurf::parse_keyword(int first)
 
   int n;
   if (filereader) n = strlen(line) + 1;
-  error->message(FLERR, "14");
+  //error->message(FLERR, "14");
   MPI_Bcast(&n,1,MPI_INT,0,filecomm);
-  error->message(FLERR, "15");
+  //error->message(FLERR, "15");
   MPI_Bcast(line,n,MPI_CHAR,0,filecomm);
 
   // copy non-whitespace portion of line into keyword

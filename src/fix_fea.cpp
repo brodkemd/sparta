@@ -681,7 +681,7 @@ void FixFea::loadSurf() {
     }
     MPI_Barrier(world);
 
-    fprintf(screen, "-> %d process here\n", comm->me);
+    //fprintf(screen, "-> %d process here\n", comm->me);
     MPI_Bcast(fname, length, MPI_CHAR, 0, world);
     arr[0] = fname;
 

@@ -723,6 +723,10 @@ namespace elmer {
             } else {
                 for (j = 0; j < elmer::dimension; j++) {
                     this->nodes[i][j] += this->node_displacements[i][j];
+                    if (nodes[i][j] < this->sparta->domain->boxlo[j] || nodes[i][j] > this->sparta->domain->boxhi[j]) {
+                        this->dump();
+                        UERR("Detected node outside of bounds at index: " + std::to_string(i) + ", dumped data");
+                    }
                     this->node_displacements[i][j] = 0.0;
                 }
             }
