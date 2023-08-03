@@ -3,6 +3,7 @@
 
 // #include "elmer_classes.hpp"
 #include "server.hpp"
+#include "mpi.h"
 
 /* ---------------------------------------------------------------------- */
 
@@ -12,6 +13,10 @@
 #else
     static const char SEP = '/';
 #endif
+
+#define ROOT 0
+#define START_GUARD if (this->me == ROOT) {
+#define END_GUARD }
 
 /* ---------------------------------------------------------------------- */
 
@@ -40,6 +45,9 @@ namespace elmer {
     class Elmer {
         private:
             SPARTA_NS::FixFea* sparta;
+
+            util::int_t me;
+            MPI_Comm world;
             elmer::Server server;
             std::vector<util::double_t> node_temperature_data;
             std::vector<std::array<util::int_t, elmer::boundary_size>> boundaries;
@@ -58,7 +66,7 @@ namespace elmer {
             /* ---------------------------------------------------------------------- */
 
         public:
-            Elmer(SPARTA_NS::FixFea* _sparta);
+            Elmer(SPARTA_NS::FixFea* _sparta, util::int_t _me, MPI_Comm _world);
             ~Elmer();
             void set(toml::handler& _h);
             /**
@@ -106,15 +114,19 @@ namespace elmer {
      * ---------------------------------------------------------------------- *
     */
 
-    Elmer::Elmer(SPARTA_NS::FixFea* _sparta) {
+    Elmer::Elmer(SPARTA_NS::FixFea* _sparta, util::int_t _me, MPI_Comm _world) {
         // referencing the calling sparta instance
         this->sparta     = &*_sparta;
-        this->server     = elmer::Server();
+        this->me         = _me;
+        this->world      = _world;
+        START_GUARD
+            this->server     = elmer::Server();
 
-        // initing class variables
-        this->header     = Section("Header", toml::noInt, " ", false);
-        this->simulation = Section("Simulation");
-        this->constants  = Section("Constants");
+            // initing class variables
+            this->header     = Section("Header", toml::noInt, " ", false);
+            this->simulation = Section("Simulation");
+            this->constants  = Section("Constants");
+        END_GUARD;
 
         this->equations.clear();   this->materials.clear();
         this->body_forces.clear(); this->bodies.clear();
@@ -124,12 +136,18 @@ namespace elmer {
 
     /* ---------------------------------------------------------------------- */
 
-    Elmer::~Elmer() { this->server.end(); }
+    Elmer::~Elmer() {
+        START_GUARD
+        this->server.end();
+        END_GUARD;
+    }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::set(toml::handler& _h) {
+        START_GUARD
         ULOG("setting elmer class parameters");
+        
         // setting needed variables
         _h.getAtPath(this->meshDB,                    "elmer.meshDB",                     toml::STRING);
         _h.getAtPath(this->exe,                       "elmer.exe",                        toml::STRING);
@@ -226,14 +244,8 @@ namespace elmer {
                 this->body_forces.push_back(bf);
             }
         }
+        END_GUARD;
     }
-
-    /* ---------------------------------------------------------------------- */
-
-    // void Elmer::makeServerFile() {
-    //     util::oFile server_file(this->shell_server_file.toString());
-    //     server_file << SHELL_SERVER_STRING;
-    // }
 
     /* ---------------------------------------------------------------------- */
 
@@ -242,10 +254,13 @@ namespace elmer {
      * returns: the name of the surf file
     */
     util::string_t Elmer::makeSpartaSurf() {
+        util::string_t surf_file = "";
+
+        START_GUARD
         ULOG("making surface file for sparta");
         std::size_t i;
         unsigned int j;
-        util::string_t surf_file = this->simulation_directory.toString() + SEP + "mesh.surf";
+        surf_file = this->simulation_directory.toString() + SEP + "mesh.surf";
         
         util::oFile f(surf_file);
         f << "# Surface element file written by SPARTA fea interface\n\n" << this->nodes.size() << " points\n" << this->boundaries.size() << " triangles\n\nPoints\n\n";
@@ -264,6 +279,7 @@ namespace elmer {
                 f << " " << this->boundaries[i][j];
             f << "\n";
         }
+        END_GUARD;
 
         return surf_file;
     }
@@ -271,6 +287,7 @@ namespace elmer {
     /* ---------------------------------------------------------------------- */
 
     void Elmer::averageNodeTemperaturesInto(double*& _temperatures, int _length) {
+        START_GUARD
         // making sure everything is consistent
         if ((std::size_t)_length != this->boundaries.size())
             UERR("boundary data does not match required size, required size " + std::to_string(_length) + ", size " + std::to_string(this->boundaries.size()));
@@ -293,13 +310,18 @@ namespace elmer {
             // computing the average by dividing the sum by the number of points and setting the surface element
             _temperatures[i] = avg/elmer::boundary_size;
         }
+        END_GUARD;
+        MPI_Bcast(_temperatures, _length, MPI_DOUBLE, ROOT, world);
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::getNodePointAtIndex(util::int_t _index, util::int_t _boundary_index, double(&_point)[elmer::dimension]) {
+        START_GUARD
         for (std::size_t j = 0; j < elmer::dimension; j++)
             _point[j] = this->nodes[this->boundaries[_index][_boundary_index]-1][j];
+        END_GUARD;
+        MPI_Bcast(_point, elmer::dimension, MPI_DOUBLE, ROOT, world);
         //this->boundary_node_moved[_boundary_index] = true;
     }
 
@@ -317,6 +339,7 @@ namespace elmer {
     /* ---------------------------------------------------------------------- */
 
     void Elmer::createInitialConditions() {
+        START_GUARD
         ULOG("Creating Initial Conditions");
         this->bodies.clear();
         this->initial_conditions.clear();
@@ -374,11 +397,13 @@ namespace elmer {
             this->bodies.push_back(_body);
         }
         ULOG("# of initial conditions and bodies: " + std::to_string(this->initial_conditions.size()));
+        END_GUARD;
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::createBoundaryConditions() {
+        START_GUARD
         ULOG("Creating Boundary Conditions");
         this->boundary_conditions.clear();
 
@@ -426,11 +451,13 @@ namespace elmer {
             this->boundary_conditions.push_back(bc);
         }
         ULOG("# of boundary conditions: " + std::to_string(this->boundary_conditions.size()));
+        END_GUARD;
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::run() {
+        START_GUARD
         // setting the timestep size
         bool has_timestep_sizes = true;
         if (!(this->simulation.hasKey("Timestep_Sizes"))) {
@@ -496,11 +523,13 @@ namespace elmer {
         //this->checkLoadedNodeData();
         this->updateNodes();
         this->updateNodeFile();
+        END_GUARD;
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::setup() {
+        START_GUARD
         this->setupDumpDirectory();
         this->setupVectors();
         this->loadBoundaries();
@@ -511,23 +540,40 @@ namespace elmer {
 
         this->server.makeServerFile();
         this->server.start();
+        END_GUARD;
     }
 
     /* ---------------------------------------------------------------------- */
 
-    void Elmer::dumpBefore() { 
+    void Elmer::dumpBefore() {
+        START_GUARD
         this->dumpNodePositionsBefore();
         this->dumpNodeTemperaturesBefore(); 
         this->dumpNodeVelocitiesBefore();
+        END_GUARD;
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::dump() {
+        START_GUARD
         this->dumpNodeTemperatures();
         this->dumpNodePositions();
         this->dumpNodeVelocities();
+        END_GUARD;
     }
+
+
+    /*----------------------------------------------
+    
+    
+    Private functions
+
+    
+    -----------------------------------------------*/
+
+
+
 
     /* ---------------------------------------------------------------------- */
 

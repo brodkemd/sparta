@@ -6,6 +6,7 @@
 #include <vector>
 #include <iomanip>
 #include <string>
+#include <cstring>
 #include <unistd.h>
 
 #include "float.h"
@@ -286,8 +287,13 @@ namespace util {
 
     int_t vecToArr(std::vector<string_t>& _vec, char**& _arr) {
         const int_t _size = _vec.size();
+        char* pc;
         _arr = new char*[_size];
-        for (int_t i = 0; i < _size; i++) _arr[i] = (char*)_vec[i].c_str();
+        for (int_t i = 0; i < _size; i++) {
+            pc = new char[_vec[i].size() + 1];
+            std::strcpy(pc, _vec[i].c_str());
+            _arr[i] = pc;
+        }
         return _size;
     }
 

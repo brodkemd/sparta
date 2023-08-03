@@ -419,6 +419,7 @@ namespace toml {
 
     class handler {
         public:
+            handler() {}
             handler(util::string_t _file) {
                 Py_Initialize();
 

@@ -50,6 +50,7 @@ namespace SPARTA_NS {
             void connect3dPost();
             bool runCondition();
             void loadSurf();
+            void processMsg(const char* msg);
             void readSurfFile(char* surf_file);
 
             #include "hash_options.h"
@@ -67,9 +68,8 @@ namespace SPARTA_NS {
             friend class elmer::Elmer;
             class elmer::Elmer* fea;
 
-            bool connectflag;
             long nsurf, *pselect;
-            int run_every, groupbit, nprocs, tindex, dimension, shear_locs[3], force_locs[3], energy_loc;
+            int connectflag, run_every, groupbit, nprocs, tindex, dimension, shear_locs[3], force_locs[3], energy_loc;
             double *qw_me, *qw, *px_me, *px, *py_me, *py, *pz_me, *pz, *shx_me, *shx, *shy_me, *shy, *shz_me, *shz;
     };
 }

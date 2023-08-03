@@ -56,18 +56,22 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP}; // several files
 
 /* ---------------------------------------------------------------------- */
 
+void FixFea::processMsg(const char* msg) {
+    fprintf(screen, "%d : %s\n", comm->me, msg);
+}
+
 /**
  * NOTE: Make sure that units are consistent, if you use si in sparta, make sure you set units
 */
 FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     /** temporary Variables used during construction **/
     char** arr;
-    util::int_t size;
+    char* str = new char[1];
+    int length, size;
     struct stat sb;
-    toml::Item_t customID, temp_run_every, temp_nevery, temp_connectflag;
-    toml::Item_t compute_args, surf_collide_args, surf_modify_args;
+    toml::Item_t customID, temp_run_every, temp_nevery, temp_connectflag, compute_args, surf_collide_args, surf_modify_args;
     // making new fea class
-    this->fea = new elmer::Elmer(this);
+    this->fea = new elmer::Elmer(this, comm->me, world);
 
     util::_screen  = &*screen;
     util::_logfile = &*logfile;
@@ -90,37 +94,42 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     START_TRY
 
     // parsing the file and generating a data structure
-    toml::handler s(arg[2]);
+    if (comm->me == 0) {
+        toml::handler s = toml::handler(arg[2]);
 
-    // getting the val at the path (second input) and setting the variable (first input) to that variable
-    s.getAtPath(temp_run_every,           "sparta.run_every",         toml::INT);
-    s.getAtPath(temp_nevery,              "sparta.nevery",            toml::INT);
-    s.getAtPath(temp_connectflag,         "sparta.connect",           toml::BOOL);
-    s.getAtPath(customID,                 "sparta.customID",          toml::STRING);
-    s.getAtPath(compute_args,             "sparta.compute",           toml::LIST);
-    s.getAtPath(surf_collide_args,        "sparta.surf_collide",      toml::LIST);
-    s.getAtPath(surf_modify_args,         "sparta.surf_modify",       toml::LIST);  
+        // getting the val at the path (second input) and setting the variable (first input) to that variable
+        s.getAtPath(temp_run_every,           "sparta.run_every",         toml::INT);
+        s.getAtPath(temp_nevery,              "sparta.nevery",            toml::INT);
+        s.getAtPath(temp_connectflag,         "sparta.connect",           toml::INT);
+        s.getAtPath(customID,                 "sparta.customID",          toml::STRING);
+        s.getAtPath(compute_args,             "sparta.compute",           toml::LIST);
+        s.getAtPath(surf_collide_args,        "sparta.surf_collide",      toml::LIST);
+        s.getAtPath(surf_modify_args,         "sparta.surf_modify",       toml::LIST);  
 
-    this->run_every   = temp_run_every.toInt();
-    this->nevery      = temp_nevery.toInt();
-    this->connectflag = temp_connectflag.toBool();
+        this->run_every   = temp_run_every.toInt();
+        this->nevery      = temp_nevery.toInt();
+        this->connectflag = temp_connectflag.toInt();
+        this->fea->set(s);
+    }
+    
 
     // sets up elmer
-    if (comm->me == 0) {
-        // letting fea handle its variable setting
-        this->fea->set(s);
-        this->fea->setup();
-        this->fea->dump();
-    }
+    // letting fea handle its variable setting
+    ULOG("before setup");
+    this->fea->setup();
+    this->fea->dump();
+    ULOG("after dump");
 
     END_TRY
     MPI_Barrier(world);
+    MPI_Bcast(&run_every,   1, MPI_INT, 0, world);
+    MPI_Bcast(&nevery,      1, MPI_INT, 0, world);
+    MPI_Bcast(&connectflag, 1, MPI_INT, 0, world);
 
     // makes a surface file if none is provided
     if (!(surf->exist)) {
         this->loadSurf();
-    } else
-        UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
+    } // else UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
 
     if (!grid->exist)
         error->all(FLERR,"Cannot use fix fea before grid is defined");
@@ -132,16 +141,76 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         SERR("Cannot use fix fea with distributed surfs");
     
     // getting the index of the surface variable added
-    this->tindex = surf->add_custom((char*)customID.toString().c_str(),DOUBLE,0);
+    if (comm->me == 0) {
+        length = customID.toString().size();
+        str = new char[length+1];
+        std::strcpy(str, customID.toString().c_str());
+    }
+    MPI_Bcast(&length, 1, MPI_INT, 0, world);
+    MPI_Bcast(str, length+1, MPI_CHAR, 0, world);
+    processMsg(("temperature variable = " + std::string(str)).c_str());
+
+    this->tindex = surf->add_custom(str, DOUBLE, 0);
     ULOG("Add surface variable with name: " + customID.toString());
     
     // adding surf collision model needed
-    size = toml::listToCharArray(surf_collide_args, arr);
+    if (comm->me == 0) {
+        size = toml::listToCharArray(surf_collide_args, arr);
+    }
+    MPI_Barrier(world);
+    ULOG("after list to char array");
+    MPI_Bcast(&size, 1, MPI_INT, 0, world);
+    if (comm->me != 0) {
+        arr = new char*[size];
+    }
+    MPI_Barrier(world);
+    ULOG("after new char array");
+    for (util::int_t i = 0; i < size; i++) {
+        START_TRY
+        if (comm->me == 0)
+            length = surf_collide_args[i].length();
+        END_TRY
+        MPI_Barrier(world);
+        MPI_Bcast(&length, 1, MPI_INT, 0, world);
+        // processMsg(("length = " + std::to_string(length)).c_str());
+        MPI_Bcast(&*arr[i], length+1, MPI_CHAR, 0, world);
+    }
+    MPI_Barrier(world);
+    ULOG("after");
+    util::string_t msg = "";
+    for (int i = 0; i < size; i++){
+        processMsg(std::to_string(i).c_str());
+        MPI_Barrier(world);
+        msg+=(std::string(arr[i]) + " ");
+    }
+    MPI_Barrier(world);
+    processMsg(("collide args = " + msg).c_str());
+    
     this->surf->add_collide(size, arr);
     ULOG("added surface collision model");
+    UERR("done");
 
     // adding compute
-    size = toml::listToCharArray(compute_args, arr);
+    if (comm->me == 0) {
+        size = toml::listToCharArray(compute_args, arr);
+    }
+    MPI_Bcast(&size, 1, MPI_INT, 0, world);
+    if (comm->me != 0) {
+        arr = new char*[size];
+    }
+    for (util::int_t i = 0; i < size; i++) {
+        length = compute_args[i].length();
+        MPI_Bcast(&length, 1, MPI_INT, 0, world);
+        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
+    }
+    MPI_Barrier(world);
+    msg = "";
+    for (int i = 0; i < size; i++){
+        msg+=(std::string(arr[i]) + " ");
+    }
+    MPI_Barrier(world);
+    processMsg(("compute args = " + msg).c_str());
+    
     modify->add_compute(size, arr);
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
@@ -154,36 +223,41 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (cqw->per_surf_flag == 0)
         SERR("Fix fea compute does not compute per-surf info");
 
-    // getting the index in the compute of the energy value
-    energy_loc = util::find(compute_args.toVector(), (toml::Item_t)"etot")-4;
-    if (energy_loc == util::npos)
-        SERR("etot is not provided as compute arg");
-    // ULOG("Energy flux index = " + std::to_string(energy_loc));
-
     // getting the indicies for the pressures (stresses) from the compute
-    std::vector<util::string_t> opts = {"px", "py", "pz"};
-    for (std::size_t i = 0; i < opts.size(); i++) {
-        force_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
-        if (force_locs[i] == util::npos)
-            SERR((opts[i] + " is not provided as compute arg").c_str());
+    if (comm->me == 0) {
+        energy_loc = util::find(compute_args.toVector(), (toml::Item_t)"etot")-4;
+        if (energy_loc == util::npos)
+            SERR("etot is not provided as compute arg");
+
+        std::vector<util::string_t> opts = {"px", "py", "pz"};
+        for (std::size_t i = 0; i < opts.size(); i++) {
+            force_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
+            if (force_locs[i] == util::npos)
+                SERR((opts[i] + " is not provided as compute arg").c_str());
+        }
+
+        // getting the indicies for the shear stresses from the compute
+        opts = {"shx", "shy", "shz"};
+        for (std::size_t i = 0; i < opts.size(); i++) {
+            shear_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
+            if (shear_locs[i] == util::npos)
+                SERR((opts[i] + " is not provided as compute arg").c_str());
+        }
+
+        // checking to make sure the indicies just detected do not go above the bounds of the compute array
+        std::vector<util::int_t> _temp_indicies = {
+            energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]
+        };
+
+        util::int_t max = util::max(_temp_indicies);
+        if (max > 0 && max > cqw->size_per_surf_cols)
+            SERR("Fix fea compute array is accessed out-of-range");
     }
-
-    // getting the indicies for the shear stresses from the compute
-    opts = {"shx", "shy", "shz"};
-    for (std::size_t i = 0; i < opts.size(); i++) {
-        shear_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
-        if (shear_locs[i] == util::npos)
-            SERR((opts[i] + " is not provided as compute arg").c_str());
-    }
-
-    // checking to make sure the indicies just detected do not go above the bounds of the compute array
-    std::vector<util::int_t> _temp_indicies = {
-        energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]
-    };
-
-    util::int_t max = util::max(_temp_indicies);
-    if (max > 0 && max > cqw->size_per_surf_cols)
-        SERR("Fix fea compute array is accessed out-of-range");
+    MPI_Barrier(world);
+    MPI_Bcast(&energy_loc, 1, MPI_INT, 0, world);
+    MPI_Bcast(force_locs,  3, MPI_INT, 0, world);
+    MPI_Bcast(shear_locs,  3, MPI_INT, 0, world);
+    
 
     ULOG("added surf compute with id: " + std::string(modify->compute[icompute]->id));
 
@@ -192,7 +266,24 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     ULOG("running on: " + std::to_string(nprocs) + " processes");
 
     // adding collision by modifying surf
-    size = toml::listToCharArray(surf_modify_args, arr);
+    if (comm->me == 0)
+        size = toml::listToCharArray(surf_modify_args, arr);
+    MPI_Bcast(&size, 1, MPI_INT, 0, world);
+    if (comm->me != 0) {
+        arr = new char*[size];
+    }
+    for (util::int_t i = 0; i < size; i++) {
+        length = surf_modify_args[i].length();
+        MPI_Bcast(&length, 1, MPI_INT, 0, world);
+        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
+    }
+    MPI_Barrier(world);
+    msg = "";
+    for (int i = 0; i < size; i++){
+        msg+=(std::string(arr[i]) + " ");
+    }
+    MPI_Barrier(world);
+    processMsg(("modify args = " + msg).c_str());
     this->surf->modify_params(size, arr);
     ULOG("modified surface");
 
@@ -217,6 +308,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // deleting no longer needed var
     delete [] arr;
+    delete str;
 
     MPI_Barrier(world);
 }
@@ -302,15 +394,14 @@ void FixFea::init() {
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
     // loading the boundary data
-    if (comm->me == 0) {
-        START_TRY
+    START_TRY
 
-        // sets the temperatures of the surface elements
-        this->updateTemperatures();
-        
-        // no need to update surf here
-        END_TRY
-    }
+    // sets the temperatures of the surface elements
+    this->updateTemperatures();
+    
+    // no need to update surf here
+    END_TRY
+
 
     // waits for all processes to get here
     MPI_Barrier(world);
@@ -381,29 +472,31 @@ void FixFea::end_of_step() {
         MPI_Allreduce(this->shy_me, this->shy, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
         MPI_Allreduce(this->shz_me, this->shz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
 
-        // only run on the main process
-        if (comm->me == 0) {
-            // wrapping in try to catch if exception is,
-            // fea throws exceptions if it encounters an error
-            START_TRY
-            // this->fea->dumpBefore();
-            // checks to see if elmer should be run
-            if (this->fea->shouldRun()) {
+        // // only run on the main process
+        // if (comm->me == 0) {
+        // wrapping in try to catch if exception is,
+        // fea throws exceptions if it encounters an error
+        START_TRY
+        // this->fea->dumpBefore();
+        // checks to see if elmer should be run
+        if (this->fea->shouldRun()) {
+            if (comm->me == 0) {
                 this->fea->createInitialConditions();
                 this->fea->createBoundaryConditions();
                 // runs the fea solver
                 this->fea->run();
+            }
 
-                // loading new temperatures and surface points from the fea result
-                this->updateTemperatures();
-                this->updateSurf();
-            } else ULOG("Skipping fea, it did not detect sufficient values");
+            // loading new temperatures and surface points from the fea result
+            this->updateTemperatures();
+            this->updateSurf();
+        } else ULOG("Skipping fea, it did not detect sufficient values");
 
-            // dumps the data obtained from the fea solver
-            this->fea->dump();
-            END_TRY
+        // dumps the data obtained from the fea solver
+        this->fea->dump();
+        END_TRY
 
-        }
+        // }
         // resetting arrays to all zeros
         memset(this->qw_me,  0, this->nsurf*sizeof(double));
         memset(this->px_me,  0, this->nsurf*sizeof(double));
@@ -439,11 +532,17 @@ void FixFea::updateTemperatures() {
     ULOG("updating surface temperatures");
 
     // averages node temperatures on a per surface basis
+    //if (comm->me == 0)
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
+    
+    // MPI_Bcast(tvector, this->nsurf, MPI_DOUBLE, 0, world);
 
     // checking to make sure all values where set to something non zero
-    for (int i = 0; i < this->nsurf; i++) {
-        if (tvector[i] == 0.0) SERR("wall temperature not set correctly");
+    if (comm->me == 0) {
+        for (int i = 0; i < this->nsurf; i++) {
+            if (tvector[i] == 0.0)
+                SERR("wall temperature not set correctly");
+        }
     }
 }
 
@@ -469,29 +568,40 @@ void FixFea::updateSurf() {
     // moving points
     for (i = 0; i < (unsigned)this->nsurf; i++) {
         if (!(surf->tris[i].mask & this->groupbit)) continue;
-
-        this->fea->getNodePointAtIndex(i, 0, surf->tris[i].p1);
+        
+        if (comm->me == 0)
+            this->fea->getNodePointAtIndex(i, 0, surf->tris[i].p1);
         this->pselect[3*i] = 1; // saying the first point of the triangle moved
+        MPI_Bcast(surf->tris[i].p1, 3, MPI_DOUBLE, 0, world);
 
-        this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p2);
+        if (comm->me == 0)
+            this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p2);
         this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
+        MPI_Bcast(surf->tris[i].p2, 3, MPI_DOUBLE, 0, world);
 
-        this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
+        if (comm->me == 0)
+            this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
+        MPI_Bcast(surf->tris[i].p3, 3, MPI_DOUBLE, 0, world);
     }
     //this->fea->checkUpdatedAllBoundaryNodes();
+    MPI_Bcast(this->pselect, 3*this->nsurf*sizeof(int), MPI_INT, 0, world);
     
     // connects the surfs, makes it water tight
     if (this->connectflag && this->groupbit != 1) this->connect3dPost();
 
+    ULOG("tri normal");
     surf->compute_tri_normal(0);
 
+    ULOG("point inside");
     // check that all points are still inside simulation box
     surf->check_point_inside(0);
 
     // assign split cell particles to parent split cell
     // assign surfs to grid cells
+    ULOG("unset neighbors");
     grid->unset_neighbors();
+    ULOG("remove ghosts");
     grid->remove_ghosts();
 
     if (grid->nsplitlocal) {
@@ -502,32 +612,43 @@ void FixFea::updateSurf() {
                 grid->combine_split_cell_particles(icell,1);
         }
     }
-
+    ULOG("clear surf");
     grid->clear_surf();
+    ULOG("surf to grid");
     grid->surf2grid(1,0);
 
     // checks
+    ULOG("near surf");
     surf->check_point_near_surf_3d();
+    ULOG("check water tight");
     surf->check_watertight_3d();
 
     // re-setup owned and ghost cell info
+    ULOG("setup owned");
     grid->setup_owned();
+    ULOG("acquire ghosts");
     grid->acquire_ghosts();
+    ULOG("grid reset neighbors");
     grid->reset_neighbors();
+    ULOG("comm reset neighbors");
     comm->reset_neighbors();
 
     // flag cells and corners as OUTSIDE or INSIDE
+    ULOG("set inout");
     grid->set_inout();
+    ULOG("type check");
     grid->type_check(0);
 
     // remove particles as needed due to surface move
     // set ndeleted for scalar output
+    ULOG("remove particles");
     if (particle->exist) {
         bigint ndeleted = this->removeParticles();
         ULOG("number of particles deleted: " + std::to_string(ndeleted));
     }
 
     // notify all classes that store per-grid data that grid may have changed
+    ULOG("notify change");
     grid->notify_changed();
 }
 
