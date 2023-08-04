@@ -173,7 +173,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         MPI_Barrier(world);
         MPI_Bcast(&length, 1, MPI_INT, 0, world);
         // processMsg(("length = " + std::to_string(length)).c_str());
-        MPI_Bcast(&*arr[i], length+1, MPI_CHAR, 0, world);
+        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
     }
     MPI_Barrier(world);
     ULOG("after");
