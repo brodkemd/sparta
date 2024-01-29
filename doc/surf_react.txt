@@ -40,10 +40,10 @@ args = arguments for that style :l
 
 [Examples:]
 
-surf_react global 0.2 0.15
-surf_react prob air.surf  
-surf_react adsorb gs gs_react.surf nsync 10 surf 1000 6.022e18 O CO
-surf_react adsorb gs/ps gs_react.surf ps_react.surf nsync 1 face 300 3e9 O :pre
+surf_react 1 global 0.2 0.15
+surf_react 1 prob air.surf  
+surf_react 1 adsorb gs gs_react.surf nsync 10 surf 1000 6.022e18 O CO
+surf_react 1 adsorb gs/ps gs_react.surf ps_react.surf nsync 1 face 300 3e9 O :pre
 
 [Description:]
 
@@ -165,9 +165,12 @@ S = Surface :ul
 The style determines how many reaction coefficients are listed as C1,
 C2, etc, and how they are interpreted by SPARTA.
 
-For S = Surface style, there is a single coefficient:
+For S = Surface style, there are two coefficients. The first is
+required and the second is optional and will be set to 0.0 if not
+specified:
 
-C1 = probability that the reaction occurs (0.0 to 1.0) :ul
+C1 = probability that the reaction occurs (0.0 to 1.0)
+C2 = catalytic chemical energy of reaction (optional, positive for exothermic) :ul
 
 :line
 
