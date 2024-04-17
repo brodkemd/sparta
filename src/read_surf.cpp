@@ -1101,6 +1101,7 @@ void ReadSurf::read_tris(int storeflag)
         p1 = input->inumeric(FLERR,strtok(NULL," \t\n\r\f"));
         p2 = input->inumeric(FLERR,strtok(NULL," \t\n\r\f"));
         p3 = input->inumeric(FLERR,strtok(NULL," \t\n\r\f"));
+        
         if (p1 < 1 || p1 > npoint_file || p2 < 1 || p2 > npoint_file ||
             p3 < 1 || p3 > npoint_file || p1 == p2 || p2 == p3)
           error->all(FLERR,"Invalid point index in Triangles section");

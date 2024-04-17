@@ -17,7 +17,6 @@
    of Cincinnati
 ------------------------------------------------------------------------- */
 
-#include "fix_fea.h"
 
 #include "error.h"
 #include "surf.h"
@@ -35,10 +34,10 @@
 #include "input.h"
 #include "read_surf.h"
 
-#include "Elmer/elmer.hpp"
+#include "Elmer/elmer.h"
+#include "fix_fea.h"
 
 using namespace SPARTA_NS;
-
 
 // DO NOT CHANGE THESE
 enum{INT,DOUBLE};                     // several files
@@ -51,13 +50,41 @@ enum{UNKNOWN,OUTSIDE,INSIDE,OVERLAP}; // several files
 
 // THESE CAN CHANGE BUT BE VERY CAREFUL
 #define SERR(_msg) error->all(FLERR, _msg)
+#define ROOT 0
+#define START_GUARD if (this->comm->me == ROOT) {
+#define END_GUARD } MPI_Barrier(world);
 #define START_TRY try {
 #define END_TRY } catch (std::string _msg) { error->allNoFileAndLine(_msg.c_str()); } catch (std::exception& e) { error->all(FLERR, e.what()); } catch (...) { error->all(FLERR, "unidentified error occurred"); }
 
 /* ---------------------------------------------------------------------- */
 
-void FixFea::processMsg(const char* msg) {
-    fprintf(screen, "%d : %s\n", comm->me, msg);
+// for debugging, prints to terminal from all processes with the process identifier
+void FixFea::processMsg(const char* msg) { fprintf(screen, "%d : %s\n", comm->me, msg); }
+
+/*
+Sends a char* to all other processes from the root process
+*/
+void FixFea::BcastString(char*& str) {
+    int length;
+    if (this->comm->me == ROOT) length = strlen(str)+1;
+    MPI_Barrier(world);
+
+    MPI_Bcast(&length,  1, MPI_INT,  ROOT, world);
+    if (comm->me != ROOT) str = new char[length];
+    MPI_Bcast(str, length, MPI_CHAR, ROOT, world);
+    str[length] = '\0';
+}
+
+/*
+Sends a char* to all other processes from the root process, then
+splits the string at spaces into a char** (safer to do this then send
+a char** directly)
+
+returns: length of the char** 
+*/
+int FixFea::BcastStringIntoArrOfStrings(char* str, char**& arr) {
+    BcastString(str);
+    return util::splitStringInto(str, arr);
 }
 
 /**
@@ -67,17 +94,27 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     /** temporary Variables used during construction **/
     char** arr;
     char* str = new char[1];
-    int length, size;
+    int length;
     struct stat sb;
-    toml::Item_t customID, temp_run_every, temp_nevery, temp_connectflag, compute_args, surf_collide_args, surf_modify_args;
-    // making new fea class
-    this->fea = new elmer::Elmer(this, comm->me, world);
+    char *compute_args, *surf_collide_args, *surf_modify_args, *customID;
 
+    // setting pointers for nice printing
     util::_screen  = &*screen;
     util::_logfile = &*logfile;
     util::_me      = comm->me;
 
-    ULOG("Setting up fix fea");
+    // setting pointers so elmer can grab them
+    this->dt       = &this->update->dt;
+    this->timestep = &this->update->ntimestep;
+    this->boxlo    = &this->domain->boxlo[0];
+    this->boxhi    = &this->domain->boxhi[0];
+
+    // got bored and made this
+    START_GUARD
+    // fprintf(screen, "-----------------------------\n                        ________\n ||         ||        // \n ||         ||       //\n ||         ||      ||\n ||         ||      ||\n ||         ||      ||\n ||         ||      ||\n  \\\\       //        \\\\\n   \\\\_____//          \\\\________\n\nFix fea by the ARL and the University of Cincinnati\n\n-----------------------------\n");
+    END_GUARD
+
+    // ULOG("Setting up fix fea");
 
     // checking if the number of args is correct
     if (narg > 3)
@@ -87,49 +124,53 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // making sure provided config path exists
     if (!(stat(arg[2],  &sb) == 0))
-        SERR("Illegal fix fea command, toml config file does not exist");
-    ULOG("Loading config from: " + std::string(arg[2]));
+        SERR("Illegal fix fea command, python file does not exist");
+
+    START_GUARD
+    fprintf(screen, "  Loading config from: %s\n", arg[2]);
+    fprintf(screen, "  Running: Python %s\n", Py_GetVersion());
+    
+    // ULOG("Loading config from: " + std::string(arg[2]));
+    END_GUARD
 
     // wrapping in a try catch defined above
+    START_GUARD
     START_TRY
 
-    // parsing the file and generating a data structure
-    if (comm->me == 0) {
-        toml::handler s = toml::handler(arg[2]);
+    // reading python file
+    this->python = new python::handler(arg[2]);
 
-        // getting the val at the path (second input) and setting the variable (first input) to that variable
-        s.getAtPath(temp_run_every,           "sparta.run_every",         toml::INT);
-        s.getAtPath(temp_nevery,              "sparta.nevery",            toml::INT);
-        s.getAtPath(temp_connectflag,         "sparta.connect",           toml::INT);
-        s.getAtPath(customID,                 "sparta.customID",          toml::STRING);
-        s.getAtPath(compute_args,             "sparta.compute",           toml::LIST);
-        s.getAtPath(surf_collide_args,        "sparta.surf_collide",      toml::LIST);
-        s.getAtPath(surf_modify_args,         "sparta.surf_modify",       toml::LIST);  
+    // getting the sparta configuration from the python object
+    PyObject* sparta_config = this->python->loadObjectWithSetupFromMain("sparta");
+    python::loadAttrFromObjectAndConvert(sparta_config, "run_every",    this->run_every);
+    python::loadAttrFromObjectAndConvert(sparta_config, "nevery",       this->nevery);
+    python::loadAttrFromObjectAndConvert(sparta_config, "connect",      this->connectflag);
+    python::loadAttrFromObjectAndConvert(sparta_config, "customID",     customID);
+    python::loadAttrFromObjectAndConvert(sparta_config, "compute",      compute_args);
+    python::loadAttrFromObjectAndConvert(sparta_config, "surf_collide", surf_collide_args);
+    python::loadAttrFromObjectAndConvert(sparta_config, "surf_modify",  surf_modify_args);
 
-        this->run_every   = temp_run_every.toInt();
-        this->nevery      = temp_nevery.toInt();
-        this->connectflag = temp_connectflag.toInt();
-        this->fea->set(s);
-    }
-    
+    // making new fea class
+    this->fea = new elmer::Elmer(this, comm->me, this->python);
 
-    // sets up elmer
-    // letting fea handle its variable setting
-    ULOG("before setup");
-    this->fea->setup();
+    // dumping data on first timestep (like sparta does)
     this->fea->dump();
-    ULOG("after dump");
+
+    this->should_update_surf = this->fea->shouldUpdateSurf();
 
     END_TRY
-    MPI_Barrier(world);
-    MPI_Bcast(&run_every,   1, MPI_INT, 0, world);
-    MPI_Bcast(&nevery,      1, MPI_INT, 0, world);
-    MPI_Bcast(&connectflag, 1, MPI_INT, 0, world);
+    END_GUARD
+
+    MPI_Bcast(&this->run_every,   1, MPI_INT, ROOT, world);
+    MPI_Bcast(&this->nevery,      1, MPI_INT, ROOT, world);
+    MPI_Bcast(&this->connectflag, 1, MPI_INT, ROOT, world);
+    MPI_Bcast(&this->should_update_surf, 1, MPI_INT, ROOT, world);
 
     // makes a surface file if none is provided
-    if (!(surf->exist)) {
+    if (!(surf->exist))
         this->loadSurf();
-    } // else UERR("can not use fix fea with existing surface, no guarantee it will match with the elmer body");
+    else 
+        SERR("can not use fix fea with existing surface, let sparta generate the surface, it ensures correct indicies");
 
     if (!grid->exist)
         error->all(FLERR,"Cannot use fix fea before grid is defined");
@@ -140,78 +181,37 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (surf->distributed)
         SERR("Cannot use fix fea with distributed surfs");
     
-    // getting the index of the surface variable added
-    if (comm->me == 0) {
-        length = customID.toString().size();
-        str = new char[length+1];
-        std::strcpy(str, customID.toString().c_str());
-    }
-    MPI_Bcast(&length, 1, MPI_INT, 0, world);
-    MPI_Bcast(str, length+1, MPI_CHAR, 0, world);
-    processMsg(("temperature variable = " + std::string(str)).c_str());
+    START_GUARD
+    fprintf(screen, "Setting up FEA\n");
+    END_GUARD
+    
+    // adding custom variable and getting the index of the surface variable added
+    BcastString(customID);
+    this->tindex = surf->add_custom(customID, DOUBLE, 0);
+    START_GUARD
+    fprintf(screen, "  Added surface variable:                %s\n", customID);
+    END_GUARD
 
-    this->tindex = surf->add_custom(str, DOUBLE, 0);
-    ULOG("Add surface variable with name: " + customID.toString());
-    
-    // adding surf collision model needed
-    if (comm->me == 0) {
-        size = toml::listToCharArray(surf_collide_args, arr);
-    }
-    MPI_Barrier(world);
-    ULOG("after list to char array");
-    MPI_Bcast(&size, 1, MPI_INT, 0, world);
-    if (comm->me != 0) {
-        arr = new char*[size];
-    }
-    MPI_Barrier(world);
-    ULOG("after new char array");
-    for (util::int_t i = 0; i < size; i++) {
-        START_TRY
-        if (comm->me == 0)
-            length = surf_collide_args[i].length();
-        END_TRY
-        MPI_Barrier(world);
-        MPI_Bcast(&length, 1, MPI_INT, 0, world);
-        // processMsg(("length = " + std::to_string(length)).c_str());
-        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
-    }
-    MPI_Barrier(world);
-    ULOG("after");
-    util::string_t msg = "";
-    for (int i = 0; i < size; i++){
-        processMsg(std::to_string(i).c_str());
-        MPI_Barrier(world);
-        msg+=(std::string(arr[i]) + " ");
-    }
-    MPI_Barrier(world);
-    processMsg(("collide args = " + msg).c_str());
-    
-    this->surf->add_collide(size, arr);
-    ULOG("added surface collision model");
-    UERR("done");
+    // adding surface collision model
+    length = BcastStringIntoArrOfStrings(surf_collide_args, arr);
+    this->surf->add_collide(length, arr);
+    START_GUARD
+    fprintf(screen, "  Added surface collision model with id: %s\n", arr[0]);
+    END_GUARD
+
+    // modifying surface
+    length = BcastStringIntoArrOfStrings(surf_modify_args, arr);
+    this->surf->modify_params(length, arr);
+    START_GUARD
+    fprintf(screen, "  Modified surface with id:              %s\n", arr[0]);
+    END_GUARD
 
     // adding compute
-    if (comm->me == 0) {
-        size = toml::listToCharArray(compute_args, arr);
-    }
-    MPI_Bcast(&size, 1, MPI_INT, 0, world);
-    if (comm->me != 0) {
-        arr = new char*[size];
-    }
-    for (util::int_t i = 0; i < size; i++) {
-        length = compute_args[i].length();
-        MPI_Bcast(&length, 1, MPI_INT, 0, world);
-        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
-    }
-    MPI_Barrier(world);
-    msg = "";
-    for (int i = 0; i < size; i++){
-        msg+=(std::string(arr[i]) + " ");
-    }
-    MPI_Barrier(world);
-    processMsg(("compute args = " + msg).c_str());
-    
-    modify->add_compute(size, arr);
+    length = BcastStringIntoArrOfStrings(compute_args, arr);
+    modify->add_compute(length, arr);
+    START_GUARD
+    fprintf(screen, "  Added compute id:                      %s\n", arr[0]);
+    END_GUARD
 
     // the compute index, it was just made so it is the number of computes minus 1 because it is an index
     int icompute = modify->ncompute - 1;
@@ -224,68 +224,67 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         SERR("Fix fea compute does not compute per-surf info");
 
     // getting the indicies for the pressures (stresses) from the compute
-    if (comm->me == 0) {
-        energy_loc = util::find(compute_args.toVector(), (toml::Item_t)"etot")-4;
-        if (energy_loc == util::npos)
-            SERR("etot is not provided as compute arg");
+    START_GUARD
+    energy_loc = util::findStringInArr((char*)"etot", arr, length);
+    if (energy_loc == length)
+        SERR("etot is not provided as compute arg");
+    
+    std::vector<long> _temp_indicies;
+    if (this->should_update_surf) {
+        force_locs[0] = util::findStringInArr((char*)"px", arr, length);
+        if (force_locs[0] == length)
+            SERR("px is not provided as compute arg");
 
-        std::vector<util::string_t> opts = {"px", "py", "pz"};
-        for (std::size_t i = 0; i < opts.size(); i++) {
-            force_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
-            if (force_locs[i] == util::npos)
-                SERR((opts[i] + " is not provided as compute arg").c_str());
-        }
+        force_locs[1] = util::findStringInArr((char*)"py", arr, length);
+        if (force_locs[1] == length)
+            SERR("py is not provided as compute arg");
 
+        force_locs[2] = util::findStringInArr((char*)"pz", arr, length);
+        if (force_locs[2] == length)
+            SERR("pz is not provided as compute arg");
+        
         // getting the indicies for the shear stresses from the compute
-        opts = {"shx", "shy", "shz"};
-        for (std::size_t i = 0; i < opts.size(); i++) {
-            shear_locs[i] = util::find(compute_args.toVector(), (toml::Item_t)opts[i])-4;
-            if (shear_locs[i] == util::npos)
-                SERR((opts[i] + " is not provided as compute arg").c_str());
-        }
+        shear_locs[0] = util::findStringInArr((char*)"shx", arr, length);
+        if (shear_locs[0] == length)
+            SERR("shx is not provided as compute arg");
+
+        shear_locs[1] = util::findStringInArr((char*)"shy", arr, length);
+        if (shear_locs[1] == length)
+            SERR("shy is not provided as compute arg");
+
+        shear_locs[2] = util::findStringInArr((char*)"shz", arr, length);
+        if (shear_locs[2] == length)
+            SERR("shz is not provided as compute arg");
 
         // checking to make sure the indicies just detected do not go above the bounds of the compute array
-        std::vector<util::int_t> _temp_indicies = {
-            energy_loc, force_locs[0], force_locs[1], force_locs[2], shear_locs[0], shear_locs[1], shear_locs[2]
+        // they are shifted by 4 because that is the number of args before they are specified
+        _temp_indicies = {
+            energy_loc-4, force_locs[0]-4, force_locs[1]-4, force_locs[2]-4, shear_locs[0]-4, shear_locs[1]-4, shear_locs[2]-4
         };
-
-        util::int_t max = util::max(_temp_indicies);
-        if (max > 0 && max > cqw->size_per_surf_cols)
-            SERR("Fix fea compute array is accessed out-of-range");
+    } else { 
+        _temp_indicies = {energy_loc-4};
     }
-    MPI_Barrier(world);
-    MPI_Bcast(&energy_loc, 1, MPI_INT, 0, world);
-    MPI_Bcast(force_locs,  3, MPI_INT, 0, world);
-    MPI_Bcast(shear_locs,  3, MPI_INT, 0, world);
-    
 
-    ULOG("added surf compute with id: " + std::string(modify->compute[icompute]->id));
+    // if the indices exceed the bounds
+    long max = util::max(_temp_indicies);
+    if (max > 0 && max > cqw->size_per_surf_cols)
+        SERR("Fix fea compute array is accessed out-of-range");
+    
+    END_GUARD
+
+    // sending the data to all the processes
+    MPI_Bcast(&energy_loc, 1, MPI_INT, ROOT, world);
+    if (this->should_update_surf) {
+        MPI_Bcast(force_locs,  3, MPI_INT, ROOT, world);
+        MPI_Bcast(shear_locs,  3, MPI_INT, ROOT, world);
+    }
+    
+    START_GUARD
+    fprintf(screen, "  Added surf compute id:                 %s\n", modify->compute[icompute]->id);
+    END_GUARD
 
     // getting number of processes
     MPI_Comm_size(world, &nprocs);
-    ULOG("running on: " + std::to_string(nprocs) + " processes");
-
-    // adding collision by modifying surf
-    if (comm->me == 0)
-        size = toml::listToCharArray(surf_modify_args, arr);
-    MPI_Bcast(&size, 1, MPI_INT, 0, world);
-    if (comm->me != 0) {
-        arr = new char*[size];
-    }
-    for (util::int_t i = 0; i < size; i++) {
-        length = surf_modify_args[i].length();
-        MPI_Bcast(&length, 1, MPI_INT, 0, world);
-        MPI_Bcast(arr[i], length+1, MPI_CHAR, 0, world);
-    }
-    MPI_Barrier(world);
-    msg = "";
-    for (int i = 0; i < size; i++){
-        msg+=(std::string(arr[i]) + " ");
-    }
-    MPI_Barrier(world);
-    processMsg(("modify args = " + msg).c_str());
-    this->surf->modify_params(size, arr);
-    ULOG("modified surface");
 
     // initing vars
     this->qw     = NULL;
@@ -320,24 +319,29 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
  */
 FixFea::~FixFea() {
     // deleting the pointer
+    START_GUARD
     delete this->fea;
+    delete this->python;
+    END_GUARD
 
     // freeing up memory
     memory->destroy(this->pselect);
     memory->destroy(this->qw_me);
     memory->destroy(this->qw);
-    memory->destroy(this->px_me);
-    memory->destroy(this->px);
-    memory->destroy(this->py_me);
-    memory->destroy(this->py);
-    memory->destroy(this->pz_me);
-    memory->destroy(this->pz);
-    memory->destroy(this->shx_me);
-    memory->destroy(this->shx);
-    memory->destroy(this->shy_me);
-    memory->destroy(this->shy);
-    memory->destroy(this->shz_me);
-    memory->destroy(this->shz);
+    if (this->should_update_surf) {
+        memory->destroy(this->px_me);
+        memory->destroy(this->px);
+        memory->destroy(this->py_me);
+        memory->destroy(this->py);
+        memory->destroy(this->pz_me);
+        memory->destroy(this->pz);
+        memory->destroy(this->shx_me);
+        memory->destroy(this->shx);
+        memory->destroy(this->shy_me);
+        memory->destroy(this->shy);
+        memory->destroy(this->shz_me);
+        memory->destroy(this->shz);
+    }
 
     // removing the variable from the surface
     surf->remove_custom(this->tindex);
@@ -357,40 +361,44 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
  */
 void FixFea::init() {
     // number of surface elements
-    this->nsurf = surf->nlocal;
+    this->nsurf = surf->nsurf;
 
     // creating the memory
     memory->create(this->qw,        this->nsurf, "fea:qw");
     memory->create(this->qw_me,     this->nsurf, "fea:qw_me");
-    memory->create(this->px,        this->nsurf, "fea:px");
-    memory->create(this->px_me,     this->nsurf, "fea:px_me");
-    memory->create(this->py,        this->nsurf, "fea:py");
-    memory->create(this->py_me,     this->nsurf, "fea:py_me");
-    memory->create(this->pz,        this->nsurf, "fea:px");
-    memory->create(this->pz_me,     this->nsurf, "fea:pz_me");
-    memory->create(this->shx,       this->nsurf, "fea:shx");
-    memory->create(this->shx_me,    this->nsurf, "fea:shx_me");
-    memory->create(this->shy,       this->nsurf, "fea:shy");
-    memory->create(this->shy_me,    this->nsurf, "fea:shz_me");
-    memory->create(this->shz,       this->nsurf, "fea:shz");
-    memory->create(this->shz_me,    this->nsurf, "fea:shz_me");
+    if (this->should_update_surf) {
+        memory->create(this->px,        this->nsurf, "fea:px");
+        memory->create(this->px_me,     this->nsurf, "fea:px_me");
+        memory->create(this->py,        this->nsurf, "fea:py");
+        memory->create(this->py_me,     this->nsurf, "fea:py_me");
+        memory->create(this->pz,        this->nsurf, "fea:px");
+        memory->create(this->pz_me,     this->nsurf, "fea:pz_me");
+        memory->create(this->shx,       this->nsurf, "fea:shx");
+        memory->create(this->shx_me,    this->nsurf, "fea:shx_me");
+        memory->create(this->shy,       this->nsurf, "fea:shy");
+        memory->create(this->shy_me,    this->nsurf, "fea:shz_me");
+        memory->create(this->shz,       this->nsurf, "fea:shz");
+        memory->create(this->shz_me,    this->nsurf, "fea:shz_me");
+    }
     memory->create(this->pselect, 3*surf->nsurf, "fea:pselect"); // needs "surf->nsurf"
 
     // setting all of the entries to zero
     memset(this->qw,      0,   this->nsurf*sizeof(double));
     memset(this->qw_me,   0,   this->nsurf*sizeof(double));
-    memset(this->px,      0,   this->nsurf*sizeof(double));
-    memset(this->px_me,   0,   this->nsurf*sizeof(double));
-    memset(this->py,      0,   this->nsurf*sizeof(double));
-    memset(this->py_me,   0,   this->nsurf*sizeof(double));
-    memset(this->pz,      0,   this->nsurf*sizeof(double));
-    memset(this->pz_me,   0,   this->nsurf*sizeof(double));
-    memset(this->shx,     0,   this->nsurf*sizeof(double));
-    memset(this->shx_me,  0,   this->nsurf*sizeof(double));
-    memset(this->shy,     0,   this->nsurf*sizeof(double));
-    memset(this->shy_me,  0,   this->nsurf*sizeof(double));
-    memset(this->shz,     0,   this->nsurf*sizeof(double));
-    memset(this->shz_me,  0,   this->nsurf*sizeof(double));
+    if (this->should_update_surf) {
+        memset(this->px,      0,   this->nsurf*sizeof(double));
+        memset(this->px_me,   0,   this->nsurf*sizeof(double));
+        memset(this->py,      0,   this->nsurf*sizeof(double));
+        memset(this->py_me,   0,   this->nsurf*sizeof(double));
+        memset(this->pz,      0,   this->nsurf*sizeof(double));
+        memset(this->pz_me,   0,   this->nsurf*sizeof(double));
+        memset(this->shx,     0,   this->nsurf*sizeof(double));
+        memset(this->shx_me,  0,   this->nsurf*sizeof(double));
+        memset(this->shy,     0,   this->nsurf*sizeof(double));
+        memset(this->shy_me,  0,   this->nsurf*sizeof(double));
+        memset(this->shz,     0,   this->nsurf*sizeof(double));
+        memset(this->shz_me,  0,   this->nsurf*sizeof(double));
+    }
     memset(this->pselect, 0, 3*this->nsurf*sizeof(int));
 
     // loading the boundary data
@@ -402,6 +410,14 @@ void FixFea::init() {
     // no need to update surf here
     END_TRY
 
+    START_GUARD
+    START_TRY
+    
+    // dump the initial sif file
+    this->fea->makeSif();
+
+    END_TRY
+    END_GUARD
 
     // waits for all processes to get here
     MPI_Barrier(world);
@@ -414,8 +430,7 @@ void FixFea::init() {
  * to elmer
  */
 void FixFea::end_of_step() {
-    //ULOG("end of step");
-    util::int_t i, m;
+    long i, m;
     
     // number of surface elements
     if (this->nsurf != this->surf->nlocal)
@@ -430,82 +445,91 @@ void FixFea::end_of_step() {
     this->cqw->post_process_surf();
 
     // adding the heat flux and all of the stress to the running averages
-    m = 0;
-    for (i = comm->me; i < this->nsurf; i += this->nprocs) {
-        if (!(surf->tris[i].mask & groupbit))
-        this->qw_me[i] +=this->cqw->array_surf[m][this->energy_loc];
-        this->px_me[i] +=this->cqw->array_surf[m][this->force_locs[0]];
-        this->py_me[i] +=this->cqw->array_surf[m][this->force_locs[1]];
-        this->pz_me[i] +=this->cqw->array_surf[m][this->force_locs[2]];
-        this->shx_me[i]+=this->cqw->array_surf[m][this->shear_locs[0]];
-        this->shy_me[i]+=this->cqw->array_surf[m][this->shear_locs[1]];
-        this->shz_me[i]+=this->cqw->array_surf[m][this->shear_locs[2]];
-        m++;
+    if (this->should_update_surf) {
+        m = 0;
+        for (i = comm->me; i < this->nsurf; i += this->nprocs) {
+            this->qw_me[i] +=this->cqw->array_surf[m][this->energy_loc];
+            this->px_me[i] +=this->cqw->array_surf[m][this->force_locs[0]];
+            this->py_me[i] +=this->cqw->array_surf[m][this->force_locs[1]];
+            this->pz_me[i] +=this->cqw->array_surf[m][this->force_locs[2]];
+            this->shx_me[i]+=this->cqw->array_surf[m][this->shear_locs[0]];
+            this->shy_me[i]+=this->cqw->array_surf[m][this->shear_locs[1]];
+            this->shz_me[i]+=this->cqw->array_surf[m][this->shear_locs[2]];
+            m++;
+        }
+    } else {
+        m = 0;
+        for (i = comm->me; i < this->nsurf; i += this->nprocs) {
+            this->qw_me[i] +=this->cqw->array_surf[m][this->energy_loc];
+            m++;
+        }
     }
     MPI_Barrier(world);
 
     // if should run fea
     if (this->runCondition()) {
-        ULOG("got true run condition, running fea");
+        // ULOG("got true run condition, running fea");
         double denominator = ((double)this->run_every)/((double)this->nevery);
-        // ULOG("Dividing by: " + std::to_string(denominator));
+        
         // averaging the values over time range
-        m = 0;
-        for (i = comm->me; i < this->nsurf; i += this->nprocs) {
-            if (!(surf->tris[i].mask & groupbit))
-            this->qw_me[i]  /= denominator;
-            this->px_me[i]  /= denominator;
-            this->py_me[i]  /= denominator;
-            this->pz_me[i]  /= denominator;
-            this->shx_me[i] /= denominator;
-            this->shy_me[i] /= denominator;
-            this->shz_me[i] /= denominator;
-            m++;
-        }
-
-        // summing all of the per process arrays into shared arrays
-        MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->px_me,  this->px,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->py_me,  this->py,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->pz_me,  this->pz,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shx_me, this->shx, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shy_me, this->shy, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-        MPI_Allreduce(this->shz_me, this->shz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-
-        // // only run on the main process
-        // if (comm->me == 0) {
-        // wrapping in try to catch if exception is,
-        // fea throws exceptions if it encounters an error
-        START_TRY
-        // this->fea->dumpBefore();
-        // checks to see if elmer should be run
-        if (this->fea->shouldRun()) {
-            if (comm->me == 0) {
-                this->fea->createInitialConditions();
-                this->fea->createBoundaryConditions();
-                // runs the fea solver
-                this->fea->run();
+        if (this->should_update_surf) {
+            for (i = comm->me; i < this->nsurf; i += this->nprocs) {
+                this->qw_me[i]  /= denominator;
+                this->px_me[i]  /= denominator;
+                this->py_me[i]  /= denominator;
+                this->pz_me[i]  /= denominator;
+                this->shx_me[i] /= denominator;
+                this->shy_me[i] /= denominator;
+                this->shz_me[i] /= denominator;
             }
 
-            // loading new temperatures and surface points from the fea result
-            this->updateTemperatures();
-            this->updateSurf();
-        } else ULOG("Skipping fea, it did not detect sufficient values");
+            // summing all of the per process arrays into shared arrays
+            MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->px_me,  this->px,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->py_me,  this->py,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->pz_me,  this->pz,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->shx_me, this->shx, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->shy_me, this->shy, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce(this->shz_me, this->shz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        } else {
+            for (i = comm->me; i < this->nsurf; i += this->nprocs) {
+                this->qw_me[i]  /= denominator;
+            }
+            // summing all of the per process arrays into shared arrays
+            MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+        }
+
+        // wrapping in try to catch if exception is,
+        // fea throws exceptions if it encounters an error
+        START_GUARD
+        START_TRY
+        // this->fea->dumpBefore();
+        
+        // runs the fea solver
+        this->fea->run();
 
         // dumps the data obtained from the fea solver
         this->fea->dump();
         END_TRY
+        END_GUARD
 
-        // }
+        // loading new temperatures and surface points from the fea result
+        this->updateTemperatures();
+        if (this->should_update_surf)
+            this->updateSurf();
+
         // resetting arrays to all zeros
         memset(this->qw_me,  0, this->nsurf*sizeof(double));
-        memset(this->px_me,  0, this->nsurf*sizeof(double));
-        memset(this->py_me,  0, this->nsurf*sizeof(double));
-        memset(this->pz_me,  0, this->nsurf*sizeof(double));
-        memset(this->shx_me, 0, this->nsurf*sizeof(double));
-        memset(this->shy_me, 0, this->nsurf*sizeof(double));
-        memset(this->shz_me, 0, this->nsurf*sizeof(double));
+        if (this->should_update_surf) {
+            memset(this->px_me,  0, this->nsurf*sizeof(double));
+            memset(this->py_me,  0, this->nsurf*sizeof(double));
+            memset(this->pz_me,  0, this->nsurf*sizeof(double));
+            memset(this->shx_me, 0, this->nsurf*sizeof(double));
+            memset(this->shy_me, 0, this->nsurf*sizeof(double));
+            memset(this->shz_me, 0, this->nsurf*sizeof(double));
+        }
     }
+
     // telling the compute to run on the next timestep
     modify->addstep_compute(update->ntimestep+1);
     MPI_Barrier(world);
@@ -532,18 +556,17 @@ void FixFea::updateTemperatures() {
     ULOG("updating surface temperatures");
 
     // averages node temperatures on a per surface basis
-    //if (comm->me == 0)
+    START_GUARD
     this->fea->averageNodeTemperaturesInto(tvector, this->nsurf);
-    
-    // MPI_Bcast(tvector, this->nsurf, MPI_DOUBLE, 0, world);
 
     // checking to make sure all values where set to something non zero
-    if (comm->me == 0) {
-        for (int i = 0; i < this->nsurf; i++) {
-            if (tvector[i] == 0.0)
-                SERR("wall temperature not set correctly");
-        }
+    for (int i = 0; i < this->nsurf; i++) {
+        if (tvector[i] <= 0.0)
+            SERR("wall temperature not set correctly");
     }
+    END_GUARD
+
+    MPI_Bcast(tvector, this->nsurf, MPI_DOUBLE, 0, world);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -568,19 +591,25 @@ void FixFea::updateSurf() {
     // moving points
     for (i = 0; i < (unsigned)this->nsurf; i++) {
         if (!(surf->tris[i].mask & this->groupbit)) continue;
-        
-        if (comm->me == 0)
-            this->fea->getNodePointAtIndex(i, 0, surf->tris[i].p1);
+
+        START_GUARD
+        this->fea->getNodePointAtIndex(i, 0, surf->tris[i].p1);
+        END_GUARD
+
         this->pselect[3*i] = 1; // saying the first point of the triangle moved
         MPI_Bcast(surf->tris[i].p1, 3, MPI_DOUBLE, 0, world);
 
-        if (comm->me == 0)
-            this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p2);
+        START_GUARD
+        this->fea->getNodePointAtIndex(i, 1, surf->tris[i].p2);
+        END_GUARD
+
         this->pselect[3*i+1] = 1; // saying the second point of the triangle moved
         MPI_Bcast(surf->tris[i].p2, 3, MPI_DOUBLE, 0, world);
 
-        if (comm->me == 0)
-            this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
+        START_GUARD
+        this->fea->getNodePointAtIndex(i, 2, surf->tris[i].p3);
+        END_GUARD
+
         this->pselect[3*i+2] = 1; // saying the third point of the triangle moved
         MPI_Bcast(surf->tris[i].p3, 3, MPI_DOUBLE, 0, world);
     }
@@ -590,18 +619,18 @@ void FixFea::updateSurf() {
     // connects the surfs, makes it water tight
     if (this->connectflag && this->groupbit != 1) this->connect3dPost();
 
-    ULOG("tri normal");
+    // ULOG("tri normal");
     surf->compute_tri_normal(0);
 
-    ULOG("point inside");
+    // ULOG("point inside");
     // check that all points are still inside simulation box
     surf->check_point_inside(0);
 
     // assign split cell particles to parent split cell
     // assign surfs to grid cells
-    ULOG("unset neighbors");
+    // ULOG("unset neighbors");
     grid->unset_neighbors();
-    ULOG("remove ghosts");
+    // ULOG("remove ghosts");
     grid->remove_ghosts();
 
     if (grid->nsplitlocal) {
@@ -612,50 +641,50 @@ void FixFea::updateSurf() {
                 grid->combine_split_cell_particles(icell,1);
         }
     }
-    ULOG("clear surf");
+    // ULOG("clear surf");
     grid->clear_surf();
-    ULOG("surf to grid");
+    // ULOG("surf to grid");
     grid->surf2grid(1,0);
 
     // checks
-    ULOG("near surf");
+    // ULOG("near surf");
     surf->check_point_near_surf_3d();
-    ULOG("check water tight");
+    // ULOG("check water tight");
     surf->check_watertight_3d();
 
     // re-setup owned and ghost cell info
-    ULOG("setup owned");
+    // ULOG("setup owned");
     grid->setup_owned();
-    ULOG("acquire ghosts");
+    // ULOG("acquire ghosts");
     grid->acquire_ghosts();
-    ULOG("grid reset neighbors");
+    // ULOG("grid reset neighbors");
     grid->reset_neighbors();
-    ULOG("comm reset neighbors");
+    // ULOG("comm reset neighbors");
     comm->reset_neighbors();
 
     // flag cells and corners as OUTSIDE or INSIDE
-    ULOG("set inout");
+    // ULOG("set inout");
     grid->set_inout();
-    ULOG("type check");
+    // ULOG("type check");
     grid->type_check(0);
 
     // remove particles as needed due to surface move
     // set ndeleted for scalar output
-    ULOG("remove particles");
+    // ULOG("remove particles");
     if (particle->exist) {
         bigint ndeleted = this->removeParticles();
         ULOG("number of particles deleted: " + std::to_string(ndeleted));
     }
 
     // notify all classes that store per-grid data that grid may have changed
-    ULOG("notify change");
+    // ULOG("notify change");
     grid->notify_changed();
 }
 
 /* ---------------------------------------------------------------------- */
 
 void FixFea::connect3dPre() {
-    ULOG("connecting surface before move");
+    // ULOG("connecting surface before move");
     // hash for corner points of moved triangles
     // key = corner point
     // value = global index (0 to 3*Ntri-1) of the point
@@ -683,7 +712,7 @@ void FixFea::connect3dPre() {
 /* ---------------------------------------------------------------------- */
 
 void FixFea::connect3dPost() {
-    ULOG("connecting surface after move");
+    // ULOG("connecting surface after move");
     // check if non-moved points are in hash
     // if so, set their coords to matching point
     // set pselect for newly moved points so remove_particles() will work
@@ -723,7 +752,7 @@ void FixFea::connect3dPost() {
 /* ---------------------------------------------------------------------- */
 
 bigint FixFea::removeParticles() {
-    ULOG("removing particles");
+    // ULOG("removing particles");
 
     int isurf, cell_nsurf;
     surfint *csurfs;
@@ -786,35 +815,30 @@ bigint FixFea::removeParticles() {
  * makes surface using data from fea
 */
 void FixFea::loadSurf() {
-    char* fname = (char*)"";
-    char* arr[1];
-    int length = 0;
+    char **arr, *args;
+    long length;
     std::string _temp;
 
-    if (comm->me == 0) {
-        ULOG("no surface detected, making surface from fea object");
+    START_GUARD
+    START_TRY
+    // ULOG("no surface detected, making surface from fea object");
+    PyObject* sparta_config = this->python->loadObjectWithSetupFromMain("sparta");
+    python::loadAttrFromObjectAndConvert(sparta_config, "read_surf",  args);
+    END_TRY    
+    END_GUARD
 
-        START_TRY
-        _temp = this->fea->makeSpartaSurf();
-        length = (int)(_temp.size());
-        fname = (char*)_temp.c_str();
-        END_TRY
-    }
-    MPI_Barrier(world);
+    length = BcastStringIntoArrOfStrings(args, arr);
 
-    //fprintf(screen, "-> %d process here\n", comm->me);
-    MPI_Bcast(fname, length, MPI_CHAR, 0, world);
-    arr[0] = fname;
+    START_GUARD
+    START_TRY
+    this->fea->makeSpartaSurf(arr[0]);
+    END_TRY
+    END_GUARD
 
-    ULOG("running surface reader on resulting surface file: " + std::string(fname));
+    // ULOG("running surface reader on resulting surface file: " + std::string(arr[0]));
 
-    if (true) {
-        ReadSurf reader(sparta);
-        fprintf(screen, "%d process here\n", comm->me);
-        reader.command(1, arr);
-    }
-    // util::string_t cmd = "read_surf " + std::string(fname);
-    // char* cmd_name = input->one(cmd.c_str());
+    ReadSurf reader(sparta);
+    reader.command(length, arr);
 
     if (!(surf->exist))
         UERR("reading surf was unsuccessful");

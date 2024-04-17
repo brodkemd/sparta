@@ -33,7 +33,7 @@ conda create -n sparta python=3
 
 6. Load the library for the executable, this must be done every time it is run:
     ```shell
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.conda/envs/sparta/lib/
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/anaconda3/envs/sparta/lib
     ```
 
 7. Install the python library:
@@ -97,7 +97,7 @@ module purge > /dev/null 2>&1
 module load gnu/8.3.0 openmpi/4.1.4 anaconda/3.0
 
 # adds path to environment vairable to load the python shared library
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.conda/envs/sparta/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/anaconda3/envs/sparta/lib/
 export PMIX_MCA_gds=hash
 
 # runs with mpi, '--mca mpi_warn_on_fork 0' allows system calls

@@ -7,12 +7,12 @@ SHELL = /bin/sh
 # specify flags and libraries needed for your compiler
 
 CC =		mpic++
-CCFLAGS =	-O3 # $(shell python3.10-config --cflags)
+CCFLAGS =	-O3 $(shell python3-config --cflags)
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		mpic++
-LINKFLAGS =	-O # $(shell python3.10-config --ldflags --embed)
+LINKFLAGS =	-O $(shell python3-config --ldflags --embed) -lcrypto
 LIB =  
 SIZE =		size
 

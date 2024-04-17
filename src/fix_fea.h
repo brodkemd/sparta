@@ -29,6 +29,10 @@ namespace elmer {
     class Elmer;
 }
 
+namespace python {
+    class handler;
+}
+
 namespace SPARTA_NS {
     /**
      * Class for this fix command
@@ -52,6 +56,8 @@ namespace SPARTA_NS {
             void loadSurf();
             void processMsg(const char* msg);
             void readSurfFile(char* surf_file);
+            int BcastStringIntoArrOfStrings(char* str, char**& arr);
+            void BcastString(char*& str);
 
             #include "hash_options.h"
 
@@ -67,6 +73,12 @@ namespace SPARTA_NS {
             class Compute *cqw;
             friend class elmer::Elmer;
             class elmer::Elmer* fea;
+            class python::handler* python;
+
+            // these with reference other things eventually
+            double *dt, *boxlo, *boxhi;
+            long* timestep;
+            bool should_update_surf;
 
             long nsurf, *pselect;
             int connectflag, run_every, groupbit, nprocs, tindex, dimension, shear_locs[3], force_locs[3], energy_loc;

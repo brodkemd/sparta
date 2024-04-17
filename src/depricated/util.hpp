@@ -8,6 +8,10 @@
 #include <string>
 #include <cstring>
 #include <unistd.h>
+#include <limits>
+#include <limits.h>
+#include <sys/time.h>
+#include <openssl/sha.h>
 
 #include "float.h"
 
@@ -19,21 +23,18 @@
 /* ---------------------------------------------------------------------- */
 
 #define UERR(_msg) util::error("\n  FILE: " + std::string(__FILE__) + "\n  FUNCTION: " + std::string(__PRETTY_FUNCTION__) + "\n  LINE: " + std::to_string(__LINE__) + "\n  MESSAGE: " + _msg)
-#define ULOG(_msg) util::printColor("[" + util::getTime() + "] [" + util::formatFunc(__PRETTY_FUNCTION__) + "]", std::string(" ") + _msg)
+#define ULOG(_msg) util::printColor("[" + util::formatFunc(__PRETTY_FUNCTION__) + "]", std::string(" ") + _msg)
 
 /* ---------------------------------------------------------------------- */
 
 namespace util {
-    typedef long int_t;
-    typedef double double_t;
-    typedef std::string string_t;
-    typedef bool bool_t;
+    const long NO_INT = LONG_MIN;
    
     /* ---------------------------------------------------------------------- */
 
     std::ostringstream makeDoubleConverter() {
         std::ostringstream __double_converter;
-        __double_converter << std::scientific << std::setprecision(std::numeric_limits<double_t>::digits10+2);
+        __double_converter << std::scientific << std::setprecision(std::numeric_limits<double>::digits10+2);
         return __double_converter;
     }
 
@@ -41,22 +42,57 @@ namespace util {
 
     FILE* _screen;
     FILE* _logfile;
-    int_t _me;
-    int_t npos = -1;
+    long _me;
+    long npos = -1;
     std::ostringstream _double_converter = makeDoubleConverter();
 
     /* ---------------------------------------------------------------------- */
 
     // error command
     // NOTE: all functions that using this command must be wrapped in a try-catch statement that catches strings
-    void error(string_t _msg) { throw _msg; }
+    void error(std::string _msg) { throw _msg; }
+
+    /* --------------- hashing functions ---------------------- */
+
+    std::string sha256_raw(const unsigned char* data, size_t len) {
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256_CTX sha256;
+        SHA256_Init(&sha256);
+        SHA256_Update(&sha256, data, len);
+        SHA256_Final(hash, &sha256);
+
+        // Return the raw bytes as a string 
+        return std::string(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH); 
+    }
+
+    std::string longToHash(long& val) {
+        unsigned char *bytes = reinterpret_cast<unsigned char*>(&val);
+        return sha256_raw(bytes, sizeof(val));
+    }
+
+    std::string stringToHash(std::string& val) {
+        unsigned char *bytes = (unsigned char*)val.c_str();
+        return sha256_raw(bytes, val.length());
+    }
+
+    std::string doubleToHash(double& val) {
+        unsigned char *bytes = reinterpret_cast<unsigned char*>(&val);
+        return sha256_raw(bytes, sizeof(double));
+    }
+
+    std::string doubleArrayToHash(double* arr, long length) {
+        std::string out = "";
+        for (int i = 0; i < length; i++) out+=doubleToHash(arr[i]);
+        return out;
+    }
+
 
     /* ---------------------------------------------------------------------- */
 
     /**
      * gets current time as a string
     */
-    string_t getTime() {
+    std::string getTime() {
         timeval curTime;
         gettimeofday(&curTime, NULL);
         int milli = curTime.tv_usec / 1000;
@@ -66,7 +102,7 @@ namespace util {
 
         char currentTime[84] = "";
         sprintf(currentTime, "%s:%03d", buffer, milli);
-        return string_t(currentTime);
+        return std::string(currentTime);
     }
 
     /* ---------------------------------------------------------------------- */
@@ -74,22 +110,70 @@ namespace util {
     /**
      * custom printing for this class
     */
-    void print(string_t str, int_t num_indent=1, string_t end = "\n") {
+    void print(std::string str, long num_indent=1, std::string end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            string_t space = "";
-            for (int_t i = 0; i < num_indent; i++) space += "  ";
+            std::string space = "";
+            for (long i = 0; i < num_indent; i++) space += "  ";
             if (_screen)  fprintf(_screen,  "%s", (space+str+end).c_str());
             if (_logfile) fprintf(_logfile, "%s", (space+str+end).c_str());
         }
     }
 
+    int countNumChar(char* s, char c) {
+        int length = strlen(s);
+        int count = 0;
+
+        for (int i = 0; i < length; i++) {
+            if (s[i] == c) count++;
+        }
+
+        // printf("Detected length: %d\n", length);
+        return count;
+    }
+
+
+    int find(char* s, char c, int start = 0) {
+        int length = strlen(s);
+        for (int i = start; i < length; i++) {
+            if (s[i] == c) return i;
+        }
+        return length;
+    }
+
+
+    int splitStringInto(char*& s, char**& arr) {
+        int count = countNumChar(s, ' ') + 1;
+        int next, last = 0;
+        arr = new char*[count];
+        for (int i = 0; i < count; i++) {
+            next = find(s, ' ', last);
+            //print(std::to_string(next-last));
+            arr[i] = new char[next - last];
+            for (int j = 0; j < next - last; j++)
+                arr[i][j] = s[j+last];
+            
+            arr[i][next-last] = '\0';
+            last = next+1;
+        }
+        return count;
+    }
+
+
+    int findStringInArr(char* s, char** arr, int length) {
+        for (int i = 0; i < length; i++) {
+            if (strcmp(s, arr[i]) == 0) return i;
+        }
+        return length;
+    }
+
+
     /* ---------------------------------------------------------------------- */
 
     /**
      * custom printing for this class
     */
-    void printColor(string_t color_string, string_t str, string_t end = "\n") {
+    void printColor(std::string color_string, std::string str, std::string end = "\n") {
         // only prints on the main process
         if (_me == 0) {
             if (_screen)  fprintf(_screen,  "%s%s%s%s", STARTCOLOR, color_string.c_str(), ENDCOLOR, (str+end).c_str());
@@ -99,11 +183,11 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    string_t formatFunc(string_t _func) {
-        if (_func.find("::") == string_t::npos) return string_t("");
+    std::string formatFunc(std::string _func) {
+        if (_func.find("::") == std::string::npos) return std::string("");
         std::size_t _start = _func.find(' ');
         std::size_t _end   = _func.find('(');
-        if (_end <= _start || _start == string_t::npos)
+        if (_end <= _start || _start == std::string::npos)
             _func = _func.substr(0, _end);
         else {
             if (_func.substr(0, _start) == "virtual")
@@ -117,22 +201,22 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    void printToFile(string_t str, int_t num_indent=0, string_t end = "\n") {
+    void printToFile(std::string str, long num_indent=0, std::string end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            string_t space = "";
-            for (int_t i = 0; i < num_indent; i++) space += "  ";
+            std::string space = "";
+            for (long i = 0; i < num_indent; i++) space += "  ";
             if (_logfile) fprintf(_logfile, "%s%s%s", space.c_str(), str.c_str(), end.c_str());
         }
     }
 
     /* ---------------------------------------------------------------------- */
 
-    void printToScreen(string_t str, int_t num_indent=1, string_t end = "\n") {
+    void printToScreen(std::string str, long num_indent=1, std::string end = "\n") {
         // only prints on the main process
         if (_me == 0) {
-            string_t space = "";
-            for (int_t i = 0; i < num_indent; i++) space += "  ";
+            std::string space = "";
+            for (long i = 0; i < num_indent; i++) space += "  ";
             if (_screen) fprintf(_screen,  "%s%s%s", space.c_str(), str.c_str(), end.c_str());
         }
     }
@@ -140,7 +224,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // // used in the EXEC function below, represents data returned from a system command
-    // struct CommandResult { string_t output; int_t exitstatus; };
+    // struct CommandResult { std::string output; long exitstatus; };
 
     // /**
     //  * Execute system command and get STDOUT result.
@@ -150,10 +234,10 @@ namespace util {
     //  * of command. Empty if command failed (or has no output). If you want stderr,
     //  * use shell redirection (2&>1).
     //  */
-    // static CommandResult EXEC(const string_t &command) {
-    //     int_t exitcode = 0;
+    // static CommandResult EXEC(const std::string &command) {
+    //     long exitcode = 0;
     //     std::array<char, 1048576> buffer {};
-    //     string_t result;
+    //     std::string result;
 
     //     FILE *pipe = popen(command.c_str(), "r");
     //     if (pipe == nullptr) {
@@ -162,7 +246,7 @@ namespace util {
     //     try {
     //         std::size_t bytesread;
     //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-    //             result += string_t(buffer.data(), bytesread);
+    //             result += std::string(buffer.data(), bytesread);
     //         }
     //     } catch (...) {
     //         pclose(pipe);
@@ -182,7 +266,7 @@ namespace util {
     //  * of command. Empty if command failed (or has no output). If you want stderr,
     //  * use shell redirection (2&>1).
     //  */
-    // int_t verboseExec(const string_t &command) {
+    // long verboseExec(const std::string &command) {
     //     std::array<char, 128> buffer {};
 
     //     FILE *pipe = popen(command.c_str(), "r");
@@ -192,7 +276,7 @@ namespace util {
     //     try {
     //         std::size_t bytesread;
     //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-    //             print(string_t(buffer.data(), bytesread), 0, "");
+    //             print(std::string(buffer.data(), bytesread), 0, "");
     //         }
     //     } catch (...) {
     //         pclose(pipe);
@@ -211,9 +295,9 @@ namespace util {
     //  * of command. Empty if command failed (or has no output). If you want stderr,
     //  * use shell redirection (2&>1).
     //  */
-    // int_t limitedExec(const string_t &command, string_t _start, string_t _end) {
+    // long limitedExec(const std::string &command, std::string _start, std::string _end) {
     //     std::array<char, 128> buffer {};
-    //     string_t result, temp;
+    //     std::string result, temp;
     //     result = temp = "";
     //     std::size_t _start_ind, _end_ind;
     //     // ULOG("right before popen");
@@ -228,12 +312,12 @@ namespace util {
     //         // ULOG("before read");
     //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
     //             // ULOG("in loop");
-    //             temp    = string_t(buffer.data(), bytesread);
+    //             temp    = std::string(buffer.data(), bytesread);
     //             //data   += temp;
     //             result += temp;
     //             _start_ind = result.find(_start);
     //             _end_ind = result.find(_end, _start_ind+_start.length()+1);
-    //             if (_start_ind != string_t::npos && _end_ind != string_t::npos) {
+    //             if (_start_ind != std::string::npos && _end_ind != std::string::npos) {
     //                 // printing only the part wanted
     //                 ULOG(result.substr(_start_ind+_start.length(), _end_ind - _start_ind - _start.length()));
     //                 result.clear();
@@ -254,9 +338,9 @@ namespace util {
     //  * of command. Empty if command failed (or has no output). If you want stderr,
     //  * use shell redirection (2&>1).
     //  */
-    // int_t quietExec(const string_t &command) {
+    // long quietExec(const std::string &command) {
     //     std::array<char, 128> buffer {};
-    //     string_t result = "";
+    //     std::string result = "";
     //     std::size_t bytesread;
 
     //     FILE *pipe = popen(command.c_str(), "r");
@@ -265,7 +349,7 @@ namespace util {
     //     }
     //     try {
     //         while ((bytesread = std::fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0) {
-    //             result += string_t(buffer.data(), bytesread);
+    //             result += std::string(buffer.data(), bytesread);
     //         }
     //     } catch (...) {
     //         pclose(pipe);
@@ -277,7 +361,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    string_t dtos(double_t _val) {
+    std::string dtos(double _val) {
         _double_converter.str("");
         _double_converter << _val;
         return _double_converter.str();
@@ -285,11 +369,11 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int_t vecToArr(std::vector<string_t>& _vec, char**& _arr) {
-        const int_t _size = _vec.size();
+    long vecToArr(std::vector<std::string>& _vec, char**& _arr) {
+        const long _size = _vec.size();
         char* pc;
         _arr = new char*[_size];
-        for (int_t i = 0; i < _size; i++) {
+        for (long i = 0; i < _size; i++) {
             pc = new char[_vec[i].size() + 1];
             std::strcpy(pc, _vec[i].c_str());
             _arr[i] = pc;
@@ -299,7 +383,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    util::bool_t fileExists(util::string_t filename) {
+    bool fileExists(std::string filename) {
         std::ifstream infile(filename);
         return infile.good();
     }
@@ -309,11 +393,11 @@ namespace util {
     class oFile {
         private:
             std::ofstream _out;
-            string_t _f_name;
+            std::string _f_name;
         public:
-            oFile(string_t _file_name) {
+            oFile(std::string _file_name) {
                 _f_name = _file_name;
-                ULOG("opening: " + _f_name);
+                // ULOG("opening: " + _f_name);
                 _out.open(_file_name);
                 if (!(_out.is_open())) {
                     UERR("could not open: " + _f_name);
@@ -325,7 +409,7 @@ namespace util {
             }
 
             void close() {
-                ULOG("closing: " + _f_name);
+                // ULOG("closing: " + _f_name);
                 if (_out.is_open()) {
                     _out.close();
                     if (_out.is_open())
@@ -334,12 +418,12 @@ namespace util {
                 
             }
 
-            friend oFile& operator<<(oFile& _f, const double_t& _val) { 
+            friend oFile& operator<<(oFile& _f, const double& _val) { 
                 _f._out << util::dtos(_val);
                 return _f;
             }
 
-            friend oFile& operator<<(oFile& _f, const int_t& _val) { 
+            friend oFile& operator<<(oFile& _f, const long& _val) { 
                 _f._out << _val;
                 return _f;
             }
@@ -354,7 +438,7 @@ namespace util {
                 return _f;
             }
 
-            friend oFile& operator<<(oFile& _f, const string_t& _val) { 
+            friend oFile& operator<<(oFile& _f, const std::string& _val) { 
                 _f._out << _val;
                 return _f;
             }
@@ -375,11 +459,11 @@ namespace util {
     class iFile {
         private:
             std::ifstream _out;
-            string_t _f_name;
+            std::string _f_name;
         public:
-            iFile(string_t _file_name) {
+            iFile(std::string _file_name) {
                 _f_name = _file_name;
-                ULOG("opening: " + _f_name);
+                // ULOG("opening: " + _f_name);
                 _out.open(_file_name);
                 if (!(_out.is_open())) {
                     UERR("could not open: " + _f_name);
@@ -391,7 +475,7 @@ namespace util {
             }
 
             void close() {
-                ULOG("closing: " + _f_name);
+                // ULOG("closing: " + _f_name);
                 if (_out.is_open()) {
                     _out.close();
                     if (_out.is_open())
@@ -399,14 +483,14 @@ namespace util {
                 }
             }
 
-            bool_t getLine(string_t& _line) {
+            bool getLine(std::string& _line) {
                 if (std::getline(_out, _line))
                     return true;
                 return false;
             }
 
-            bool_t getLines(std::vector<string_t>& _lines, bool_t clear = true, string_t end = "\n") {
-                string_t _line;
+            bool getLines(std::vector<std::string>& _lines, bool clear = true, std::string end = "\n") {
+                std::string _line;
                 if (clear) _lines.clear();
                 while (std::getline(_out, _line)) {
                     _lines.push_back(_line + end);
@@ -417,7 +501,7 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    void copyFile(string_t from, string_t to) {
+    void copyFile(std::string from, std::string to) {
         std::ifstream ini_file{from};
         std::ofstream out_file{to};
         if (ini_file && out_file) {
@@ -431,7 +515,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // left trims a string
-    void ltrim(string_t& _s) {
+    void ltrim(std::string& _s) {
         std::size_t j;
         for (j = 0; j < _s.length(); j++) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(j, _s.length() - j);
@@ -440,7 +524,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // right trims a string
-    void rtrim(string_t& _s) {
+    void rtrim(std::string& _s) {
         std::size_t j;
         for (j = _s.length()-1; j >= 0; j--) { if (_s[j] != ' ' && _s[j] != '\n') break; }
         _s = _s.substr(0,  j+1);
@@ -449,11 +533,11 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     // trims a string from right and left
-    void trim(string_t& _s) { rtrim(_s); ltrim(_s); }
+    void trim(std::string& _s) { rtrim(_s); ltrim(_s); }
 
     /* ---------------------------------------------------------------------- */
 
-    void split(string_t& _s, std::vector<string_t>& _v, char sep) {
+    void split(std::string& _s, std::vector<std::string>& _v, char sep) {
         _v.clear();
         std::size_t last, j;
         last = 0;
@@ -471,7 +555,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     template<typename T>
-    int_t find(std::vector<T> _v, T _find) {
+    long find(std::vector<T> _v, T _find) {
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] == _find) return i;
         }
@@ -480,8 +564,8 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int_t max(std::vector<int_t> _v) {
-        int_t _max = INT_MIN;
+    long max(std::vector<long> _v) {
+        long _max = INT_MIN;
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];
         }
@@ -490,8 +574,8 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    double_t max(std::vector<double_t> _v) {
-        double_t _max = DBL_MIN;
+    double max(std::vector<double> _v) {
+        double _max = DBL_MIN;
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];
         }
@@ -500,9 +584,9 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    double_t max(double_t* _v, int_t _size) {
-        double_t _max = DBL_MIN;
-        for (int_t i = 0; i < _size; i++) {
+    double max(double* _v, long _size) {
+        double _max = DBL_MIN;
+        for (long i = 0; i < _size; i++) {
             if (_v[i] > _max) _max = _v[i];
         }
         return _max;
@@ -510,9 +594,9 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    int_t max(int_t* _v, int_t _size) {
-        int_t _max = INT_MIN;
-        for (int_t i = 0; i < _size; i++) {
+    long max(long* _v, long _size) {
+        long _max = INT_MIN;
+        for (long i = 0; i < _size; i++) {
             if (_v[i] > _max) _max = _v[i];
         }
         return _max;
@@ -525,7 +609,7 @@ namespace util {
     // /**
     //  * erases the file at the path inputted
     // */ 
-    // void eraseFile(string_t filename) {
+    // void eraseFile(std::string filename) {
     //     std::ofstream ofs;
     //     ofs.open(filename, std::ofstream::out | std::ofstream::trunc);
     //     if (!(ofs.is_open())) error(filename + " did not open");
@@ -537,7 +621,7 @@ namespace util {
     /**
      * writes the inputted string to file at the path inputted
     */ 
-    void writeFile(string_t filename, string_t& lines) {
+    void writeFile(std::string filename, std::string& lines) {
         util::oFile out{filename};
         out << lines;
     }
@@ -547,9 +631,9 @@ namespace util {
     /**
      * counts the number of lines in the file at the path inputted
     */ 
-    int_t countLinesInFile(string_t _file) {
-        int_t number_of_lines = 0;
-        string_t line;
+    long countLinesInFile(std::string _file) {
+        long number_of_lines = 0;
+        std::string line;
         util::iFile myfile(_file);
 
         while (myfile.getLine(line)) number_of_lines++;
@@ -562,7 +646,7 @@ namespace util {
      * reads the contents of the file at the path inputted into the inputted
      * vector
     */ 
-    void readFile(string_t fileName, std::vector<string_t>& lines) {
+    void readFile(std::string fileName, std::vector<std::string>& lines) {
         util::iFile myfile(fileName);
         myfile.getLines(lines, true);
         myfile.close();
