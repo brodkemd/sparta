@@ -126,15 +126,14 @@ Dump::Dump(SPARTA *sparta, int, char **arg) : Pointers(sparta)
 
 Dump::~Dump()
 {
-  if (strcmp(style, (char*)"fea") != 0) {
+
     if (multifile == 0 && fp != NULL) {
-      if (compressed) {
+        if (compressed) {
         if (filewriter) pclose(fp);
-      } else {
+        } else {
         if (filewriter) fclose(fp);
-      }
+        }
     }
-  }
 
   delete [] id;
   delete [] style;

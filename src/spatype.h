@@ -67,10 +67,14 @@ enum ExecutionSpace{Host,Device};
 
 #ifdef SPARTA_LONGLONG_TO_LONG
 #define MPI_LL MPI_LONG
+#define MPI_ULL MPI_UNSIGNED_LONG
 #define ATOLL atoll
+#define STOULL(val) std::stoul(val)
 #else
 #define MPI_LL MPI_LONG_LONG
+#define MPI_ULL MPI_UNSIGNED_LONG_LONG
 #define ATOLL atol
+#define STOULL(val) std::stoull(val)
 #endif
 
 // default, sufficient for problems with up to 2B grid cells
@@ -78,20 +82,26 @@ enum ExecutionSpace{Host,Device};
 
 #ifdef SPARTA_BIG
 
+#define SPA_INDEX_T uint64_t
+
 typedef int smallint;
 typedef uint32_t cellint;
 typedef int surfint;
 typedef int64_t bigint;
+typedef SPA_INDEX_T index_t;
 
 #define MAXSMALLINT INT_MAX
 #define MAXBIGINT INT64_MAX
 #define MPI_SPARTA_BIGINT MPI_LL
+#define MPI_SPARTA_INDEX_T MPI_ULL
 #define CELLINT_FORMAT "%u"
 #define SURFINT_FORMAT "%d"
 #define BIGINT_FORMAT "%" PRId64
 #define ATOCELLINT atoi
 #define ATOSURFINT atoi
 #define ATOBIGINT ATOLL
+#define INDEX_T_MAX UINT64_MAX
+#define stoindex_t(val) STOULL(val)
 
 #endif
 
@@ -100,20 +110,26 @@ typedef int64_t bigint;
 
 #ifdef SPARTA_BIGBIG
 
+#define SPA_INDEX_T uint64_t
+
 typedef int smallint;
 typedef uint64_t cellint;
 typedef int64_t surfint;
 typedef int64_t bigint;
+typedef SPA_INDEX_T index_t;
 
 #define MAXSMALLINT INT_MAX
 #define MAXBIGINT INT64_MAX
 #define MPI_SPARTA_BIGINT MPI_LL
+#define MPI_SPARTA_INDEX_T MPI_ULL
 #define CELLINT_FORMAT "%" PRIu64
 #define SURFINT_FORMAT "%" PRId64
 #define BIGINT_FORMAT "%" PRId64
 #define ATOCELLINT ATOLL
 #define ATOSURFINT ATOLL
 #define ATOBIGINT ATOLL
+#define INDEX_T_MAX UINT64_MAX
+#define stoindex_t(val) STOULL(val)
 
 #endif
 
@@ -122,20 +138,26 @@ typedef int64_t bigint;
 
 #ifdef SPARTA_SMALL
 
+#define SPA_INDEX_T unsigned int
+
 typedef int smallint;
 typedef uint32_t cellint;
 typedef int surfint;
 typedef int bigint;
+typedef SPA_INDEX_T index_t;
 
 #define MAXSMALLINT INT_MAX
 #define MAXBIGINT INT_MAX
 #define MPI_SPARTA_BIGINT MPI_INT
+#define MPI_SPARTA_INDEX_T MPI_UNSIGNED
 #define CELLINT_FORMAT "%u"
 #define SURFINT_FORMAT "%d"
 #define BIGINT_FORMAT "%d"
 #define ATOCELLINT atoi
 #define ATOSURFINT atoi
 #define ATOBIGINT atoi
+#define INDEX_T_MAX UINT_MAX
+#define stoindex_t(val) std::stoi(val)
 
 #endif
 

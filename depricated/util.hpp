@@ -92,18 +92,18 @@ namespace util {
     /**
      * gets current time as a string
     */
-    std::string getTime() {
-        timeval curTime;
-        gettimeofday(&curTime, NULL);
-        int milli = curTime.tv_usec / 1000;
+    // std::string getTime() {
+    //     timeval curTime;
+    //     gettimeofday(&curTime, NULL);
+    //     int milli = curTime.tv_usec / 1000;
 
-        char buffer [80];
-        strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
+    //     char buffer [80];
+    //     strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
 
-        char currentTime[84] = "";
-        sprintf(currentTime, "%s:%03d", buffer, milli);
-        return std::string(currentTime);
-    }
+    //     char currentTime[84] = "";
+    //     sprintf(currentTime, "%s:%03d", buffer, milli);
+    //     return std::string(currentTime);
+    // }
 
     /* ---------------------------------------------------------------------- */
 
@@ -565,6 +565,14 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     long max(std::vector<long> _v) {
+        long _max = INT_MIN;
+        for (std::size_t i = 0; i < _v.size(); i++) {
+            if (_v[i] > _max) _max = _v[i];
+        }
+        return _max;
+    }
+
+    int max(std::vector<long> _v) {
         long _max = INT_MIN;
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];

@@ -3,8 +3,30 @@
 #include <cstdlib>
 #include <unordered_map>
 #include "../fix_fea.h"
+#include <Python.h>
 
 namespace elmer {
+    const std::unordered_map<int, int> typeCodeToVTKEnumType = {
+        {101, cVTU_VERTEX},
+        {202, cVTU_LINE},
+        {203, cVTU_QUADRATIC_EDGE},
+        {303, cVTU_TRIANGLE},
+        {306, cVTU_QUADRATIC_TRIANGLE},
+        {404, cVTU_QUAD},
+        {408, cVTU_QUADRATIC_QUAD},
+        {504, cVTU_TETRA},
+        {510, cVTU_QUADRATIC_TETRA},
+        {605, cVTU_PYRAMID},
+        {706, cVTU_WEDGE},
+        {808, cVTU_HEXAHEDRON},
+        {820, cVTU_QUADRATIC_HEXAHEDRON}
+    };
+
+    double truncateDouble(double num, int precision) {
+        double factor = std::pow(10, precision);
+        return floor(num * factor) / factor;
+    }
+
     void Elmer::setupVectors() {
         // getting the number of nodes
         std::vector<std::string> lines, split;
@@ -17,36 +39,56 @@ namespace elmer {
         util::splitStringAtWhiteSpace(lines[0], split);
         
         // getting the parameters from the mesh header file
-        this->num_nodes    = std::stol(split[0]);
-        this->num_elements = std::stol(split[1]);
-        this->num_boundary = std::stol(split[2]);
+        this->num_nodes    = stoindex_t(split[0]);
+        this->num_elements = stoindex_t(split[1]);
+        this->num_boundary = stoindex_t(split[2]);
+
+        util::trim(lines[1]);
+        util::splitStringAtWhiteSpace(lines[1], split);
+        SPARTA_NS::index_t num_cell_types = stoindex_t(split[0]);
+
+        SPARTA_NS::index_t i, total_num_nodes = 0;
+        for (i = 0; i < num_cell_types; i++) {
+            util::trim(lines[2+i]);
+            util::splitStringAtWhiteSpace(lines[2+i], split);
+            try {
+                total_num_nodes+=(cVTU_getElementTypeNodeCount(typeCodeToVTKEnumType.at(std::stoi(split[0]))))*stoindex_t(split[1]);
+            } catch(const std::exception& e) {
+                UERR("Could not find type code: "+split[0]);
+            }
+        }
 
         // ULOG("Creating node vector with length: " + std::to_string(this->num_nodes));
-        this->nodes    = new double*[this->num_nodes];
+        this->nodes = new double[3*this->num_nodes];
+        this->cells = new SPARTA_NS::index_t[total_num_nodes];
+        this->cell_types = new cVTU_cell_type_t[num_elements+num_boundary];
+        this->offsets = new SPARTA_NS::index_t[num_boundary+num_elements+1];
+        this->offsets[0] = 0;
+
+        this->elements_additional_info = new SPARTA_NS::index_t[ELEMENT_ARRAY_NODE_START*num_elements];
+        this->boundary_additional_info = new SPARTA_NS::index_t[BOUNDARY_ELEMENT_ARRAY_NODE_START*num_elements];
 
         // ULOG("Creating element vector with length: " + std::to_string(this->num_elements));
-        this->elements = new long*[this->num_elements];
-        this->element_lengths = new long[this->num_elements];
+        // this->elements = new SPARTA_NS::index_t*[this->num_elements];
+        // this->element_lengths = new SPARTA_NS::index_t[this->num_elements];
 
         // ULOG("Creating boundary vector with length: " + std::to_string(this->num_boundary));
-        this->boundary = new long*[this->num_boundary];
+        // this->boundary = new SPARTA_NS::index_t*[this->num_boundary];
 
         // writing base temperature to file for each node
         // ULOG("Creating nodal data vectors with length: " + std::to_string(this->num_nodes));
         this->node_temperatures  = new double[this->num_nodes];
-        this->node_velocities    = new double*[this->num_nodes];
-        this->node_displacements = new double*[this->num_nodes];
+        this->node_velocities    = new double[3*this->num_nodes];
+        this->node_displacements = new double[3*this->num_nodes];
 
         // sets each element in vectors
-        long j;
-        for (long i = 0; i < num_nodes; i++) {
+        SPARTA_NS::index_t j;
+        for (SPARTA_NS::index_t i = 0; i < num_nodes; i++) {
             this->node_temperatures[i]  = this->base_temp;
-            this->node_velocities[i]    = new double[ELMER_DIMENSION];
-            this->node_displacements[i] = new double[ELMER_DIMENSION];
             // ensuring all are set to 0
             for (j = 0; j < ELMER_DIMENSION; j++) {
-                this->node_velocities[i][j]    = 0.0;
-                this->node_displacements[i][j] = 0.0;
+                this->node_velocities[3*i+j]    = 0.0;
+                this->node_displacements[3*i+j] = 0.0;
             }
         }
 
@@ -56,21 +98,21 @@ namespace elmer {
         this->clamped         = new bool[this->num_boundary];
 
         // setting the default values
-        for (long i = 0; i < this->num_boundary; i++) {
+        for (SPARTA_NS::index_t i = 0; i < this->num_boundary; i++) {
             this->allow_forces[i]    = false;
             this->allow_heat_flux[i] = true;
             this->clamped[i]         = false;
         }
         // overwrites is deformation is allowed
         if (this->shouldUpdateSurf()) {
-            for (long i = 0; i < this->num_boundary; i++) {
+            for (SPARTA_NS::index_t i = 0; i < this->num_boundary; i++) {
                 this->allow_forces[i]    = true;
             }
         }   
         
         // loading the stuff from the elmer mesh database
+        this->loadElements(); // must do first, then boundaries
         this->loadBoundaries();
-        this->loadElements();
         this->loadNodes();
     }
 
@@ -79,13 +121,13 @@ namespace elmer {
     void Elmer::handleUserBoundaryConditions() {
         
         // long temp_id, size_target_boundaries, target_boundary_id, i;
-        long i, j, k, size_target_boundaries, target_boundary_group_id;
+        SPARTA_NS::index_t i, j, k, size_target_boundaries, target_boundary_group_id;
         
         // getting the boundary conditions list from the elmer class
         PyObject *user_specified_boundary_conditions = python::loadAttrFromObject(this->elmer, "boundary_conditions", python::PYLIST);
 
         // getting how long the list of boundary conditions from the elmer class is
-        long size = (long)PyList_Size(user_specified_boundary_conditions);
+        SPARTA_NS::index_t size = (SPARTA_NS::index_t)PyList_Size(user_specified_boundary_conditions);
         ULOG("Collecting User Specified Boundary Conditions: " + std::to_string(size));
 
         // declaring the variables
@@ -107,7 +149,7 @@ namespace elmer {
             target_boundaries = python::loadAttrFromObject(user_bc, "Target_Boundaries", python::PYLIST);
             
             // getting length of the list of boundary boundary conditions
-            size_target_boundaries = (long)PyList_Size(target_boundaries);
+            size_target_boundaries = (SPARTA_NS::index_t)PyList_Size(target_boundaries);
             
             // iterating over list of target boundaries
             for (j = 0; j < size_target_boundaries; j++) {
@@ -115,13 +157,13 @@ namespace elmer {
                 list_item = PyList_GetItem(target_boundaries, (Py_ssize_t)j);
 
                 // getting the boundary_group_id as a long
-                python::convertObjToLong(list_item, target_boundary_group_id);
+                python::convertObjToSpartaIndex_t(list_item, target_boundary_group_id);
 
                 // setting all indices in the user specified conditions vectors
                 // for boundary elements with the same target_group_id
                 for (k = 0; k < this->num_boundary; k++) {
                     // if the boundary element has the same id as the target
-                    if (this->boundary[k][0] == target_boundary_group_id) {
+                    if (this->boundary_additional_info[k] == target_boundary_group_id) {
                         // setting to the provided values from the user
                         this->allow_heat_flux[k] = allow_heat_flux_at_boundary;
                         this->allow_forces[k]    = allow_forces_at_boundary;
@@ -137,40 +179,40 @@ namespace elmer {
     void Elmer::createInitialConditions() {
         ULOG("Creating Initial Conditions");
 
-        long i, j, k, count;
+        SPARTA_NS::index_t i, j, k, count;
         std::vector<std::string> hashes(this->num_elements);
         double avg[ELMER_DIMENSION+1];
 
         // averages values for the nodes of a surface element and sets this average to the 
         // temperature of the surface element
         // ULOG("Setting surface temperatures");
-        for (long i = 0; i < this->num_elements; i++) {
+        for (i = 0; i < this->num_elements; i++) {
             // computes the average temperature of the nodes that make up the surface element
             // this value is used to set the surface element temperature
             for (j = 0; j < ELMER_DIMENSION+1; j++)
                 avg[j] = 0;
             
-            for (j = ELEMENT_ARRAY_NODE_START; j < this->element_lengths[i]; j++) {
+            for (j = this->offsets[i]; j < this->offsets[i+1]; j++) {
                 // gets the data point corresponding to node id and adds it to the rolling sum
-                avg[0] += this->node_temperatures[this->elements[i][j]-1];
+                avg[0] += this->node_temperatures[this->cells[j]-1];
                 for (k = 0; k < ELMER_DIMENSION; k++)
-                    avg[k+1] += this->node_velocities[this->elements[i][j]-1][k];
+                    avg[k+1] += this->node_velocities[this->cells[j]-1+k];
             }
 
             // dividing by the number of data points (the average)
             for (j = 0; j < ELMER_DIMENSION+1; j++)
-                avg[j] /= (this->element_lengths[i] - ELEMENT_ARRAY_NODE_START);
+                avg[j] /= (double)(this->offsets[i+1] - this->offsets[i]);
             
             hashes[i] = util::hashDoubleArray(avg, ELMER_DIMENSION+1);
         }
 
-        std::unordered_map<std::string, std::vector<long>> data_dict;
+        std::unordered_map<std::string, std::vector<SPARTA_NS::index_t>> data_dict;
         // ULOG("Setting up Inital Condition Map");
 
         // setting all the hashes in the map, this essentially filters
         // for unique values (of surface parameters)
         for (i = 0; i < this->num_elements; i++)
-            data_dict[hashes[i]] = std::vector<long>({});
+            data_dict[hashes[i]] = std::vector<SPARTA_NS::index_t>({});
 
         // this step adds the indicies that correspond to each unique 
         // value (of surface parameters)
@@ -191,10 +233,12 @@ namespace elmer {
             // writing to the element file, count is the index of the surface element
             // in the file and i is the element group. The rest is added from the 
             // originally loaded element file
-            for (j = 0; j < (long)value.size(); j++) {
+            for (j = 0; j < (SPARTA_NS::index_t)value.size(); j++) {
                 out << count << " " << i;
-                for (k = 1; k < this->element_lengths[value[j]]; k++)
-                    out << " " << this->elements[value[j]][k];
+                for (k = 1; k < ELEMENT_ARRAY_NODE_START; k++)
+                    out << " " << this->elements_additional_info[ELEMENT_ARRAY_NODE_START*value[j]+k];
+                for (k = offsets[value[j]]; k < offsets[value[j]+1]; k++)
+                    out << " " << this->cells[k];
                 out << "\n";
                 count++;
             }
@@ -203,15 +247,16 @@ namespace elmer {
             for (j = 0; j < ELMER_DIMENSION+1; j++)
                 avg[j] = 0;
             
-            for (j = ELEMENT_ARRAY_NODE_START; j < this->element_lengths[value[0]]; j++) {
+            for (j = this->offsets[value[0]]; j < this->offsets[value[0]+1]; j++) {
                 // gets the data point corresponding to node id and adds it to the rolling sum
-                avg[0] += this->node_temperatures[this->elements[value[0]][j]-1];
+                avg[0] += this->node_temperatures[this->cells[j]-1];
                 for (k = 0; k < ELMER_DIMENSION; k++)
-                    avg[k+1] += this->node_velocities[this->elements[value[0]][j]-1][k];
+                    avg[k+1] += this->node_velocities[this->cells[j]-1+k];
             }
 
+            // dividing by the number of data points (the average)
             for (j = 0; j < ELMER_DIMENSION+1; j++)
-                avg[j] /= (this->element_lengths[value[0]] - ELEMENT_ARRAY_NODE_START);
+                avg[j] /= (double)(this->offsets[value[0]+1] - this->offsets[value[0]]);
 
             Section* ic = new Section("Initial Condition", i);
             ic->addEquality("Temperature", avg[0]);
@@ -223,7 +268,7 @@ namespace elmer {
             
             body->addEquality("Initial Condition", i, true);
             
-            if (body_force_id != util::NO_INT)
+            if (body_force_id != util::NO_INDEX_T)
                 body->addEquality("Body Force", this->body_force_id);
 
             body->addEquality("Equation", this->equation_id);
@@ -232,7 +277,7 @@ namespace elmer {
 
             this->initial_conditions.push_back(ic);
             this->bodies.push_back(body);
-            
+
             i++;
         }
 
@@ -244,8 +289,9 @@ namespace elmer {
     void Elmer::createBoundaryConditions() {
         ULOG("Creating Boundary Conditions");
 
-        long len, i, j, k, count = 1;
+        SPARTA_NS::index_t len, i, j, k, count = 1;
         double* temp_arr = new double[7];
+        double temp_val;
         std::vector<std::string> hashes(this->num_boundary); // num_boundary = sparta->nsurf
 
         // ULOG("Calculating Hashes");
@@ -253,19 +299,43 @@ namespace elmer {
             len = 0;
             if (allow_heat_flux[i]) {
                 temp_arr[len] = this->sparta->qw[i];
+                // if ( -HEAT_FLUX_TOL < temp_arr[len] && temp_arr[len] < HEAT_FLUX_TOL )
+                //     temp_arr[len] = 0.0;
                 len += 1;
             }
 
             if (allow_forces[i]) {
                 // if (this->shouldUpdateSurf()) {
-                // do not need this if here because this is guarded by python
+                // do not need this if here because this is guarded by python, ah yes
                 temp_arr[len]   = this->sparta->px[i];
-                temp_arr[len+1] = this->sparta->py[i];
-                temp_arr[len+2] = this->sparta->pz[i];
-                temp_arr[len+3] = this->sparta->shx[i];
+                // if ( -FORCE_TOL < temp_arr[len] && temp_arr[len] < FORCE_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
+                
+                temp_arr[len] = this->sparta->py[i];
+                // if ( -FORCE_TOL < temp_arr[len] && temp_arr[len] < FORCE_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
+                
+                temp_arr[len] = this->sparta->pz[i];
+                // if ( -FORCE_TOL < temp_arr[len] && temp_arr[len] < FORCE_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
+
+                temp_arr[len] = this->sparta->shx[i];
+                // if ( -SHEAR_TOL < temp_arr[len] && temp_arr[len] < SHEAR_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
+
                 temp_arr[len+4] = this->sparta->shy[i];
+                // if ( -SHEAR_TOL < temp_arr[len] && temp_arr[len] < SHEAR_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
+
                 temp_arr[len+5] = this->sparta->shz[i];
-                len+=6;
+                // if ( -SHEAR_TOL < temp_arr[len] && temp_arr[len] < SHEAR_TOL )
+                //     temp_arr[len] = 0.0;
+                len++;
             } else if (clamped[i]) {
                 // adding two so that no other combination of add values can be the same
                 // i.e. so that for each combination of bools, a unique len is produced,
@@ -275,6 +345,9 @@ namespace elmer {
                 len+=2;
             }
 
+            for (j = 0; j < len; j++)
+                temp_arr[j] = truncateDouble(temp_arr[j], DOUBLE_TRUNCATE_PRECISION);
+
             hashes[i] = util::hashDoubleArray(temp_arr, len);
         }
 
@@ -282,13 +355,13 @@ namespace elmer {
         // their corresponding indices to the indices vector, this condenses the
         // number of boundary conditions (removes boundary conditions with
         // the same values)
-        std::unordered_map<std::string, std::vector<long>> data_dict;
+        std::unordered_map<std::string, std::vector<SPARTA_NS::index_t>> data_dict;
         // ULOG("Setting up Boundary Map");
 
         // setting all the hashes in the map, this essentially filters
         // for unique values (of surface parameters)
         for (i = 0; i < this->num_boundary; i++) {
-            data_dict[hashes[i]] = std::vector<long>({});
+            data_dict[hashes[i]] = std::vector<SPARTA_NS::index_t>({});
         }
 
         // this step adds the indicies that correspond to each unique 
@@ -314,10 +387,12 @@ namespace elmer {
             // writing to the boundary file, count is the index of the surface element
             // in the file and i is the boundary group. The rest is added from the 
             // originally loaded boundary file
-            for (j = 0; j < (long)value.size(); j++) {
+            for (j = 0; j < (SPARTA_NS::index_t)value.size(); j++) {
                 out << count << " " << i;
-                for (k = 1; k < BOUNDARY_ELEMENT_ARRAY_SIZE; k++)
-                    out << " " << this->boundary[value[j]][k];
+                for (k = 1; k < BOUNDARY_ELEMENT_ARRAY_NODE_START; k++)
+                    out << " " << this->boundary_additional_info[BOUNDARY_ELEMENT_ARRAY_NODE_START*value[j]+k];
+                for (k = offsets[value[j]+num_elements]; k < offsets[value[j]+1+num_elements]; k++)
+                    out << " " << this->cells[k];
                 out << "\n";
                 count++;
             }
@@ -329,8 +404,12 @@ namespace elmer {
             bc->addEquality("Target Boundaries", i, true);
             // all data points at any index in the values vector has the same
             // surface parameters (by construction), so just pick the first one
-            if (allow_heat_flux[value[0]])
-                bc->addEquality("Heat Flux", this->sparta->qw[value[0]]);
+            if (allow_heat_flux[value[0]]) {
+                temp_val = truncateDouble(this->sparta->qw[i], DOUBLE_TRUNCATE_PRECISION);
+                // if ( -HEAT_FLUX_TOL < temp_val && temp_val < HEAT_FLUX_TOL )
+                //     temp_val = 0.0;
+                bc->addEquality("Heat Flux", temp_val);
+            }
 
             if (allow_forces[value[0]]) {
                 temp_arr[0] = this->sparta->px[value[0]];
@@ -339,6 +418,9 @@ namespace elmer {
                 temp_arr[3] = this->sparta->shx[value[0]];
                 temp_arr[4] = this->sparta->shy[value[0]];
                 temp_arr[5] = this->sparta->shz[value[0]];
+                for (j = 0; j < 6; j++)
+                    temp_arr[j] = truncateDouble(temp_arr[j], DOUBLE_TRUNCATE_PRECISION);
+                
                 bc->addEquality("Stress", temp_arr, 6, true);
             } else if (clamped[value[0]]) {              
                 bc->addEquality("Displacement 1", (double)0);
@@ -361,17 +443,17 @@ namespace elmer {
     void Elmer::loadNodeData() {
         // ULOG("loading node data");
         std::string line, var;
-        std::unordered_map<long, long> permutation_table;
+        std::unordered_map<SPARTA_NS::index_t, SPARTA_NS::index_t> permutation_table;
 
         // ULOG("Initializing node data permutation table");
-        for (long i = 0; i < num_nodes; i++)
+        for (SPARTA_NS::index_t i = 0; i < num_nodes; i++)
             permutation_table[i] = 0;
 
         ULOG("Loading data from: " + std::string(node_data_file));
         std::ifstream file(node_data_file);
 
         if (file.is_open()) {
-            long line_count = 1, counter = 0;
+            SPARTA_NS::index_t line_count = 1, counter = 0;
             bool loading_perm = false;
 
             std::vector<std::string> split_line;
@@ -399,7 +481,7 @@ namespace elmer {
                             ;
                         }
                         // makes sure there is a value number of entries in the table
-                        else if (std::stol(split_line[1]) == num_nodes) {
+                        else if (stoindex_t(split_line[1]) == num_nodes) {
                             // telling the rest of the code that a permutation table is being loaded
                             // ULOG("  Loading new permutation table at line:" + std::to_string(line_count));
                             loading_perm = true;
@@ -420,7 +502,7 @@ namespace elmer {
                     // if the data is part of a permutation table
                     if (loading_perm) {
                         // getting the map, indexing from 0 that why there is -1 here
-                        permutation_table[std::stol(split_line[0])-1] = std::stol(split_line[1])-1;
+                        permutation_table[stoindex_t(split_line[0])-1] = stoindex_t(split_line[1])-1;
                         counter++;
 
                         // if the end of the table was reached, stop loading the table
@@ -439,22 +521,22 @@ namespace elmer {
                             this->node_temperatures[counter]      = std::stod(split_line[0]);
                         } 
                         else if (var == (std::string)"displacement 1") {
-                            this->node_displacements[counter][0] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
+                            this->node_displacements[3*counter] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
                         }
                         else if (var == (std::string)"displacement 2") {
-                            this->node_displacements[counter][1] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
+                            this->node_displacements[3*counter+1] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
                         }
                         else if (var == (std::string)"displacement 3") {
-                            this->node_displacements[counter][2] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
+                            this->node_displacements[3*counter+2] += std::stod(split_line[0]); // rolling addition so that values that fall below precision are remembered
                         }
                         else if (var == (std::string)"velocity 1") {
-                            this->node_velocities[counter][0]     = std::stod(split_line[0]);
+                            this->node_velocities[3*counter]     = std::stod(split_line[0]);
                         }
                         else if (var == (std::string)"velocity 2") {
-                            this->node_velocities[counter][1]     = std::stod(split_line[0]);
+                            this->node_velocities[3*counter+1]     = std::stod(split_line[0]);
                         }
                         else if (var == (std::string)"velocity 3") {
-                            this->node_velocities[counter][2]     = std::stod(split_line[0]);
+                            this->node_velocities[3*counter+2]     = std::stod(split_line[0]);
                         }
                         else { 
                             UERR("got unknown key in data file with name: " + var);
@@ -473,7 +555,7 @@ namespace elmer {
 
     void Elmer::updateNodes() {
         ULOG("Updating nodes");
-        long i, j;
+        SPARTA_NS::index_t i, j;
         double before, after;
         bool got_difference;
 
@@ -483,9 +565,9 @@ namespace elmer {
             // so it does not affect the other value
             got_difference = true;
             for (j = 0; j < ELMER_DIMENSION; j++) {
-                before = this->nodes[i][j];
-                after  = before + this->node_displacements[i][j];
-                if (before == after && this->node_displacements[i][j] != 0.0) {
+                before = this->nodes[3*i+j];
+                after  = before + this->node_displacements[3*i+j];
+                if (before == after && this->node_displacements[3*i+j] != 0.0) {
                     got_difference = false;
                     break;
                 }
@@ -494,12 +576,12 @@ namespace elmer {
             // if the displacement changes the value
             if (got_difference) {
                 for (j = 0; j < ELMER_DIMENSION; j++) {
-                    this->nodes[i][j] += this->node_displacements[i][j];
-                    if (nodes[i][j] < *(this->sparta->boxlo + j) || nodes[i][j] > *(this->sparta->boxhi + j)) {
+                    this->nodes[3*i+j] += this->node_displacements[3*i+j];
+                    if (nodes[3*i+j] < *(this->sparta->boxlo + j) || nodes[3*i+j] > *(this->sparta->boxhi + j)) {
                         this->dump();
                         UERR("Detected node outside of bounds at index: " + std::to_string(i) + ", dumped data");
                     }
-                    this->node_displacements[i][j] = 0.0;
+                    this->node_displacements[3*i+j] = 0.0;
                 }
             } //else ULOG("did not update node point: " + std::to_string(i+1) + ", remembering displacement");
         }
@@ -510,17 +592,17 @@ namespace elmer {
     void Elmer::updateNodeFile() {
         ULOG("updating node file");
         util::oFile out(this->node_file);
-        for (long i = 0; i < this->num_nodes; i++)
-            out << i+1 << " " << -1 << " " << this->nodes[i][0] << " " << this->nodes[i][1] << " " << this->nodes[i][2] << "\n";
+        for (SPARTA_NS::index_t i = 0; i < this->num_nodes; i++)
+            out << i+1 << " " << -1 << " " << this->nodes[3*i] << " " << this->nodes[3*i+1] << " " << this->nodes[3*i+2] << "\n";
     }
 
     /* ---------------------------------------------------------------------- */
     
-    void Elmer::handleNodeFileSplitLine(std::vector<std::string>& split, long line_number) {
+    void Elmer::handleNodeFileSplitLine(std::vector<std::string>& split, SPARTA_NS::index_t line_number) {
         if (split.size() != NODE_LINE_SIZE)
             UERR("node element not correct size at line " + std::to_string(line_number) + ", should have size " + std::to_string(NODE_LINE_SIZE));
 
-        if (std::stol(split[0]) != line_number)
+        if (stoindex_t(split[0]) != line_number)
             UERR("detected unordered node element at line " + std::to_string(line_number));
 
         if (std::stoi(split[1]) != -1)
@@ -529,10 +611,8 @@ namespace elmer {
         if (line_number > this->num_nodes)
             UERR("Too many entries in the node file");
 
-        this->nodes[line_number-1] = new double[ELMER_DIMENSION];
-
-        for (long j = NODE_START_READ; j < NODE_LINE_SIZE; j++)
-            this->nodes[line_number-1][j-NODE_START_READ] = std::stod(split[j]);
+        for (unsigned j = 0; j < 3; j++)
+            this->nodes[3*(line_number-1)+j] = std::stod(split[j+NODE_START_READ]);
     }
 
     /* ---------------------------------------------------------------------- */
@@ -549,64 +629,142 @@ namespace elmer {
 
     /* ---------------------------------------------------------------------- */
 
-    void Elmer::handleBoundaryFileSplitLine(std::vector<std::string>& split, long line_number) {
-        if (split[4] != (std::string)"303") 
-            UERR("element is not a triangle in boundary file at line: " + std::to_string(line_number));
+    // void Elmer::handleBoundaryFileSplitLine(std::vector<std::string>& split, SPARTA_NS::index_t line_number) {
+    //     if (split[4] != (std::string)"303") 
+    //         UERR("element is not a triangle in boundary file at line: " + std::to_string(line_number));
 
-        if (std::stol(split[0]) != line_number)
-            UERR("got unordered boundary elements at line: " + std::to_string(line_number));
+    //     if (stoindex_t(split[0]) != line_number)
+    //         UERR("got unordered boundary elements at line: " + std::to_string(line_number));
 
-        if (split.size() != BOUNDARY_ELEMENT_LINE_SIZE)
-            UERR("Caught boundary element with incorrect number of entries");
+    //     if (split.size() != BOUNDARY_ELEMENT_LINE_SIZE)
+    //         UERR("Caught boundary element with incorrect number of entries");
 
-        if (line_number > this->num_boundary)
-            UERR("Too many entries in the boundary file");
+    //     if (line_number > this->num_boundary)
+    //         UERR("Too many entries in the boundary file");
 
-        this->boundary[line_number-1] = new long[BOUNDARY_ELEMENT_ARRAY_SIZE]; // line number starts at 1
+    //     this->boundary[line_number-1] = new SPARTA_NS::index_t[BOUNDARY_ELEMENT_ARRAY_SIZE]; // line number starts at 1
 
-        // adding the data
-        for (int j = BOUNDARY_ELEMENT_START_READ; j < BOUNDARY_ELEMENT_LINE_SIZE; j++)
-            this->boundary[line_number-1][j-BOUNDARY_ELEMENT_START_READ] = std::stol(split[j]);
-    }
+    //     // adding the data
+    //     for (unsigned j = BOUNDARY_ELEMENT_START_READ; j < BOUNDARY_ELEMENT_LINE_SIZE; j++)
+    //         this->boundary[line_number-1][j-BOUNDARY_ELEMENT_START_READ] = stoindex_t(split[j]);
+    // }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::loadBoundaries() {
         ULOG("Loading boundaries");
         // iterates over the lines in the boundary file, trims whitespace, splits at whitespace
-        // then pass resulting vector to handleBoundaryFileSplitLine
-        ITERATE_OVER_NONEMPTY_LINES_FROM_FILE_AND_SPLIT(
-            this->boundary_file,
-            this->handleBoundaryFileSplitLine
-        );
+        
+        std::vector<std::string> split;
+        std::string line;
+        SPARTA_NS::index_t line_number = 1;
+        unsigned j;
+        std::ifstream buf(this->boundary_file);
+        if (buf.is_open()) {
+            while (std::getline(buf, line)) {
+                util::trim(line);
+                if (line.length() == 0) continue;
+                util::splitStringAtWhiteSpace(line, split);
+
+                if (split[4] != (std::string)"303") 
+                    UERR("element is not a triangle in boundary file at line: " + std::to_string(line_number));
+
+                if (stoindex_t(split[0]) != line_number)
+                    UERR("got unordered boundary elements at line: " + std::to_string(line_number));
+
+                if (split.size() != BOUNDARY_ELEMENT_LINE_SIZE)
+                    UERR("Caught boundary element with incorrect number of entries");
+
+                if (line_number > this->num_boundary)
+                    UERR("Too many entries in the boundary file");
+
+                this->cell_types[line_number-1+num_elements] = cVTU_TRIANGLE;
+
+                this->offsets[line_number+this->num_elements] = BOUNDARY_ELEMENT_NODE_COUNT+this->offsets[line_number-1+this->num_elements];
+
+                for (j = 0; j < BOUNDARY_ELEMENT_ARRAY_NODE_START; j++)
+                    this->boundary_additional_info[BOUNDARY_ELEMENT_ARRAY_NODE_START*(line_number-1)+j] = stoindex_t(split[BOUNDARY_ELEMENT_START_READ+j]);
+
+                for (j = 0; j < BOUNDARY_ELEMENT_NODE_COUNT; j++)
+                    this->cells[this->offsets[line_number-1+this->num_elements]+j] = stoindex_t(split[j+BOUNDARY_ELEMENT_START_READ+BOUNDARY_ELEMENT_ARRAY_NODE_START]);
+
+                line_number++;
+            }
+        } else
+            UERR("Failed to open: " + std::string(this->boundary_file));
+        
+        buf.close();
     }
 
     /* ---------------------------------------------------------------------- */
 
-    void Elmer::handleElementFileSplitLine(std::vector<std::string>& split, long line_number) {
-        if (std::stol(split[0]) != line_number)
-            UERR("got unordered boundary elements at line: " + std::to_string(line_number));
+    // void Elmer::handleElementFileSplitLine(std::vector<std::string>& split, SPARTA_NS::index_t line_number) {
+    //     if (stoindex_t(split[0]) != line_number)
+    //         UERR("got unordered boundary elements at line: " + std::to_string(line_number));
         
-        if (line_number > this->num_elements)
-            UERR("Too many entries in the elements file");
+    //     if (line_number > this->num_elements)
+    //         UERR("Too many entries in the elements file");
 
-        this->element_lengths[line_number-1] = (long)(split.size() - ELEMENT_START_READ);
-        this->elements[line_number-1]        = new long[this->element_lengths[line_number-1]];
+    //     this->element_lengths[line_number-1] = (SPARTA_NS::index_t)(split.size() - ELEMENT_START_READ);
+    //     this->elements[line_number-1]        = new SPARTA_NS::index_t[this->element_lengths[line_number-1]];
 
-        for (long j = ELEMENT_START_READ; j < this->element_lengths[line_number-1]+ELEMENT_START_READ; j++)
-            this->elements[line_number-1][j-ELEMENT_START_READ] = std::stol(split[j]);
-    }
+    //     for (unsigned j = ELEMENT_START_READ; j < this->element_lengths[line_number-1]+ELEMENT_START_READ; j++)
+    //         this->elements[line_number-1][j-ELEMENT_START_READ] = stoindex_t(split[j]);
+    // }
 
     /* ---------------------------------------------------------------------- */
 
     void Elmer::loadElements() {
         ULOG("Loading elements");
+        
+        std::vector<std::string> split;
+        std::string line;
+        SPARTA_NS::index_t line_number = 1; 
+        
+        int temp, enum_type;
+        unsigned j, temp_node_count;
+
         // iterates over the lines in the element file, trims whitespace, splits at whitespace
-        // then pass resulting vector to handleElementFileSplitLine
-        ITERATE_OVER_NONEMPTY_LINES_FROM_FILE_AND_SPLIT(
-            this->element_file,
-            this->handleElementFileSplitLine
-        );
+        std::ifstream buf(this->element_file);
+        if (buf.is_open()) { 
+            while (std::getline(buf,line)) { 
+                util::trim(line);
+                if (line.length() == 0) continue; 
+                util::splitStringAtWhiteSpace(line, split);
+
+                if (stoindex_t(split[0]) != line_number)
+                    UERR("got unordered boundary elements at line: " + std::to_string(line_number));
+                
+                if (line_number > this->num_elements)
+                    UERR("Too many entries in the elements file");
+
+                temp = std::stoi(split[2]);
+                if (typeCodeToVTKEnumType.count(temp) == 0)
+                    UERR("Invalid element type found: " + split[2]);
+                enum_type = typeCodeToVTKEnumType.at(temp);
+                temp_node_count = cVTU_getElementTypeNodeCount(enum_type);
+
+                // this->cell_types[line_number-1] = typeCodeToVTKEnumType.at(temp);
+
+                if ((ELEMENT_START_READ + ELEMENT_ARRAY_NODE_START + temp_node_count) != split.size())
+                    UERR("Preset node count does not match element file line size at line: " + std::to_string(line_number));
+                
+                this->cell_types[line_number-1] = enum_type;
+
+                this->offsets[line_number] = temp_node_count + this->offsets[line_number-1];
+
+                // this->element_lengths[line_number-1] = (SPARTA_NS::index_t)(split.size() - ELEMENT_START_READ);
+                for (j = 0; j < ELEMENT_ARRAY_NODE_START; j++)
+                    this->elements_additional_info[ELEMENT_ARRAY_NODE_START*(line_number-1)+j] = stoindex_t(split[j+ELEMENT_START_READ]);
+                
+                for (j = 0; j < temp_node_count; j++)
+                    this->cells[this->offsets[line_number-1]+j] = stoindex_t(split[j+ELEMENT_ARRAY_NODE_START+ELEMENT_START_READ]);
+                
+                line_number++;
+            }
+        } else
+            UERR("Failed to open: " + std::string(this->element_file));
+        buf.close();
     }
 
     /* ---------------------------------------------------------------------- */
@@ -618,8 +776,7 @@ namespace elmer {
         if (result == -1) { UERR("asprintf failed for dumpNodePositions"); }
 
         util::oFile out(filename);
-
-        for (long i = 0; i < this->num_nodes; i++)
+        for (SPARTA_NS::index_t i = 0; i < this->num_nodes; i++)
             out << this->node_temperatures[i] << "\n";
     }
 
@@ -632,13 +789,11 @@ namespace elmer {
         if (result == -1) { UERR("asprintf failed for dumpNodeVelocities"); }
 
         util::oFile out(filename);
-        
-        int j;
-        for (long i = 0; i < this->num_nodes; i++) {
-            out << this->node_velocities[i][0];
-            for (j = 1; j < ELMER_DIMENSION; j++)
-                out << " " << this->node_velocities[i][j];
-            out << "\n";
+        for (SPARTA_NS::index_t i = 0; i < this->num_nodes; i++) {
+            out << this->node_velocities[3*i]
+                << " " << this->node_velocities[3*i+1]
+                << " " << this->node_velocities[3*i+2]
+                << "\n";
         }
     }
 

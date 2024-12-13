@@ -11,6 +11,8 @@ const std::sregex_token_iterator regex_end;
 /* ---------------------------------------------------------------------- */
 
 namespace util {
+    const char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
     void error(std::string _msg) { throw _msg; }
 
     /* ---------------------------------------------------------------------- */
@@ -18,44 +20,86 @@ namespace util {
     void splitStringAtWhiteSpace(const std::string& input, std::vector<std::string>& out) {
         std::sregex_token_iterator iter(input.begin(), input.end(), whitespace_pattern, -1);
         out.clear();
-        for (; iter != regex_end; ++iter) {
-            out.push_back(*iter);
+        for (; iter != regex_end; ++iter) out.push_back(*iter);
+    }
+
+    /* ---------------------------------------------------------------------- */
+
+    // void doubleToByteArray(double val, char*& bytes) {
+    //     bytes = new char[sizeof(double)];
+    //     memcpy(bytes, &val, sizeof(double));
+    // }
+
+    // /* ---------------------------------------------------------------------- */
+
+    // std::string byteArrayToString(char*& bytes, long size) {
+    //     return std::string(bytes, bytes+size);
+    // }
+
+    // /* ---------------------------------------------------------------------- */
+
+    // std::string hashDouble(double val) {
+    //     char* buf;
+    //     doubleToByteArray(val, buf);
+    //     std::string to_return = byteArrayToString(buf, sizeof(double));
+    //     delete [] buf;
+    //     return to_return;
+    // }
+
+    /* ---------------------------------------------------------------------- */
+
+    // std::string hashDoubleArray(double* arr, long size) {
+    //     std::string to_return = "";
+    //     if (size) {
+    //         char* buf;
+    //         for (long i = 0; i < size; i++) {
+    //             doubleToByteArray(arr[i], buf);
+    //             to_return += byteArrayToString(buf, sizeof(double));
+    //         }
+    //         delete [] buf;
+    //     }
+    //     return to_return;
+    // }
+
+    SPARTA_NS::index_t b64EncodedSize(SPARTA_NS::index_t inlen) {
+        SPARTA_NS::index_t ret = inlen;
+        if (inlen % 3 != 0) ret += 3 - (inlen % 3);
+        ret /= 3;
+        ret *= 4;
+        return ret;
+    }
+
+    void b64Encode(const unsigned char *in, SPARTA_NS::index_t len, std::string& out) {
+        SPARTA_NS::index_t elen, i, j, v;
+
+        if (in == NULL || len == 0) { out = ""; return; }
+        
+        elen = b64EncodedSize(len);
+        out.clear();
+        out.resize(elen);
+
+        for (i=0, j=0; i<len; i+=3, j+=4) {
+            v = in[i];
+            v = i+1 < len ? v << 8 | in[i+1] : v << 8;
+            v = i+2 < len ? v << 8 | in[i+2] : v << 8;
+            out[j]   = b64chars[(v >> 18) & 0x3F];
+            out[j+1] = b64chars[(v >> 12) & 0x3F];
+
+            if (i+1 < len) out[j+2] = b64chars[(v >> 6) & 0x3F];
+            else out[j+2] = '=';
+            
+            if (i+2 < len) out[j+3] = b64chars[v & 0x3F];
+            else out[j+3] = '=';
         }
     }
 
-    /* ---------------------------------------------------------------------- */
 
-    void doubleToByteArray(double val, char*& bytes) {
-        bytes = new char[sizeof(double)];
-        memcpy(bytes, &val, sizeof(double));
-    }
-
-    /* ---------------------------------------------------------------------- */
-
-    std::string byteArrayToString(char*& bytes, long size) {
-        return std::string(bytes, bytes+size);
-    }
-
-    /* ---------------------------------------------------------------------- */
-
-    std::string hashDouble(double val) {
-        char* buf;
-        doubleToByteArray(val, buf);
-        std::string to_return = byteArrayToString(buf, sizeof(double));
-        delete [] buf;
-        return to_return;
-    }
-
-    /* ---------------------------------------------------------------------- */
-
-    std::string hashDoubleArray(double* arr, long size) {
-        char* buf;
+    std::string hashDoubleArray(double* val, const SPARTA_NS::index_t len) {
+        unsigned char* bytes = new unsigned char[len*sizeof(double)];
+        memcpy(bytes, val, len*sizeof(double));
         std::string to_return;
-        for (long i = 0; i < size; i++) {
-            doubleToByteArray(arr[i], buf);
-            to_return += byteArrayToString(buf, sizeof(double));
-        }
-        delete [] buf;
+        b64Encode(bytes, sizeof(double)*len, to_return);
+        delete [] bytes;
         return to_return;
     }
 
@@ -64,18 +108,18 @@ namespace util {
     /**
      * gets current time as a string
     */
-    std::string getTime() {
-        timeval curTime;
-        gettimeofday(&curTime, NULL);
-        int milli = curTime.tv_usec / 1000;
+    // std::string getTime() {
+    //     timeval curTime;
+    //     gettimeofday(&curTime, NULL);
+    //     long milli = curTime.tv_usec / 1000;
 
-        char buffer [80];
-        strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
+    //     char buffer [80];
+    //     strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
 
-        char currentTime[84] = "";
-        sprintf(currentTime, "%s:%03d", buffer, milli);
-        return std::string(currentTime);
-    }
+    //     char currentTime[84] = "";
+    //     sprintf(currentTime, "%s:%03ld", buffer, milli);
+    //     return std::string(currentTime);
+    // }
 
     /* ---------------------------------------------------------------------- */
 
@@ -95,7 +139,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     int countNumChar(char* s, char c) {
-        int length = strlen(s);
+        int length = (int)strlen(s);
         int count = 0;
         for (int i = 0; i < length; i++) {
             if (s[i] == c) count++;
@@ -106,7 +150,7 @@ namespace util {
     /* ---------------------------------------------------------------------- */
 
     int find(char* s, char c, int start) {
-        int length = strlen(s);
+        int length = (int)strlen(s);
         for (int i = start; i < length; i++) {
             if (s[i] == c) return i;
         }
@@ -160,9 +204,9 @@ namespace util {
         if (_func.find("::") == std::string::npos) return std::string("");
         std::size_t _start = _func.find(' ');
         std::size_t _end   = _func.find('(');
-        if (_end <= _start || _start == std::string::npos)
+        if (_end <= _start || _start == std::string::npos) {
             _func = _func.substr(0, _end);
-        else {
+        } else {
             if (_func.substr(0, _start) == "virtual")
                 _func = _func.substr(_start+1, _func.length()-_start-1);
             _start = _func.find(' ');
@@ -226,7 +270,6 @@ namespace util {
             if (_out.is_open())
                 UERR("could not close: " + _f_name);
         }
-        
     }
 
     oFile& operator<<(oFile& _f, const double& _val) { 
@@ -333,8 +376,8 @@ namespace util {
 
     /* ---------------------------------------------------------------------- */
 
-    long max(std::vector<long> _v) {
-        long _max = INT_MIN;
+    int max(std::vector<int> _v) {
+        int _max = NO_INT;
         for (std::size_t i = 0; i < _v.size(); i++) {
             if (_v[i] > _max) _max = _v[i];
         }

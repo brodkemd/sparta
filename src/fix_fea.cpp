@@ -37,6 +37,14 @@
 #include "Elmer/elmer.h"
 #include "fix_fea.h"
 
+#include <stdlib.h>
+#include <cstring>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+
 using namespace SPARTA_NS;
 
 // DO NOT CHANGE THESE
@@ -96,7 +104,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     char* str = new char[1];
     int length;
     struct stat sb;
-    char *compute_args, *surf_collide_args, *surf_modify_args, *customID;
+    char *compute_args, *surf_collide_args, *surf_modify_args, *customID, *surf_group_name;
 
     // setting pointers for nice printing
     util::_screen  = &*screen;
@@ -128,7 +136,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     START_GUARD
     fprintf(screen, "  Loading config from: %s\n", arg[2]);
-    fprintf(screen, "  Running: Python %s\n", Py_GetVersion());
+    // fprintf(screen, "  Running: Python %s\n", Py_GetVersion());
     
     // ULOG("Loading config from: " + std::string(arg[2]));
     END_GUARD
@@ -142,19 +150,17 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
 
     // getting the sparta configuration from the python object
     PyObject* sparta_config = this->python->loadObjectWithSetupFromMain("sparta");
-    python::loadAttrFromObjectAndConvert(sparta_config, "run_every",    this->run_every);
-    python::loadAttrFromObjectAndConvert(sparta_config, "nevery",       this->nevery);
-    python::loadAttrFromObjectAndConvert(sparta_config, "connect",      this->connectflag);
-    python::loadAttrFromObjectAndConvert(sparta_config, "customID",     customID);
-    python::loadAttrFromObjectAndConvert(sparta_config, "compute",      compute_args);
+    python::loadAttrFromObjectAndConvert(sparta_config,    "run_every",   this->run_every);
+    python::loadAttrFromObjectAndConvert(sparta_config,       "nevery",      this->nevery);
+    python::loadAttrFromObjectAndConvert(sparta_config,      "connect", this->connectflag);
+    python::loadAttrFromObjectAndConvert(sparta_config,     "customID",          customID);
+    python::loadAttrFromObjectAndConvert(sparta_config,      "compute",      compute_args);
     python::loadAttrFromObjectAndConvert(sparta_config, "surf_collide", surf_collide_args);
-    python::loadAttrFromObjectAndConvert(sparta_config, "surf_modify",  surf_modify_args);
+    python::loadAttrFromObjectAndConvert(sparta_config,  "surf_modify",  surf_modify_args);
+    python::loadAttrFromObjectAndConvert(sparta_config,   "surf_group",   surf_group_name);
 
     // making new fea class
     this->fea = new elmer::Elmer(this, comm->me, this->python);
-
-    // dumping data on first timestep (like sparta does)
-    this->fea->dump();
 
     this->should_update_surf = this->fea->shouldUpdateSurf();
 
@@ -181,6 +187,12 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (surf->distributed)
         SERR("Cannot use fix fea with distributed surfs");
     
+    // get surface group we are looking for
+    BcastString(surf_group_name);
+    int igroup = surf->find_group(surf_group_name);
+    if (igroup < 0) SERR("fix fea surf group ID does not exist");
+    groupbit = surf->bitmask[igroup];
+
     START_GUARD
     fprintf(screen, "Setting up FEA\n");
     END_GUARD
@@ -213,8 +225,8 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     fprintf(screen, "  Added compute id:                      %s\n", arr[0]);
     END_GUARD
 
-    // the compute index, it was just made so it is the number of computes minus 1 because it is an index
-    int icompute = modify->ncompute - 1;
+    // finding the compute
+    int icompute = modify->find_compute(arr[0]);
 
     // error checks
     this->cqw = modify->compute[icompute];
@@ -222,6 +234,11 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
         SERR("Could not find fix fea compute ID");
     if (cqw->per_surf_flag == 0)
         SERR("Fix fea compute does not compute per-surf info");
+    
+    // telling compute to run on first step
+    // telling the compute surf etot to run
+    if (modify->compute[icompute]->timeflag)
+        modify->compute[icompute]->addstep(1);
 
     // getting the indicies for the pressures (stresses) from the compute
     START_GUARD
@@ -229,7 +246,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     if (energy_loc == length)
         SERR("etot is not provided as compute arg");
     
-    std::vector<long> _temp_indicies;
+    std::vector<int> _temp_indicies;
     if (this->should_update_surf) {
         force_locs[0] = util::findStringInArr((char*)"px", arr, length);
         if (force_locs[0] == length)
@@ -266,7 +283,7 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     }
 
     // if the indices exceed the bounds
-    long max = util::max(_temp_indicies);
+    int max = util::max(_temp_indicies);
     if (max > 0 && max > cqw->size_per_surf_cols)
         SERR("Fix fea compute array is accessed out-of-range");
     
@@ -301,9 +318,6 @@ FixFea::FixFea(SPARTA *sparta, int narg, char **arg) : Fix(sparta, narg, arg) {
     this->shy_me = NULL;
     this->shz    = NULL;
     this->shz_me = NULL;
-
-    // telling the compute surf etot to run
-    modify->addstep_compute_all(1);
 
     // deleting no longer needed var
     delete [] arr;
@@ -360,6 +374,10 @@ int FixFea::setmask() { return 0 | END_OF_STEP; }
  * allocates memory, loads the initial data, and performs some checks
  */
 void FixFea::init() {
+    if (surf->nsurf != surf->nlocal) {
+        SERR("number of surface elements does not match local number of surface elements, must not use distributed or implicit surface");
+    }
+
     // number of surface elements
     this->nsurf = surf->nsurf;
 
@@ -412,6 +430,9 @@ void FixFea::init() {
 
     START_GUARD
     START_TRY
+
+    // dumping data on first timestep (like sparta does)
+    this->fea->dump();
     
     // dump the initial sif file
     this->fea->makeSif();
@@ -430,7 +451,7 @@ void FixFea::init() {
  * to elmer
  */
 void FixFea::end_of_step() {
-    long i, m;
+    index_t i, m;
     
     // number of surface elements
     if (this->nsurf != this->surf->nlocal)
@@ -484,16 +505,16 @@ void FixFea::end_of_step() {
             }
 
             // summing all of the per process arrays into shared arrays
-            MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-            MPI_Allreduce(this->px_me,  this->px,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-            MPI_Allreduce(this->py_me,  this->py,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
-            MPI_Allreduce(this->pz_me,  this->pz,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce( this->qw_me,  this->qw, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce( this->px_me,  this->px, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce( this->py_me,  this->py, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
+            MPI_Allreduce( this->pz_me,  this->pz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
             MPI_Allreduce(this->shx_me, this->shx, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
             MPI_Allreduce(this->shy_me, this->shy, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
             MPI_Allreduce(this->shz_me, this->shz, this->nsurf, MPI_DOUBLE, MPI_SUM, world);
         } else {
             for (i = comm->me; i < this->nsurf; i += this->nprocs) {
-                this->qw_me[i]  /= denominator;
+                this->qw_me[i] /= denominator;
             }
             // summing all of the per process arrays into shared arrays
             MPI_Allreduce(this->qw_me,  this->qw,  this->nsurf, MPI_DOUBLE, MPI_SUM, world);
@@ -672,7 +693,7 @@ void FixFea::updateSurf() {
     // set ndeleted for scalar output
     // ULOG("remove particles");
     if (particle->exist) {
-        bigint ndeleted = this->removeParticles();
+        bigint ndeleted = this->removeParticlesFromSurfInterior();
         ULOG("number of particles deleted: " + std::to_string(ndeleted));
     }
 
@@ -749,11 +770,81 @@ void FixFea::connect3dPost() {
     delete hash;
 }
 
-/* ---------------------------------------------------------------------- */
+// Define a structure for a 3D point
+struct Point3D {
+    double x,y,z;
+};
 
-bigint FixFea::removeParticles() {
-    // ULOG("removing particles");
+// Define a structure for a triangle
+struct Triangle {
+    Point3D v0, v1, v2;
+};
 
+
+// Function to compute the cross product of two vectors
+Point3D cross(const Point3D& u, const Point3D& v) {
+    return Point3D{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+}
+
+// Function to compute norm vectors
+double norm(const Point3D& v) {
+    return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
+}
+
+Point3D triNorm(const Triangle& tri) {
+    return cross({tri.v1.x - tri.v0.x, tri.v1.y - tri.v0.y, tri.v1.z - tri.v0.z}, {tri.v2.x - tri.v0.x, tri.v2.y - tri.v0.y, tri.v2.z - tri.v0.z});
+}
+
+Point3D triCenter(const Triangle& tri) {
+    return {(tri.v0.x + tri.v1.x + tri.v2.x)/3, (tri.v0.y + tri.v1.y + tri.v2.y)/3, (tri.v0.z + tri.v1.z + tri.v2.z)/3};
+}
+
+Point3D normalize(const Point3D& v) {
+    double norm_val = norm(v);
+    return {v.x/norm_val, v.y/norm_val, v.z/norm_val};
+}
+
+// Function to compute the dot product of two vectors
+double dot(const Point3D& u, const Point3D& v) {
+    return u.x * v.x + u.y * v.y + u.z * v.z;
+}
+
+// Function to compute the vector subtraction u - v
+Point3D subtract(const Point3D& u, const Point3D& v) {
+    return Point3D{u.x - v.x, u.y - v.y, u.z - v.z};
+}
+
+// Ray-triangle intersection test
+int rayIntersectsTriangle(const Point3D& rayOrigin, const Point3D& rayVector, const Triangle& triangle) {
+    const double EPSILON = 1e-9;
+    Point3D vertex0 =                triangle.v0, vertex1 =                triangle.v1, vertex2 = triangle.v2;
+    Point3D   edge1 = subtract(vertex1, vertex0),   edge2 = subtract(vertex2, vertex0);
+    Point3D       h =    cross(rayVector, edge2);
+    double        a =              dot(edge1, h);
+
+    if (fabs(a) < EPSILON) return 0; // Ray is parallel to the triangle
+
+    double  f = 1.0 / a;
+    Point3D s = subtract(rayOrigin, vertex0);
+    double  u = f * dot(s, h);
+
+    if (u < 0.0 || u > 1.0) return 0;
+
+    Point3D q = cross(s, edge1);
+    double  v = f * dot(rayVector, q);
+
+    if (v < 0.0 || u + v > 1.0) return 0;
+
+    // At this stage, we can compute t to find out where the intersection point is on the line
+    double t = f * dot(edge2, q);
+    if (t > EPSILON) return 1; // Ray intersection
+    
+    // This means that there is a line intersection but not a ray intersection
+    return 0;
+}
+
+bigint FixFea::removeParticlesFromSurfInterior() {
+    ULOG("removing particles from surf interior");
     int isurf, cell_nsurf;
     surfint *csurfs;
 
@@ -761,8 +852,14 @@ bigint FixFea::removeParticles() {
     Grid::ChildInfo *cinfo = grid->cinfo;
     int nglocal = grid->nlocal;
     int delflag = 0;
+    int ip; Triangle tri;
+    surfint i, count;
+    Point3D rayVector;
+
+    bigint initial_count;
 
     for (int icell = 0; icell < nglocal; icell++) {
+        initial_count = cinfo[icell].count;
         // cell is inside surfs
         // remove particles in case it wasn't before
         if (cinfo[icell].type == INSIDE) {
@@ -777,28 +874,65 @@ bigint FixFea::removeParticles() {
         // if m < cell_nsurf, loop over csurfs did not finish
         // which means cell contains a moved surf, so delete all its particles
         if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
-            cell_nsurf = cells[icell].nsurf;
-            csurfs = cells[icell].csurfs;
+            // set tri to the very first of owned tris, use the norm as the ray
+            tri.v0 = {
+                surf->tris[cells[icell].csurfs[0]].p1[0], // x
+                surf->tris[cells[icell].csurfs[0]].p1[1], // y
+                surf->tris[cells[icell].csurfs[0]].p1[2]  // z
+            };
+            tri.v1 = {
+                surf->tris[cells[icell].csurfs[0]].p2[0], // x
+                surf->tris[cells[icell].csurfs[0]].p2[1], // y
+                surf->tris[cells[icell].csurfs[0]].p2[2]  // z
+            };
+            tri.v2 = {
+                surf->tris[cells[icell].csurfs[0]].p3[0], // x
+                surf->tris[cells[icell].csurfs[0]].p3[1], // y
+                surf->tris[cells[icell].csurfs[0]].p3[2]  // z
+            };
+            rayVector = triNorm(tri);
 
-            int m;
+            // first particle
+            ip = cinfo[icell].first;
 
-            for (m = 0; m < cell_nsurf; m++) {
-                isurf = csurfs[m];
-                if (pselect[3*isurf]) break;
-                if (pselect[3*isurf+1]) break;
-                if (pselect[3*isurf+2]) break;
-            }
+            // essentially, while there is any particle in the cell
+            while (ip >= 0) {
+                // set count of intersections to 0
+                count = 0;
 
-            if (m < cell_nsurf) {
-                if (cinfo[icell].count) delflag = 1;
-                particle->remove_all_from_cell(cinfo[icell].first);
-                cinfo[icell].count = 0;
-                cinfo[icell].first = -1;
+                // loop over the surface and compute if it is an interior point with the raytracing function
+                for (i = 0; i < surf->nsurf; i++) {
+                    tri.v0 = {surf->tris[i].p1[0], surf->tris[i].p1[1], surf->tris[i].p1[2]};
+                    tri.v1 = {surf->tris[i].p2[0], surf->tris[i].p2[1], surf->tris[i].p2[2]};
+                    tri.v2 = {surf->tris[i].p3[0], surf->tris[i].p3[1], surf->tris[i].p3[2]};
+
+                    // returns 1 if intersects with tri, 0 if not, keep a rolling count of the number
+                    // intersections
+                    count += rayIntersectsTriangle(
+                        {particle->particles[ip].x[0], particle->particles[ip].x[1], particle->particles[ip].x[2]},
+                        rayVector,
+                        tri
+                    );
+                }
+
+                // if it is odd, interior to the surface, tell it to be deleted
+                if (count%2 == 1) {
+                    particle->particles[ip].icell = -1;
+                    cinfo[icell].count--;
+                    if (ip == cinfo[icell].first)
+                        cinfo[icell].first = particle->next[ip];
+                }
+
+                // move to the next particle
+                ip = particle->next[ip];
             }
         }
 
         if (cells[icell].nsplit > 1)
             grid->assign_split_cell_particles(icell);
+        
+        if (initial_count != cinfo[icell].count)
+            delflag = 1;
     }
 
     int nlocal_old = particle->nlocal;
@@ -811,12 +945,72 @@ bigint FixFea::removeParticles() {
 
 /* ---------------------------------------------------------------------- */
 
+// bigint FixFea::removeParticles() {
+//     // ULOG("removing particles");
+
+//     int isurf, cell_nsurf;
+//     surfint *csurfs;
+
+//     Grid::ChildCell *cells = grid->cells;
+//     Grid::ChildInfo *cinfo = grid->cinfo;
+//     int nglocal = grid->nlocal;
+//     int delflag = 0;
+
+//     for (int icell = 0; icell < nglocal; icell++) {
+//         // cell is inside surfs
+//         // remove particles in case it wasn't before
+//         if (cinfo[icell].type == INSIDE) {
+//             if (cinfo[icell].count) delflag = 1;
+//             particle->remove_all_from_cell(cinfo[icell].first);
+//             cinfo[icell].count = 0;
+//             cinfo[icell].first = -1;
+//             continue;
+//         }
+
+//         // cell has surfs or is split
+//         // if m < cell_nsurf, loop over csurfs did not finish
+//         // which means cell contains a moved surf, so delete all its particles
+//         if (cells[icell].nsurf && cells[icell].nsplit >= 1) {
+//             cell_nsurf = cells[icell].nsurf;
+//             csurfs = cells[icell].csurfs;
+
+//             int m;
+
+//             for (m = 0; m < cell_nsurf; m++) {
+//                 isurf = csurfs[m];
+//                 if (pselect[3*isurf]) break;
+//                 if (pselect[3*isurf+1]) break;
+//                 if (pselect[3*isurf+2]) break;
+//             }
+
+//             if (m < cell_nsurf) {
+//                 if (cinfo[icell].count) delflag = 1;
+//                 particle->remove_all_from_cell(cinfo[icell].first);
+//                 cinfo[icell].count = 0;
+//                 cinfo[icell].first = -1;
+//             }
+//         }
+
+//         if (cells[icell].nsplit > 1)
+//             grid->assign_split_cell_particles(icell);
+//     }
+
+//     int nlocal_old = particle->nlocal;
+//     if (delflag) particle->compress_rebalance();
+//     bigint delta = nlocal_old - particle->nlocal;
+//     bigint ndeleted;
+//     MPI_Allreduce(&delta,&ndeleted,1,MPI_SPARTA_BIGINT,MPI_SUM,world);
+//     return ndeleted;
+// }
+
+/* ---------------------------------------------------------------------- */
+
 /**
  * makes surface using data from fea
 */
 void FixFea::loadSurf() {
     char **arr, *args;
-    long length;
+    index_t length;
     std::string _temp;
 
     START_GUARD

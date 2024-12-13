@@ -663,7 +663,7 @@ namespace elmer {
         // making the sif file
         ULOG("Making sif file for elmer");
         util::oFile _buf(this->sif);
-        _buf << "! File created: " << util::getTime() << "\n";
+        // _buf << "! File created: " << util::getTime() << "\n";
         _buf << "! File made by process: " << util::_me << "\n\n";
         _buf << "Check Keywords warn\n";
     

@@ -49,7 +49,7 @@ namespace SPARTA_NS {
         private:
             void updateTemperatures();
             void updateSurf();
-            bigint removeParticles();
+            // bigint removeParticles();
             void connect3dPre();
             void connect3dPost();
             bool runCondition();
@@ -57,6 +57,7 @@ namespace SPARTA_NS {
             void processMsg(const char* msg);
             void readSurfFile(char* surf_file);
             int BcastStringIntoArrOfStrings(char* str, char**& arr);
+            bigint removeParticlesFromSurfInterior();
             void BcastString(char*& str);
 
             #include "hash_options.h"

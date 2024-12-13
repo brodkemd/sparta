@@ -8,6 +8,9 @@
 #include <limits>
 #include "limits.h"
 
+#include "../spatype.h"
+
+
 /* ---------------------------------------------------------------------- */
 
 #define STARTCOLOR "\033[0;32m"
@@ -20,9 +23,9 @@
 
 /* ---------------------------------------------------------------------- */
 
-#define ITERATE_OVER_NONEMPTY_LINES_FROM_FILE(file_name, func) std::string __line; long __line_number = 1; std::ifstream __buf(file_name); if (__buf.is_open()) { while (std::getline(__buf,__line)) { util::trim(__line); if (__line.length() == 0) continue; func(__line, __line_number); __line_number++; } } else UERR("Failed to open: " + std::string(file_name)); __buf.close();
+#define ITERATE_OVER_NONEMPTY_LINES_FROM_FILE(file_name, func) std::string __line; SPARTA_NS::index_t __line_number = 1; std::ifstream __buf(file_name); if (__buf.is_open()) { while (std::getline(__buf,__line)) { util::trim(__line); if (__line.length() == 0) continue; func(__line, __line_number); __line_number++; } } else UERR("Failed to open: " + std::string(file_name)); __buf.close();
 
-#define ITERATE_OVER_NONEMPTY_LINES_FROM_FILE_AND_SPLIT(file_name, func) std::vector<std::string> __split; std::string __line; long __line_number = 1; std::ifstream __buf(file_name); if (__buf.is_open()) { while (std::getline(__buf,__line)) { util::trim(__line); if (__line.length() == 0) continue; util::splitStringAtWhiteSpace(__line, __split); func(__split, __line_number); __line_number++; } } else UERR("Failed to open: " + std::string(file_name)); __buf.close();
+#define ITERATE_OVER_NONEMPTY_LINES_FROM_FILE_AND_SPLIT(file_name, func) std::vector<std::string> __split; std::string __line; SPARTA_NS::index_t __line_number = 1; std::ifstream __buf(file_name); if (__buf.is_open()) { while (std::getline(__buf,__line)) { util::trim(__line); if (__line.length() == 0) continue; util::splitStringAtWhiteSpace(__line, __split); func(__split, __line_number); __line_number++; } } else UERR("Failed to open: " + std::string(file_name)); __buf.close();
 
 /* ---------------------------------------------------------------------- */
 
@@ -30,11 +33,12 @@ namespace util {
     // parameters set from sparta
     inline FILE* _screen;
     inline FILE* _logfile;
-    inline long _me;
-    const  long npos = -1;
+    inline SPARTA_NS::index_t _me;
+    const  int npos = -1;
 
     // variables used a lot, so defining them here
-    const long NO_INT = LONG_MIN;
+    const int NO_INT = INT_MIN;
+    const SPARTA_NS::index_t NO_INDEX_T = INDEX_T_MAX;
 
     /*
      * error command
@@ -46,7 +50,9 @@ namespace util {
     /*
      * misc
     */
-    long max(std::vector<long> _v);
+    // long max(std::vector<long> _v);
+
+    int max(std::vector<int> _v);
 
     /*
      * Double to string stuff
@@ -57,15 +63,15 @@ namespace util {
      * Converting double and double arrays to bytes and string and bytes
      * for hashing purposes
     */
-    void doubleToByteArray(double val, char*& bytes);
-    std::string byteArrayToString(char*& bytes, long size);
-    std::string hashDouble(double val);
-    std::string hashDoubleArray(double* arr, long size);
+    // void doubleToByteArray(double val, char*& bytes);
+    // std::string byteArrayToString(char*& bytes, long size);
+    // std::string hashDouble(double val);
+    std::string hashDoubleArray(double* arr, SPARTA_NS::index_t size);
 
     /**
      * gets current time as a string
     */
-    std::string getTime();
+    // std::string getTime();
     
     /*
      * string and char* handling functions
@@ -81,11 +87,11 @@ namespace util {
     /**
      * custom printing
     */
-    void print(std::string str, long num_indent=1, std::string end = "\n");
+    void print(std::string str, int num_indent=1, std::string end = "\n");
     void printColor(std::string color_string, std::string str, std::string end = "\n");
     std::string formatFunc(std::string _func);
-    void printToFile(std::string str, long num_indent=0, std::string end = "\n");
-    void printToScreen(std::string str, long num_indent=1, std::string end = "\n");
+    void printToFile(std::string str, int num_indent=0, std::string end = "\n");
+    void printToScreen(std::string str, int num_indent=1, std::string end = "\n");
     
 
     /*
@@ -107,6 +113,7 @@ namespace util {
             void close();
             friend oFile& operator<<(oFile& _f, const double& _val);
             friend oFile& operator<<(oFile& _f, const long& _val);
+            friend oFile& operator<<(oFile& _f, const SPARTA_NS::index_t& _val);
             friend oFile& operator<<(oFile& _f, const int& _val);
             friend oFile& operator<<(oFile& _f, const std::size_t& _val);
             friend oFile& operator<<(oFile& _f, const std::string& _val);

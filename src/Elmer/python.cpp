@@ -1,5 +1,9 @@
 #include "python.h"
-#include "util.h"
+
+#include <Python.h>
+
+#define END Py_Finalize();
+#define START Py_Initialize();
 
 namespace python {
     void _err() {
@@ -46,7 +50,13 @@ namespace python {
 
             case PYLIST:
                 if (!PyList_Check(attr)) {
-                    UERR(std::string(name) + " is not an bool");
+                    UERR(std::string(name) + " is not an list");
+                }
+                break;
+            
+            case PYSPARTINDEX_T:
+                if (!PyLong_Check(attr)) {
+                    UERR(std::string(name) + " is not an int");
                 }
                 break;
             
@@ -64,25 +74,32 @@ namespace python {
     //     s = (char*)_PyUnicode_AsString(obj);
     // }
 
+    void convertObjToSpartaIndex_t(PyObject*& obj, SPARTA_NS::index_t& val) {
+        if (!PyLong_Check(obj)) {
+            UERR("can not be converted to a int, it is not an int");
+        }
+        val = PyLong_AsSpartaIndex_t(obj);
+    }
+
     void convertObjToLong(PyObject*& obj, long& val) {
         if (!PyLong_Check(obj)) {
             UERR("can not be converted to a int, it is not an int");
         }
-        val = PyLong_AsLong(obj);
+        val = PYLONGTOLONG(obj);
     }
 
     void convertObjToInt(PyObject*& obj, int& val) {
         if (!PyLong_Check(obj)) {
             UERR("can not be converted to a int, it is not an int");
         }
-        val = PyLong_AsLong(obj);
+        val = (int)PyLong_AsLong(obj);
     }
 
     void convertObjToBool(PyObject*& obj, bool& val) {
         if (!PyBool_Check(obj)) {
             UERR("can not be converted to a bool, it is not a bool");
         }
-        val = PyObject_IsTrue(obj);
+        val = (bool)PyObject_IsTrue(obj);
     }
     
     void convertObjToDouble(PyObject*& obj, double& val) {
@@ -110,6 +127,11 @@ namespace python {
         convertObjToLong(attr, val);
     }
 
+    void loadAttrFromObjectAndConvert(PyObject*& obj, const char* name, SPARTA_NS::index_t& val) {
+        PyObject* attr = loadAttrFromObject(obj, name, PYSPARTINDEX_T);
+        convertObjToSpartaIndex_t(attr, val);
+    }
+
     void loadAttrFromObjectAndConvert(PyObject*& obj, const char* name, int& val) {
         PyObject* attr = loadAttrFromObject(obj, name, PYINT);
         convertObjToInt(attr, val);
@@ -132,6 +154,15 @@ namespace python {
 
     void setAttrOfObject(PyObject*& obj, const char* name, long val) {
         PyObject* pyAttrValue = PyLong_FromLong(val);
+        if (pyAttrValue == NULL) { PYCHECK }
+
+        int setResult = PyObject_SetAttrString(obj, name, pyAttrValue);
+        Py_DECREF(pyAttrValue);
+        if (setResult == -1) { PYCHECK }
+    }
+
+    void setAttrOfObject(PyObject*& obj, const char* name, SPARTA_NS::index_t val) {
+        PyObject* pyAttrValue = PyLong_FromSpartaIndex_t(val);
         if (pyAttrValue == NULL) { PYCHECK }
 
         int setResult = PyObject_SetAttrString(obj, name, pyAttrValue);
@@ -190,6 +221,8 @@ namespace python {
         this->_main = PyImport_GetModule(this->path);
         PYCHECK
     }
+
+    handler::~handler() { END }
 
     PyObject* handler::loadObjectWithSetupFromMain(const char* name) {
         return loadObjectWithSetupFromObject(this->_main, name);

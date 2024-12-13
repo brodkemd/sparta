@@ -1,6 +1,7 @@
 #include "server.h"
 #include "util.h"
 #include "shell_server_config/shell_server_config.h"
+#include <unistd.h>
 
 namespace elmer {
     Server::Server(python::handler* _h) {

@@ -105,10 +105,6 @@ void Modify::init()
   list_init_fixes();
   list_init_computes();
 
-  // init each fix
-
-  for (i = 0; i < nfix; i++) fix[i]->init();
-
   // init each compute
   // set invoked_scalar,vector,etc to -1 to force new run to re-compute them
   // add initial timestep to all computes that store invocation times
@@ -126,6 +122,9 @@ void Modify::init()
     compute[i]->invoked_per_surf = -1;
   }
   addstep_compute_all(update->ntimestep);
+
+  // init each fix, moved here so fixes can call computes on timestep 0
+  for (i = 0; i < nfix; i++) fix[i]->init();
 }
 
 /* ---------------------------------------------------------------------- */

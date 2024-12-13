@@ -1,14 +1,14 @@
 #include "elmer.h"
 
 namespace elmer{
-    Section::Section(std::string name, long id, std::string sep, bool include_count) {
+    Section::Section(std::string name, SPARTA_NS::index_t id, std::string sep) {
         this->_name = name; this->_sep = sep; this->_id = id;
     }
 
     /* ---------------------------------------------------------------------- */
 
     void Section::joinInto(util::oFile& _buf) {
-        if (this->_id == util::NO_INT)
+        if (this->_id == util::NO_INDEX_T)
             _buf << this->_name << "\n";
         else
             _buf << this->_name << " " << _id << "\n";
@@ -20,7 +20,7 @@ namespace elmer{
 
     /* ---------------------------------------------------------------------- */
 
-    void Section::addEquality(std::string var, long val, bool include_count) {
+    void Section::addEquality(std::string var, SPARTA_NS::index_t val, bool include_count) {
         if (include_count)
             this->_content_pairs.push_back({var+"(1)", std::to_string(val)});
         else
@@ -38,7 +38,7 @@ namespace elmer{
 
     /* ---------------------------------------------------------------------- */
 
-    void Section::addEquality(std::string var, std::vector<long>& val, bool include_count) {
+    void Section::addEquality(std::string var, std::vector<SPARTA_NS::index_t>& val, bool include_count) {
         std::array<std::string, 2> buf;
         if (include_count)
             buf[0] = var + "(" + std::to_string(val.size()) + ")";
@@ -75,7 +75,7 @@ namespace elmer{
 
     /* ---------------------------------------------------------------------- */
 
-    void Section::addEquality(std::string var, double*& arr, long len, bool include_count) {
+    void Section::addEquality(std::string var, double*& arr, SPARTA_NS::index_t len, bool include_count) {
         std::array<std::string, 2> buf;
         if (include_count)
             buf[0] = var + "(" + std::to_string(len) + ")";
@@ -85,7 +85,7 @@ namespace elmer{
         buf[1] = "";
         if (len) {
             buf[1] = util::dtos(arr[0]);
-            for (long i = 1; i < len; i++)
+            for (SPARTA_NS::index_t i = 1; i < len; i++)
                 buf[1] += " " + util::dtos(arr[i]);
         } else
             UERR("can not interpret array with no length");

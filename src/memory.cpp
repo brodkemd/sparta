@@ -52,7 +52,7 @@ void *Memory::smalloc(bigint nbytes, const char *name, int align)
     char str[128];
     sprintf(str,"Failed to allocate " BIGINT_FORMAT " bytes for array %s",
             nbytes,name);
-    error->one(FLERR,str);
+    error->all(FLERR,str);
   }
   return ptr;
 }

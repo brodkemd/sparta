@@ -13,7 +13,8 @@ while [ 1 ]; do
     fi
     if [ -f $RUN_FILE ]; then
         while IFS= read -r line; do
-            eval "$line" && echo $? > $DONE_FILE
+            eval "$line"
+            echo $? > $DONE_FILE
             break
         done < $RUN_FILE
         rm $RUN_FILE
